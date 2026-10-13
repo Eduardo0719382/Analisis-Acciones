@@ -121,3 +121,28 @@ Format: DECISION / CONTEXT / ALTERNATIVES / CHOICE / RATIONALE / CONSEQUENCES.
 
 - **Choice:** The interface is in Spanish (Q6a). User-facing strings are kept in one module. Code, logs and documentation are in English.
 - **Consequences:** Adding another language later would only need a translation layer, not a rewrite.
+
+## D-010 — Python version, packaging layout and CI
+
+- **Context:** The development container has Python 3.13. The target machine is Windows, and
+  the plan says 3.12.
+- **Choice:** Support Python ≥ 3.12. Use a `src/` layout with `pyproject.toml` (hatchling).
+  GitHub Actions runs ruff, mypy (strict) and pytest on **Windows and Ubuntu** with 3.12 and 3.13.
+- **Rationale:**
+  - Tests in a Linux container alone cannot prove the app works on Windows; a Windows CI runner
+    closes most of that gap.
+  - The `src/` layout stops tests from accidentally importing code that hasn't been installed.
+- **Consequences:**
+  - The Ubuntu job installs Qt system libraries (see PROBLEMS.md P-001).
+  - Real rendering and window behaviour still need a manual check on Windows.
+
+## D-011 — UI layout persistence
+
+- **Context:** Window size, panel positions and splitter sizes must survive restarts.
+- **Choice:** Store Qt's `saveGeometry()`, `saveState()` and `QSplitter.saveState()` as base64
+  strings inside one JSON setting (`ui.layout`). Each part is restored independently and falls
+  back to defaults when it is invalid.
+- **Rationale:** Qt's own formats handle multi-monitor setups, maximised state and DPI changes
+  better than hand-written lists of sizes (see PROBLEMS.md P-002).
+- **Consequences:** The stored values are opaque and Qt-specific. That is acceptable because
+  only the UI layer reads them.
