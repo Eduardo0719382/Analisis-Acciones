@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSplitter,
+    QTabWidget,
     QToolBar,
     QWidget,
 )
@@ -33,6 +34,7 @@ from analisis_acciones.services.settings_service import SettingsService, Theme
 from analisis_acciones.services.update_service import UpdateCheck, UpdateService
 from analisis_acciones.services.watchlist_service import WatchlistService
 from analisis_acciones.ui import strings
+from analisis_acciones.ui.analysis_panel import AnalysisPanel
 from analisis_acciones.ui.details_panel import DetailsPanel
 from analisis_acciones.ui.disclaimer import DisclaimerDialog
 from analisis_acciones.ui.indicator_dialog import IndicatorDialog
@@ -146,12 +148,18 @@ class MainWindow(QMainWindow):
             )
         )
         self.details_panel = DetailsPanel()
+        self.details_panel.header.hide()  # the tab title already names it
+        self.analysis_panel = AnalysisPanel(tokens_for(self._settings.theme()))
+        self.right_tabs = QTabWidget()
+        self.right_tabs.setObjectName("rightTabs")
+        self.right_tabs.addTab(self.details_panel, strings.TAB_DETAILS)
+        self.right_tabs.addTab(self.analysis_panel, strings.TAB_ANALYSIS)
 
         self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.main_splitter.setObjectName("mainSplitter")
         self.main_splitter.addWidget(self.watchlist_panel)
         self.main_splitter.addWidget(self.chart)
-        self.main_splitter.addWidget(self.details_panel)
+        self.main_splitter.addWidget(self.right_tabs)
         # Side panels may collapse; the chart region may not.
         self.main_splitter.setCollapsible(1, False)
         self.main_splitter.setStretchFactor(1, 1)
@@ -337,6 +345,9 @@ class MainWindow(QMainWindow):
 
         interval_label = strings.INTERVAL_LABELS.get(series.interval.value, series.interval.value)
         self.chart.show_series(series, f"{series.symbol} · {interval_label}")
+        self.analysis_panel.analyze(
+            series, f"{series.symbol} · {interval_label}", result.session_in_progress
+        )
 
         when = strings.STATUS_NEVER
         if result.fetched_at is not None:
@@ -395,6 +406,7 @@ class MainWindow(QMainWindow):
         self.chart.set_theme(tokens_for(theme))
         if isinstance(self.watchlist_panel, WatchlistPanel):
             self.watchlist_panel.set_theme(tokens_for(theme))
+        self.analysis_panel.set_theme(tokens_for(theme))
         logger.info("Theme changed to %s", theme.value)
 
     # Layout persistence ----------------------------------------------------

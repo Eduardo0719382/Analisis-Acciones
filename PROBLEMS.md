@@ -140,3 +140,12 @@
 - **Cause:** a background reply arrived after its window (and controller) had been destroyed.
 - **Solution:** the controller and chart callbacks return early when `shiboken6.isValid(self)` is
   false. After the fix: 12 consecutive runs of the file and 3 full runs with no failures.
+
+## P-014 — Flat market reported as a bearish trend (Phase 6)
+
+- **Symptom:** a deliberately flat test series produced "Tendencia bajista detectada".
+- **Cause:** the rule compared EMA 20 and EMA 50 with no tolerance, so 99.98 against 99.99 counted
+  as "EMA 20 < EMA 50".
+- **Solution:** a trend is reported only when the EMAs differ by at least 0.5 % and the close is on
+  the same side. Otherwise the market is reported as sideways, and the actual separation appears
+  in the evidence.

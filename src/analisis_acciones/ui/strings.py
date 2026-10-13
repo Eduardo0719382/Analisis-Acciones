@@ -154,3 +154,22 @@ WATCHLIST_ALREADY = "{symbol} ya está en la lista."
 WATCHLIST_NOTHING_OPEN = "Abra primero un activo en el gráfico."
 WATCHLIST_ROW_TIP = "Último cierre diario: {date}"
 EMPTY_WATCHLIST_HINT = "Abra un activo y pulse «+» para añadirlo."
+
+TAB_DETAILS = "Detalles"
+TAB_ANALYSIS = "Análisis"
+ANALYSIS_EMPTY = "Abra un activo para analizarlo."
+ANALYSIS_RUNNING = "Analizando…"
+ANALYSIS_FAILED = "No se pudo completar el análisis. Consulte el registro."
+ANALYSIS_SUMMARY = "{title} · datos hasta {date} ({bars} barras)"
+ANALYSIS_PARTIAL_EXCLUDED = "Se excluye la barra de la sesión en curso (aún no cerrada)."
+ANALYSIS_NO_SIGNALS = "Ninguna regla detectó condiciones destacables en la última barra."
+ANALYSIS_BAR_DATE = "Barra evaluada: {date}"
+ANALYSIS_DIRECTION = {
+    "bullish": "Condición de carácter alcista",
+    "bearish": "Condición de carácter bajista",
+    "neutral": "Condición neutral / informativa",
+}
+ANALYSIS_DISCLAIMER = (
+    "Señales descriptivas generadas por reglas fijas sobre datos históricos. "
+    "No son predicciones ni recomendaciones de inversión."
+)

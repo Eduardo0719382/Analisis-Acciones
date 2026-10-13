@@ -298,3 +298,19 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
 - Worker results are delivered only if the receiving Qt object still exists (`shiboken6.isValid`).
 - On exit, deferred deletions are flushed explicitly, so the chart's `QWebEnginePage` is destroyed
   before the `QApplication`.
+
+## D-018 — Explainable analysis engine (Phase 6)
+
+- **Design:**
+  - `analysis/` contains rules: pure functions over bars that return `Signal` objects (category,
+    direction, title, evidence lines with the actual values, and the date of the bar evaluated).
+  - The engine skips rules that lack enough history and says why; it never guesses.
+  - It drops an in-progress session bar so signals cannot change while the session is open.
+  - Number formatting is injected, so the core stays free of Qt and of locale assumptions.
+- **Thresholds** are fixed and visible in the evidence text: trend EMA 20/50 with a minimum
+  separation of 0.5 %, RSI 70/30, crossovers within the last 5 bars, volume above 2× its 20-bar
+  mean, ATR change of ±30 % over 20 bars, and 20-bar breakouts.
+- **Problem found by the tests:** without a minimum EMA separation, a flat market with averages of
+  99.98 and 99.99 was labelled a bearish trend. The 0.5 % gap was added (PROBLEMS.md P-014).
+- **Wording:** a test checks that signal texts contain no advice or prediction words
+  ("compra", "vende", "subirá", "garantía", …). The panel shows a standing disclaimer.

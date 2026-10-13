@@ -306,3 +306,21 @@ def test_indicators_follow_interval_change(qtbot: QtBot, window: MainWindow) -> 
         window.timeframe_combo.setCurrentIndex(1)  # weekly
     qtbot.waitUntil(lambda: chart_state(qtbot, window)["bars"] == 60, timeout=20000)
     assert chart_state(qtbot, window)["indicators"] == ["SMA (5)"]
+
+
+def test_analysis_tab_lists_explained_signals(qtbot: QtBot, window: MainWindow) -> None:
+    assert window.market is not None
+    with qtbot.waitSignal(window.market.load_finished, timeout=5000):
+        window.open_symbol("TEST")
+    panel = window.analysis_panel
+    qtbot.waitUntil(lambda: panel.report is not None, timeout=10000)
+    assert panel.report is not None
+    assert panel.report.bars_used == 300
+    assert panel.tree.topLevelItemCount() >= 1
+    trend = next(
+        panel.tree.topLevelItem(i)
+        for i in range(panel.tree.topLevelItemCount())
+        if panel.tree.topLevelItem(i).data(0, Qt.ItemDataRole.UserRole) == "trend"  # type: ignore[union-attr]
+    )
+    assert trend is not None and trend.childCount() >= 3  # evidence lines
+    assert "TEST · Diario" in panel.summary.text()

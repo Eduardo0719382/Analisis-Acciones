@@ -110,6 +110,11 @@ def _stylesheet(t: ThemeTokens) -> str:
     QLabel#detailsValue[direction="up"] {{ color: {t.up}; }}
     QLabel#detailsValue[direction="down"] {{ color: {t.down}; }}
     QLabel#detailsSource {{ color: {t.text_muted}; font-size: 11px; padding-top: 10px; }}
+    QTabWidget::pane {{ border: none; background: {t.surface}; }}
+    QTabBar::tab {{ background: {t.surface_alt}; color: {t.text_muted}; padding: 6px 14px;
+                   border: none; border-bottom: 2px solid transparent; }}
+    QTabBar::tab:selected {{ color: {t.text}; border-bottom: 2px solid {t.accent}; }}
+    QTreeWidget, QTableWidget {{ background: {t.surface}; border: none; }}
     QLabel#symbolLabel {{ font-weight: 700; font-size: 14px; padding: 0 8px; }}
     QLineEdit, QComboBox, QPushButton {{ background: {t.surface_alt}; color: {t.text};
         border: 1px solid {t.border}; border-radius: 4px; padding: 4px 8px; }}

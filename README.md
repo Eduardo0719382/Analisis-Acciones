@@ -64,6 +64,11 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   crear, renombrar o eliminar listas. «+» añade el activo del gráfico, «-» (o Supr) lo quita,
   ▲/▼ reordenan, ⟳ actualiza. Cada fila muestra el último cierre diario y su cambio %; un
   clic abre el activo. Todo se guarda localmente.
+- **Análisis (pestaña del panel derecho):** reglas fijas y explicables sobre la última barra
+  cerrada: tendencia (EMA 20/50 con separación mínima de 0,5 %), RSI 14 en 70/30, cruces
+  EMA 20/50 y MACD/señal recientes (5 barras), volumen > 2× su media de 20, cambio de ATR
+  ±30 % en 20 barras y rupturas del máximo/mínimo de 20 barras. Cada señal muestra la regla y
+  los valores que la producen. Son descripciones de los datos, no recomendaciones.
 - **Detalles (panel derecho):** precio, cambio, apertura/máximo/mínimo, volumen, rango de 52
   semanas, moneda, mercado, sector. Sin conexión se muestran los datos de la última barra
   guardada, indicándolo.
