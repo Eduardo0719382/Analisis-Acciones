@@ -25,6 +25,8 @@ KEY_DISCLAIMER = "app.disclaimer_accepted"
 KEY_LAYOUT = "ui.layout"
 KEY_CHECK_UPDATES = "updates.check_on_startup"
 KEY_LAST_SYMBOL = "market.last_symbol"
+KEY_CHART_TYPE = "chart.type"
+CHART_TYPES = ("candles", "line")
 KEY_LAST_INTERVAL = "market.last_interval"
 
 
@@ -72,6 +74,16 @@ class SettingsService:
     def set_last_opened(self, symbol: str, interval: str) -> None:
         self._repo.set(KEY_LAST_SYMBOL, symbol)
         self._repo.set(KEY_LAST_INTERVAL, interval)
+
+    # Chart -------------------------------------------------------------------
+    def chart_type(self) -> str:
+        raw = self._repo.get(KEY_CHART_TYPE)
+        return raw if raw in CHART_TYPES else "candles"
+
+    def set_chart_type(self, chart_type: str) -> None:
+        if chart_type not in CHART_TYPES:
+            raise ValueError(f"unknown chart type {chart_type!r}")
+        self._repo.set(KEY_CHART_TYPE, chart_type)
 
     # Layout ----------------------------------------------------------------
     def layout(self) -> dict[str, Any]:

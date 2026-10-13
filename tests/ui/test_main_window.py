@@ -21,7 +21,7 @@ def window(qtbot: QtBot, settings: SettingsService) -> MainWindow:
 def test_window_has_all_regions(window: MainWindow) -> None:
     assert window.windowTitle() == strings.APP_TITLE
     assert window.main_splitter.count() == 3
-    assert window.center_splitter.count() == 2
+    assert window.main_splitter.widget(1) is window.chart
     assert window.watchlist_panel.header.text() == strings.PANEL_WATCHLIST
     assert window.details_panel.header.text() == strings.PANEL_DETAILS
     assert "ninguno" in window.provider_label.text()
@@ -56,7 +56,7 @@ def test_layout_saved_on_close_and_restored(qtbot: QtBot, settings: SettingsServ
     first.close()
 
     saved = settings.layout()
-    assert {"geometry", "state", "main_split", "center_split"} <= saved.keys()
+    assert {"geometry", "state", "main_split"} <= saved.keys()
 
     second = MainWindow(settings)
     qtbot.addWidget(second)

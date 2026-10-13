@@ -227,3 +227,32 @@ Format: DECISION / CONTEXT / ALTERNATIVES / CHOICE / RATIONALE / CONSEQUENCES.
 - **Alternatives rejected:**
   - always downloading the full history: slow, and more likely to hit rate limits;
   - append-only merging: would mix differently adjusted prices after a split.
+
+## D-014 — Chart integration and centre layout (Phase 3)
+
+- **Context:** The Phase 1 layout put a separate "Indicadores / Volumen" panel under the chart.
+  Lightweight Charts v5 supports several panes inside one chart that share the time axis and the
+  crosshair.
+- **Choice:**
+  - The centre region is a single `ChartWidget`. Volume (and, in Phase 4, the RSI, MACD and ATR
+    indicators) are panes inside the chart. The separate lower panel and its splitter were removed.
+    Old saved layouts fall back to the defaults for the parts that no longer exist.
+  - The chart page is bundled locally (`charts/web/`, Lightweight Charts 5.2.1 checked against
+    npm's sha512 hash) and loaded from `file://`.
+  - The page's Content Security Policy blocks every network request. Scripts may come only from the
+    bundled files; inline styles are allowed because the library needs them.
+  - Navigation away from the page is blocked and JavaScript console errors go to the log.
+  - Data flows one way, Python → JS, as strict JSON (`allow_nan=False`) through `runJavaScript`.
+    The page draws and formats only; it calculates nothing. The legend's OHLC values, change and
+    volume under the cursor are rendered in the page from the data it was sent.
+  - Number and date formatting use the system locale. If the locale is unusable (`C` or `POSIX`),
+    the chart falls back to `es-ES` (see PROBLEMS.md P-008).
+  - The TradingView attribution logo stays enabled, as the licence's NOTICE requires.
+- **Rationale:**
+  - Synchronised panes are a core expectation of technical-analysis software.
+  - Keeping the JS side free of logic keeps all calculations testable in Python.
+- **Consequences:**
+  - Tests query the real page through `chartApp.state()`.
+  - Headless Chromium needs `--no-sandbox --disable-gpu` in containers (set in `tests/conftest.py`
+    only).
+  - The Linux CI needs the NSS and X libraries.

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from PySide6.QtCore import Qt
@@ -46,10 +48,23 @@ def window(qtbot: QtBot, settings: SettingsService, market: MarketDataService) -
     return win
 
 
-def wait_loaded(qtbot: QtBot, win: MainWindow) -> None:
-    assert win.market is not None
-    with qtbot.waitSignal(win.market.load_finished, timeout=5000):
-        pass
+def chart_state(qtbot: QtBot, win: MainWindow) -> dict[str, Any]:
+    """Ask the real chart page what it is drawing."""
+    qtbot.waitUntil(lambda: win.chart.is_loaded, timeout=20000)
+    result: list[str] = []
+    qtbot.waitUntil(
+        lambda: (
+            (
+                result
+                or win.chart.evaluate("JSON.stringify(window.chartApp.state())", result.append)
+                or False
+            )
+            and bool(result)
+        ),
+        timeout=10000,
+    )
+    state: dict[str, Any] = json.loads(result[0])
+    return state
 
 
 def test_controls_enabled_with_service(window: MainWindow) -> None:
@@ -67,8 +82,9 @@ def test_open_symbol_shows_summary_and_persists(
     with qtbot.waitSignal(window.market.load_finished, timeout=5000):
         window.open_symbol("TEST", "Test Corp")
     assert window.symbol_label.text() == "TEST"
-    text = window.chart_panel.empty_label.text()
-    assert "TEST" in text and "300" in text  # 300 synthetic sessions
+    assert window.chart.showing_chart
+    assert window.chart.current_series is not None
+    assert len(window.chart.current_series) == 300  # 300 synthetic sessions
     assert settings.last_symbol() == "TEST"
     assert settings.last_interval() == "1D"
     assert window.market.service.recent()[0].symbol == "TEST"
@@ -81,15 +97,17 @@ def test_interval_change_reloads(qtbot: QtBot, window: MainWindow) -> None:
     with qtbot.waitSignal(window.market.load_finished, timeout=5000) as blocker:
         window.timeframe_combo.setCurrentIndex(1)
     assert blocker.args[0].series.interval is Interval.W1
-    assert "Semanal" in window.chart_panel.empty_label.text()
+    assert window.chart.current_series is not None
+    assert window.chart.current_series.interval is Interval.W1
 
 
 def test_invalid_ticker_shows_error(qtbot: QtBot, window: MainWindow) -> None:
     assert window.market is not None
     with qtbot.waitSignal(window.market.load_failed, timeout=5000):
         window.open_symbol("NOPE")
-    assert "NOPE" in window.chart_panel.empty_label.text()
-    assert window.chart_panel.empty_label.property("error") is True
+    assert "NOPE" in window.chart.message.text()
+    assert window.chart.message.property("error") is True
+    assert not window.chart.showing_chart
     assert window.symbol_label.text() == strings.NO_SYMBOL
 
 
@@ -97,10 +115,11 @@ def test_failed_load_keeps_previous_data(qtbot: QtBot, window: MainWindow) -> No
     assert window.market is not None
     with qtbot.waitSignal(window.market.load_finished, timeout=5000):
         window.open_symbol("TEST")
-    summary = window.chart_panel.empty_label.text()
+    shown = window.chart.current_series
     with qtbot.waitSignal(window.market.load_failed, timeout=5000):
         window.open_symbol("NOPE")
-    assert window.chart_panel.empty_label.text() == summary
+    assert window.chart.showing_chart
+    assert window.chart.current_series is shown
     assert window.symbol_label.text() == "TEST"
     assert "NOPE" in window.statusBar().currentMessage()
     # Changing interval reloads the symbol actually shown, not the failed one.
@@ -114,7 +133,7 @@ def test_network_error_message(qtbot: QtBot, window: MainWindow, client: FakeYah
     assert window.market is not None
     with qtbot.waitSignal(window.market.load_failed, timeout=5000):
         window.open_symbol("TEST")
-    assert "conexión" in window.chart_panel.empty_label.text()
+    assert "conexión" in window.chart.message.text()
 
 
 def test_typing_searches_and_enter_opens(qtbot: QtBot, window: MainWindow) -> None:
@@ -202,7 +221,8 @@ def test_details_offline_shows_bar_data_and_notice(
     qtbot: QtBot, window: MainWindow, client: FakeYahooClient
 ) -> None:
     assert window.market is not None
-    with qtbot.waitSignal(window.market.load_finished, timeout=5000):
+    # No live quote available (empty payload), so details come from the cached bars.
+    with qtbot.waitSignal(window.market.details_finished, timeout=5000):
         window.open_symbol("TEST")
     window.current_result = None  # force a details refresh on the next load
     client.error = ConnectionError("offline")
@@ -212,3 +232,36 @@ def test_details_offline_shows_bar_data_and_notice(
     assert panel.values["price"].text() != "—"
     assert "última barra" in panel.source_label.text()
     assert "conectar" in panel.source_label.text()
+
+
+def test_chart_page_draws_loaded_series(qtbot: QtBot, window: MainWindow) -> None:
+    assert window.market is not None
+    with qtbot.waitSignal(window.market.load_finished, timeout=5000):
+        window.open_symbol("TEST")
+    qtbot.waitUntil(lambda: chart_state(qtbot, window)["bars"] == 300, timeout=20000)
+    state = chart_state(qtbot, window)
+    assert state["priceSeriesType"] == "Candlestick"
+    assert state["hasVolume"] and state["panes"] == 2
+    assert state["legend"].startswith("TEST · Diario")
+    # Starts on the most recent 180 bars, not the whole history.
+    assert 115 <= state["visibleFrom"] <= 125
+
+
+def test_chart_type_switch_and_persistence(
+    qtbot: QtBot, window: MainWindow, settings: SettingsService
+) -> None:
+    assert window.market is not None
+    with qtbot.waitSignal(window.market.load_finished, timeout=5000):
+        window.open_symbol("TEST")
+    window.chart_type_combo.setCurrentIndex(window.chart_type_combo.findData("line"))
+    qtbot.waitUntil(lambda: chart_state(qtbot, window)["priceSeriesType"] == "Line", timeout=20000)
+    assert settings.chart_type() == "line"
+
+
+def test_theme_change_reaches_chart(qtbot: QtBot, window: MainWindow) -> None:
+    assert window.market is not None
+    with qtbot.waitSignal(window.market.load_finished, timeout=5000):
+        window.open_symbol("TEST")
+    dark_bg = chart_state(qtbot, window)["background"]
+    window.dark_theme_action.setChecked(False)
+    qtbot.waitUntil(lambda: chart_state(qtbot, window)["background"] != dark_bg, timeout=20000)

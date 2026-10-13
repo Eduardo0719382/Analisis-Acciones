@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QByteArray, QLocale, Qt, QTimer
+from PySide6.QtCore import QByteArray, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from analisis_acciones import __version__
+from analisis_acciones.charts.chart_widget import ChartWidget
 from analisis_acciones.models.market import Interval
 from analisis_acciones.services.market_data_service import LoadResult, MarketDataService
 from analisis_acciones.services.settings_service import SettingsService, Theme
@@ -35,7 +36,7 @@ from analisis_acciones.ui.disclaimer import DisclaimerDialog
 from analisis_acciones.ui.market_controller import MarketController
 from analisis_acciones.ui.panels import Panel
 from analisis_acciones.ui.search_box import SearchBox
-from analisis_acciones.ui.theme import apply_theme
+from analisis_acciones.ui.theme import apply_theme, tokens_for
 from analisis_acciones.ui.update_dialog import UpdateDialog
 from analisis_acciones.ui.workers import Worker, start_worker
 
@@ -43,7 +44,6 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_SIZE = (1400, 860)
 DEFAULT_MAIN_SPLIT = [240, 900, 280]
-DEFAULT_CENTER_SPLIT = [620, 200]
 STARTUP_UPDATE_CHECK_DELAY_MS = 3000
 
 
@@ -73,6 +73,7 @@ class MainWindow(QMainWindow):
         self._build_menus()
         self._restore_layout()
         self._wire_market()
+        self._wire_chart_type()
 
     # Construction ----------------------------------------------------------
     def _build_toolbar(self) -> None:
@@ -98,6 +99,13 @@ class MainWindow(QMainWindow):
         self.timeframe_combo.setMinimumWidth(70)
         bar.addWidget(self.timeframe_combo)
 
+        self.chart_type_combo = QComboBox()
+        self.chart_type_combo.setObjectName("chartTypeCombo")
+        self.chart_type_combo.setToolTip(strings.CHART_TYPE_TOOLTIP)
+        for key, label in strings.CHART_TYPE_LABELS.items():
+            self.chart_type_combo.addItem(label, key)
+        bar.addWidget(self.chart_type_combo)
+
         self.indicators_button = QPushButton(strings.INDICATORS_BUTTON)
         self.indicators_button.setObjectName("indicatorsButton")
         self.indicators_button.setEnabled(False)
@@ -113,22 +121,16 @@ class MainWindow(QMainWindow):
 
     def _build_regions(self) -> None:
         self.watchlist_panel = Panel(strings.PANEL_WATCHLIST, strings.EMPTY_WATCHLIST)
-        self.chart_panel = Panel(strings.PANEL_CHART, strings.EMPTY_CHART)
-        self.lower_panel = Panel(strings.PANEL_LOWER, strings.EMPTY_LOWER)
+        # Price, volume and (later) indicator panes live inside one chart so their
+        # time axes and crosshair stay synchronised (DECISIONS.md D-014).
+        self.chart = ChartWidget()
+        self.chart.set_theme(tokens_for(self._settings.theme()))
         self.details_panel = DetailsPanel()
-
-        self.center_splitter = QSplitter(Qt.Orientation.Vertical)
-        self.center_splitter.setObjectName("centerSplitter")
-        self.center_splitter.addWidget(self.chart_panel)
-        self.center_splitter.addWidget(self.lower_panel)
-        self.center_splitter.setChildrenCollapsible(False)
-        self.center_splitter.setStretchFactor(0, 3)
-        self.center_splitter.setStretchFactor(1, 1)
 
         self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.main_splitter.setObjectName("mainSplitter")
         self.main_splitter.addWidget(self.watchlist_panel)
-        self.main_splitter.addWidget(self.center_splitter)
+        self.main_splitter.addWidget(self.chart)
         self.main_splitter.addWidget(self.details_panel)
         # Side panels may collapse; the chart region may not.
         self.main_splitter.setCollapsible(1, False)
@@ -225,6 +227,17 @@ class MainWindow(QMainWindow):
             lambda _s, msg: self.details_panel.source_label.setText(msg)
         )
 
+    def _wire_chart_type(self) -> None:
+        index = self.chart_type_combo.findData(self._settings.chart_type())
+        self.chart_type_combo.setCurrentIndex(max(index, 0))
+        self.chart.set_chart_type(self.chart_type_combo.currentData())
+        self.chart_type_combo.currentIndexChanged.connect(self._on_chart_type_changed)
+
+    def _on_chart_type_changed(self, _index: int) -> None:
+        chart_type = str(self.chart_type_combo.currentData())
+        self.chart.set_chart_type(chart_type)
+        self._settings.set_chart_type(chart_type)
+
     def current_interval(self) -> Interval:
         value = self.timeframe_combo.currentData()
         return Interval(value) if value else Interval.D1
@@ -293,18 +306,8 @@ class MainWindow(QMainWindow):
         self._set_label(self.provider_label, strings.STATUS_PROVIDER.format(name=series.source))
         self._settings.set_last_opened(series.symbol, series.interval.value)
 
-        locale = QLocale()
-        last_close = series.bars["close"].iloc[-1]
-        self.chart_panel.set_message(
-            strings.DATA_SUMMARY.format(
-                symbol=series.symbol,
-                interval=strings.INTERVAL_LABELS.get(series.interval.value, series.interval.value),
-                count=locale.toString(len(series)),
-                first=self._format_date(series.first_date),
-                last=self._format_date(series.last_date),
-                close=locale.toString(float(last_close), "f", 2),
-            )
-        )
+        interval_label = strings.INTERVAL_LABELS.get(series.interval.value, series.interval.value)
+        self.chart.show_series(series, f"{series.symbol} · {interval_label}")
 
         when = strings.STATUS_NEVER
         if result.fetched_at is not None:
@@ -326,7 +329,7 @@ class MainWindow(QMainWindow):
         title = strings.LOAD_ERROR.format(symbol=symbol)
         self.statusBar().showMessage(f"{title}: {message}")
         if self.current_result is None:
-            self.chart_panel.set_message(f"{title}.\n\n{message}", error=True)
+            self.chart.show_message(f"{title}.\n\n{message}", error=True)
         else:
             # Keep showing the data already on screen; it is still consistent with
             # the symbol label. The status bar explains why the new request failed.
@@ -337,10 +340,6 @@ class MainWindow(QMainWindow):
         """Set text and let toolbar/status-bar layouts grow the label to fit it."""
         label.setText(text)
         label.setMinimumWidth(label.sizeHint().width())
-
-    @staticmethod
-    def _format_date(value: object) -> str:
-        return value.strftime("%d/%m/%Y") if hasattr(value, "strftime") else "—"
 
     def _import_csv(self) -> None:
         if self.market is None:
@@ -364,6 +363,7 @@ class MainWindow(QMainWindow):
         app = QApplication.instance()
         if isinstance(app, QApplication):
             apply_theme(app, theme)
+        self.chart.set_theme(tokens_for(theme))
         logger.info("Theme changed to %s", theme.value)
 
     # Layout persistence ----------------------------------------------------
@@ -372,7 +372,6 @@ class MainWindow(QMainWindow):
             "geometry": self._encode(self.saveGeometry()),
             "state": self._encode(self.saveState()),
             "main_split": self._encode(self.main_splitter.saveState()),
-            "center_split": self._encode(self.center_splitter.saveState()),
         }
 
     def _restore_layout(self) -> None:
@@ -388,8 +387,6 @@ class MainWindow(QMainWindow):
         self._restore_part(layout.get("state"), self.restoreState)
         if not self._restore_part(layout.get("main_split"), self.main_splitter.restoreState):
             self.main_splitter.setSizes(DEFAULT_MAIN_SPLIT)
-        if not self._restore_part(layout.get("center_split"), self.center_splitter.restoreState):
-            self.center_splitter.setSizes(DEFAULT_CENTER_SPLIT)
 
     def _restore_part(self, value: object, restore: Callable[[QByteArray], bool]) -> bool:
         if not isinstance(value, str):
@@ -406,7 +403,6 @@ class MainWindow(QMainWindow):
 
     def _apply_default_sizes(self) -> None:
         self.main_splitter.setSizes(DEFAULT_MAIN_SPLIT)
-        self.center_splitter.setSizes(DEFAULT_CENTER_SPLIT)
 
     def reset_layout(self) -> None:
         self._settings.reset_layout()

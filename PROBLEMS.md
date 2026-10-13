@@ -72,3 +72,37 @@
   double-checked for connectivity, see P-005); 429 means "rate limited". Unit tests cover both
   the message-only and the `response.status_code` forms. The live CI job is what caught this,
   which is why it exists.
+
+## P-008 — Chart crashed with an unusable system locale (Phase 3)
+
+- **Symptom:** the chart page threw `RangeError: Invalid language tag: C`, and the series never
+  appeared.
+- **Cause:** the locale tag came from Qt (`C`, then `en-POSIX`), and the browser's `Intl` API does
+  not accept it.
+- **Solution:**
+  - `chart_locale()` rejects empty, `C` and `POSIX` tags and anything that is not a clean BCP-47 tag,
+    falling back to `es-ES`.
+  - `chart.js` also checks `Intl.NumberFormat.supportedLocalesOf` before using the tag.
+
+## P-009 — Volume axis showed decimals; library styles blocked (Phase 3)
+
+- **Symptom:**
+  - the volume scale read "6,000,000.00";
+  - the console reported Content Security Policy violations for inline styles.
+- **Cause:**
+  - a chart-wide `priceFormatter` also applied to the volume scale;
+  - the library sets inline styles, which the strict `style-src 'self'` policy blocked.
+- **Solution:**
+  - the price and volume series each have their own formatter (volume uses compact notation,
+    e.g. "6 M");
+  - `style-src` allows `'unsafe-inline'`, while scripts remain restricted to the bundled files.
+
+## P-010 — Flaky details test (Phase 3, test-only)
+
+- **Symptom:** a UI test sometimes read the details of an earlier request.
+- **Cause:**
+  - the test waited for "any" `details_finished` signal, and the first load's reply could arrive late;
+  - after that was fixed, the provider's 60-second quote cache (correct behaviour) still served
+    the earlier quote.
+- **Solution:** the test now waits for the specific reply it triggers and does not rely on a quote
+  being refetched. Three consecutive full runs passed.

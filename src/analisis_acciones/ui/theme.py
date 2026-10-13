@@ -21,6 +21,7 @@ class ThemeTokens:
     accent: str
     up: str
     down: str
+    grid: str
 
 
 DARK = ThemeTokens(
@@ -33,6 +34,7 @@ DARK = ThemeTokens(
     accent="#4c8dff",
     up="#26a69a",
     down="#ef5350",
+    grid="#1c2129",
 )
 
 LIGHT = ThemeTokens(
@@ -45,6 +47,7 @@ LIGHT = ThemeTokens(
     accent="#2563eb",
     up="#00897b",
     down="#d32f2f",
+    grid="#edf0f4",
 )
 
 

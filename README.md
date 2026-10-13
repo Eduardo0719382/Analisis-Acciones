@@ -10,6 +10,8 @@ alertas y backtesting.
 - Plan y alcance: [`PLAN.md`](PLAN.md)
 - Decisiones de arquitectura: [`DECISIONS.md`](DECISIONS.md)
 - Problemas encontrados y soluciones: [`PROBLEMS.md`](PROBLEMS.md)
+- Gráficos: [TradingView Lightweight Charts™](https://www.tradingview.com/lightweight-charts/)
+  (Apache 2.0, incluido en `src/analisis_acciones/charts/web/` con su licencia y aviso).
 
 ## Requisitos
 
@@ -43,13 +45,19 @@ Los datos (base de datos SQLite y registros) se guardan en el directorio de dato
 usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la variable
 `ANALISIS_ACCIONES_HOME` (véase `.env.example`).
 
-## Uso (Fase 2)
+## Uso
 
 - **Buscar:** escriba un ticker (p. ej. `AAPL`) o el nombre de una empresa en el cuadro de
   búsqueda. Use ↑/↓ y Enter, o haga clic en un resultado. Con el cuadro vacío se muestran
   los símbolos recientes.
 - **Intervalo:** Diario, Semanal o Mensual (los dos últimos se calculan a partir de los datos
   diarios).
+- **Gráfico:** velas o línea (selector junto al intervalo). Rueda del ratón = zoom; arrastrar =
+  desplazarse; la leyenda superior muestra apertura, máximo, mínimo, cierre, cambio y volumen
+  de la barra bajo el cursor. El volumen aparece en un panel propio bajo el precio.
+- **Detalles (panel derecho):** precio, cambio, apertura/máximo/mínimo, volumen, rango de 52
+  semanas, moneda, mercado, sector. Sin conexión se muestran los datos de la última barra
+  guardada, indicándolo.
 - **Importar CSV:** *Archivo → Importar CSV…*. Columnas `date, open, high, low, close`
   (opcionales `volume`, `adj close`); también en español (`fecha; apertura; máximo; mínimo;
   cierre; volumen`) con coma decimal. Fechas `AAAA-MM-DD` o `DD/MM/AAAA`.

@@ -1,0 +1,215 @@
+"""Chart view: a sandboxed QWebEngineView running Lightweight Charts.
+
+Python owns all data and calculations; the page only draws what it is sent.
+The page is local (bundled files), cannot reach the network, cannot navigate
+away, and JavaScript errors are forwarded to the application log.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from dataclasses import asdict
+from importlib import resources
+from pathlib import Path
+from typing import Any
+
+from PySide6.QtCore import QLocale, Qt, QUrl, Signal
+from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
+from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtWidgets import QLabel, QStackedLayout, QVBoxLayout, QWidget
+
+from analisis_acciones.charts.payload import build_payload
+from analisis_acciones.models.market import BarSeries
+from analisis_acciones.ui import strings
+from analisis_acciones.ui.theme import ThemeTokens
+
+logger = logging.getLogger(__name__)
+
+CHART_TYPES = ("candles", "line")
+FALLBACK_LOCALE = "es-ES"
+
+
+def chart_page_path() -> Path:
+    return Path(str(resources.files("analisis_acciones.charts") / "web" / "chart.html"))
+
+
+def chart_locale(bcp47: str) -> str:
+    """BCP-47 tag for number/date formatting in the page; Spanish when unusable."""
+    tag = bcp47.strip()
+    if (
+        not tag
+        or tag.upper() == "C"
+        or "POSIX" in tag.upper()
+        or not all(part.isalnum() for part in tag.split("-"))
+    ):
+        return FALLBACK_LOCALE
+    return tag
+
+
+class _ChartPage(QWebEnginePage):
+    """Local-only page: logs console output and blocks any navigation."""
+
+    def __init__(self, allowed: QUrl, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._allowed = allowed
+
+    def javaScriptConsoleMessage(
+        self,
+        level: QWebEnginePage.JavaScriptConsoleMessageLevel,
+        message: str,
+        line: int,
+        source: str,
+    ) -> None:
+        log = (
+            logger.error
+            if level == QWebEnginePage.JavaScriptConsoleMessageLevel.ErrorMessageLevel
+            else logger.debug
+        )
+        log("chart.js:%s %s", line, message)
+
+    def acceptNavigationRequest(
+        self, url: QUrl | str, nav_type: QWebEnginePage.NavigationType, is_main_frame: bool
+    ) -> bool:
+        target = QUrl(url)
+        if (
+            is_main_frame
+            and target.isLocalFile()
+            and (target.toLocalFile() == self._allowed.toLocalFile())
+        ):
+            return True
+        logger.warning("Blocked chart navigation to %s", target.toString())
+        return False
+
+
+class ChartWidget(QWidget):
+    """Shows either a message (no data / error) or the interactive chart."""
+
+    ready = Signal()
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("chartWidget")
+        self._loaded = False
+        self._pending: list[str] = []
+        self._theme: ThemeTokens | None = None
+        self._chart_type = "candles"
+        self.current_series: BarSeries | None = None
+
+        self.message = QLabel(strings.EMPTY_CHART)
+        self.message.setObjectName("panelEmpty")
+        self.message.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.message.setWordWrap(True)
+        message_page = QWidget()
+        message_page.setObjectName("panel")
+        QVBoxLayout(message_page).addWidget(self.message)
+
+        page_url = QUrl.fromLocalFile(str(chart_page_path()))
+        self.view = QWebEngineView()
+        self.view.setPage(_ChartPage(page_url, self.view))
+        self.view.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
+        settings = self.view.settings()
+        settings.setAttribute(
+            QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, False
+        )
+        settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanOpenWindows, False)
+        settings.setAttribute(QWebEngineSettings.WebAttribute.PluginsEnabled, False)
+        self.view.loadFinished.connect(self._on_load_finished)
+        self.view.page().renderProcessTerminated.connect(self._on_render_crash)
+
+        self._stack = QStackedLayout(self)
+        self._stack.addWidget(message_page)
+        self._stack.addWidget(self.view)
+        self._stack.setCurrentIndex(0)
+
+        self.view.load(page_url)
+
+    # Page lifecycle ----------------------------------------------------------
+    @property
+    def is_loaded(self) -> bool:
+        return self._loaded
+
+    def _on_load_finished(self, ok: bool) -> None:
+        if not ok:
+            logger.error("Chart page failed to load: %s", chart_page_path())
+            self.show_message(strings.CHART_LOAD_ERROR, error=True)
+            return
+        self._loaded = True
+        self._configure()
+        for script in self._pending:
+            self.view.page().runJavaScript(script)
+        self._pending.clear()
+        self.ready.emit()
+
+    def _on_render_crash(self, status: object, code: int) -> None:
+        logger.error("Chart renderer terminated (status=%s, code=%s)", status, code)
+        self._loaded = False
+        self.show_message(strings.CHART_LOAD_ERROR, error=True)
+
+    def _run(self, script: str) -> None:
+        if self._loaded:
+            self.view.page().runJavaScript(script)
+        else:
+            self._pending.append(script)
+
+    @staticmethod
+    def _call(function: str, argument: Any) -> str:
+        # json.dumps produces a valid JS literal; allow_nan=False rejects NaN/inf.
+        literal = json.dumps(argument, allow_nan=False)
+        return f"window.chartApp && window.chartApp.{function}({literal});"
+
+    def _configure(self) -> None:
+        if self._theme is None:
+            return
+        locale = chart_locale(QLocale().bcp47Name())
+        self._run(self._call("configure", {
+            "theme": asdict(self._theme),
+            "locale": locale,
+            "labels": {
+                "open": strings.LEGEND_OPEN, "high": strings.LEGEND_HIGH,
+                "low": strings.LEGEND_LOW, "close": strings.LEGEND_CLOSE,
+                "volume": strings.LEGEND_VOLUME,
+            },
+        }))  # fmt: skip
+
+    # Public API --------------------------------------------------------------
+    def set_theme(self, theme: ThemeTokens) -> None:
+        self._theme = theme
+        if self._loaded:
+            self._configure()
+
+    def set_chart_type(self, chart_type: str) -> None:
+        self._chart_type = chart_type if chart_type in CHART_TYPES else "candles"
+        self._run(self._call("setChartType", self._chart_type))
+
+    @property
+    def chart_type(self) -> str:
+        return self._chart_type
+
+    def show_series(self, series: BarSeries, title: str) -> None:
+        if self._theme is None:
+            raise RuntimeError("set_theme() must be called before show_series()")
+        if series.bars.empty:
+            self.show_message(strings.CHART_NO_DATA)
+            return
+        self.current_series = series
+        payload = build_payload(series, title, self._theme.up, self._theme.down)
+        self._run(self._call("setChartType", self._chart_type))
+        self._run(self._call("setData", payload))
+        self._stack.setCurrentIndex(1)
+
+    def show_message(self, text: str, *, error: bool = False) -> None:
+        self.message.setText(text)
+        self.message.setProperty("error", error)
+        self.message.style().unpolish(self.message)
+        self.message.style().polish(self.message)
+        self._stack.setCurrentIndex(0)
+
+    @property
+    def showing_chart(self) -> bool:
+        return self._stack.currentIndex() == 1
+
+    def evaluate(self, script: str, callback: Any) -> None:
+        """Run a script in the page and pass its result to ``callback`` (tests, export)."""
+        self.view.page().runJavaScript(script, 0, callback)

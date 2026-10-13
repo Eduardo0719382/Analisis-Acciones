@@ -1,0 +1,8 @@
+TradingView Lightweight Charts(TM) v5.2.1
+Copyright (c) 2026 TradingView, Inc.
+Licensed under the Apache License, Version 2.0 (see LICENSE-lightweight-charts.txt).
+https://www.tradingview.com/
+
+Bundled unmodified from the npm package lightweight-charts@5.2.1
+(integrity sha512-IVwoK1RLFiLPubaKIjNbtjWLnpPMqiABSrTay6whmNa8L1+19292VtHJ+BWyPUuLCwF0tcQlhEWd1CLB2a1nsQ==).
+The chart keeps the library's default TradingView attribution logo enabled.

@@ -13,11 +13,9 @@ COMING_SOON = "Disponible en una próxima fase"
 
 PANEL_WATCHLIST = "Lista de seguimiento"
 PANEL_CHART = "Gráfico"
-PANEL_LOWER = "Indicadores / Volumen"
 PANEL_DETAILS = "Detalles"
 EMPTY_WATCHLIST = "La lista de seguimiento está vacía."
 EMPTY_CHART = "Busque un ticker para ver su gráfico."
-EMPTY_LOWER = "Aquí aparecerán el volumen y los indicadores en panel propio."
 EMPTY_DETAILS = "Seleccione un activo para ver sus datos."
 
 STATUS_PROVIDER = "Proveedor: {name}"
@@ -84,12 +82,6 @@ IMPORT_CSV_NAME_PROMPT = "Nombre para esta serie (letras, números, '-', '_' o '
 
 LOADING = "Cargando {symbol}…"
 LOAD_ERROR = "No se pudo cargar {symbol}"
-DATA_SUMMARY = (
-    "{symbol} · {interval}\n\n"
-    "{count} barras · {first} → {last}\n"
-    "Último cierre: {close}\n\n"
-    "El gráfico se añadirá en la Fase 3."
-)
 SESSION_IN_PROGRESS = "La última barra corresponde a la sesión en curso (aún no cerrada)."
 STALE_DATA = "Sin conexión: se muestran datos guardados."
 FROM_CACHE = "caché"
@@ -119,3 +111,15 @@ MARKET_STATES = {
     "POSTPOST": "Post-cierre",
     "CLOSED": "Mercado cerrado",
 }
+
+CHART_LOAD_ERROR = (
+    "No se pudo iniciar el motor del gráfico. Consulte el registro para más detalles."
+)
+CHART_NO_DATA = "No hay datos para mostrar."
+CHART_TYPE_TOOLTIP = "Tipo de gráfico"
+CHART_TYPE_LABELS = {"candles": "Velas", "line": "Línea"}
+LEGEND_OPEN = "A"
+LEGEND_HIGH = "Máx"
+LEGEND_LOW = "Mín"
+LEGEND_CLOSE = "C"
+LEGEND_VOLUME = "Vol"
