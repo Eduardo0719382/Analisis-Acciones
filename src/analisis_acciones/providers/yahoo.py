@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 import threading
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Protocol
@@ -149,11 +150,23 @@ def _not_found(symbol: str) -> UserError:
     )
 
 
+def _http_status(exc: Exception) -> int | None:
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    if isinstance(status, int):
+        return status
+    match = re.search(r"HTTP Error (\d{3})", str(exc))
+    return int(match.group(1)) if match else None
+
+
 def map_yahoo_error(exc: Exception, symbol: str) -> AppError:
     if isinstance(exc, AppError):
         return exc
     names = {cls.__name__ for cls in type(exc).__mro__}
-    if "YFRateLimitError" in names:
+    status = _http_status(exc) if "HTTPError" in names else None
+    if status == 404:
+        # yfinance >= 1.x (exceptions not hidden) surfaces the raw 404 of an unknown ticker.
+        return _not_found(symbol)
+    if "YFRateLimitError" in names or status == 429:
         return ProviderError(
             f"Yahoo rate limit: {exc}",
             user_message="Yahoo Finance ha limitado las peticiones. Espere unos minutos.",

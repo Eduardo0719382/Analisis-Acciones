@@ -26,6 +26,14 @@ class ConnectTimeout(Exception):
     pass
 
 
+class HTTPError(Exception):
+    """Mimics curl_cffi/requests HTTPError: message and optional response."""
+
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.response = type("R", (), {"status_code": status})() if status else None
+
+
 @pytest.fixture
 def client() -> FakeYahooClient:
     return FakeYahooClient()
@@ -103,6 +111,10 @@ def test_unsupported_interval(provider: YahooFinanceProvider) -> None:
         (ConnectionError("down"), NetworkError),
         (TimeoutError(), NetworkError),
         (KeyError("chart"), ProviderError),
+        (HTTPError("HTTP Error 404: "), UserError),
+        (HTTPError("Not Found", status=404), UserError),
+        (HTTPError("HTTP Error 429: Too Many Requests"), ProviderError),
+        (HTTPError("HTTP Error 500: "), ProviderError),
     ],
 )
 def test_error_mapping(exc: Exception, expected: type) -> None:

@@ -61,3 +61,14 @@
   - `main()` now destroys the window before closing the connections.
   - Reading recent symbols is guarded, because it is a convenience that must never break typing.
   - The startup tests restore `sys.excepthook` after each test.
+
+## P-007 — Unknown ticker reported as a provider error after the yfinance config change (Phase 2)
+
+- **Symptom:** the live CI test `test_invalid_ticker` failed with `ProviderError: HTTP Error 404`.
+- **Cause:** setting `yf.config.debug.hide_exceptions = False` (which replaces the deprecated
+  `raise_errors`) makes yfinance surface the raw HTTP 404 from its time-zone lookup. Previously
+  that was converted into `YFTzMissingError`.
+- **Solution:** the error mapper reads the HTTP status. 404 means "ticker not found" (still
+  double-checked for connectivity, see P-005); 429 means "rate limited". Unit tests cover both
+  the message-only and the `response.status_code` forms. The live CI job is what caught this,
+  which is why it exists.
