@@ -11,6 +11,7 @@ from PySide6.QtCore import QCoreApplication, QEvent, QProcess, QThreadPool
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
 from analisis_acciones import __version__
+from analisis_acciones.alerts.service import AlertService
 from analisis_acciones.app.error_handler import install_excepthook
 from analisis_acciones.app.logging_setup import configure_logging
 from analisis_acciones.app.paths import APP_NAME, AppPaths
@@ -56,6 +57,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         conn = open_database(paths.database)
         # Separate connection for market data: it is used from worker threads.
         market_conn = open_database(paths.database)
+        alerts_conn = open_database(paths.database)
     except (AppError, sqlite3.Error, OSError) as exc:
         logger.exception("Could not open database %s", paths.database)
         QMessageBox.critical(
@@ -67,6 +69,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     window: MainWindow | None = None
     market: MarketDataService | None = None
+    alerts: AlertService | None = None
     try:
         settings = SettingsService(SettingsRepository(conn))
         apply_theme(app, settings.theme())
@@ -78,15 +81,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             settings.accept_disclaimer()
 
         market = MarketDataService(YahooFinanceProvider(), market_conn)
+        alerts = AlertService(alerts_conn, market)
         window = MainWindow(
             settings,
             update_service=UpdateService(),
             market_service=market,
             watchlist_service=WatchlistService(conn),
+            alert_service=alerts,
         )
         window.show()
         window.restore_last_symbol()
         window.schedule_startup_update_check()
+        window.start_alert_schedule()
         code = app.exec()
         restart = window.restart_requested
     finally:
@@ -101,6 +107,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         QThreadPool.globalInstance().waitForDone(5000)
         # Closing through the service waits for any worker still inside a query
         # (a slow network request may outlive the wait above).
+        if alerts is not None:
+            alerts.close()
+        else:
+            alerts_conn.close()
         if market is not None:
             market.close()
         else:

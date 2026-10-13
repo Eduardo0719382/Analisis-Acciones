@@ -20,12 +20,15 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSplitter,
+    QStyle,
+    QSystemTrayIcon,
     QTabWidget,
     QToolBar,
     QWidget,
 )
 
 from analisis_acciones import __version__
+from analisis_acciones.alerts.service import AlertEvent, AlertService
 from analisis_acciones.charts.chart_widget import ChartWidget
 from analisis_acciones.indicators.registry import IndicatorConfig
 from analisis_acciones.models.market import Interval
@@ -34,6 +37,7 @@ from analisis_acciones.services.settings_service import SettingsService, Theme
 from analisis_acciones.services.update_service import UpdateCheck, UpdateService
 from analisis_acciones.services.watchlist_service import WatchlistService
 from analisis_acciones.ui import strings
+from analisis_acciones.ui.alerts_panel import AlertsPanel
 from analisis_acciones.ui.analysis_panel import AnalysisPanel
 from analisis_acciones.ui.details_panel import DetailsPanel
 from analisis_acciones.ui.disclaimer import DisclaimerDialog
@@ -62,12 +66,15 @@ class MainWindow(QMainWindow):
         update_service: UpdateService | None = None,
         market_service: MarketDataService | None = None,
         watchlist_service: WatchlistService | None = None,
+        alert_service: AlertService | None = None,
     ) -> None:
         super().__init__(parent)
         self._settings = settings
         self._update_service = update_service
         self.market = MarketController(market_service, self) if market_service else None
         self._watchlists = watchlist_service
+        self._alert_service = alert_service
+        self._tray: QSystemTrayIcon | None = None
         self.current_symbol: str | None = None
         self.current_result: LoadResult | None = None
         self.restart_requested = False
@@ -154,6 +161,14 @@ class MainWindow(QMainWindow):
         self.right_tabs.setObjectName("rightTabs")
         self.right_tabs.addTab(self.details_panel, strings.TAB_DETAILS)
         self.right_tabs.addTab(self.analysis_panel, strings.TAB_ANALYSIS)
+        self.alerts_panel: AlertsPanel | None = None
+        if self._alert_service is not None:
+            self.alerts_panel = AlertsPanel(self._alert_service)
+            self.alerts_panel.current_symbol_provider = lambda: (
+                self.current_result.series.symbol if self.current_result else None
+            )
+            self.alerts_panel.alerts_triggered.connect(self._notify_alerts)
+            self.right_tabs.addTab(self.alerts_panel, strings.TAB_ALERTS)
 
         self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
         self.main_splitter.setObjectName("mainSplitter")
@@ -265,6 +280,37 @@ class MainWindow(QMainWindow):
         chart_type = str(self.chart_type_combo.currentData())
         self.chart.set_chart_type(chart_type)
         self._settings.set_chart_type(chart_type)
+
+    def _notify_alerts(self, events: list[AlertEvent]) -> None:
+        """Tell the user about new alerts: status bar, taskbar flash and a desktop toast."""
+        lines = [AlertsPanel.format_event(e) for e in events]
+        self.statusBar().showMessage(lines[0] + (f" (+{len(lines) - 1})" if len(lines) > 1 else ""))
+        QApplication.alert(self)
+        if QSystemTrayIcon.isSystemTrayAvailable():
+            if self._tray is None:
+                icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation)
+                self._tray = QSystemTrayIcon(icon, self)
+                self._tray.setToolTip(strings.APP_TITLE)
+                self._tray.messageClicked.connect(self._show_alerts_tab)
+                self._tray.show()
+            for event in events[:5]:
+                self._tray.showMessage(
+                    strings.ALERT_NOTIFY_TITLE.format(description=event.description),
+                    event.message,
+                    QSystemTrayIcon.MessageIcon.Information,
+                    10_000,
+                )
+
+    def _show_alerts_tab(self) -> None:
+        if self.alerts_panel is not None:
+            self.right_tabs.setCurrentWidget(self.alerts_panel)
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def start_alert_schedule(self) -> None:
+        if self.alerts_panel is not None:
+            self.alerts_panel.start_schedule()
 
     def edit_indicators(self) -> None:
         dialog = IndicatorDialog(self.chart.indicators, self)

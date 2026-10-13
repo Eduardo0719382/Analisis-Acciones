@@ -314,3 +314,23 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   99.98 and 99.99 was labelled a bearish trend. The 0.5 % gap was added (PROBLEMS.md P-014).
 - **Wording:** a test checks that signal texts contain no advice or prediction words
   ("compra", "vende", "subirá", "garantía", …). The panel shows a standing disclaimer.
+
+## D-019 — Alert engine (Phase 7)
+
+- **Separation:** `alerts/rules.py` defines the alert kinds, parameter validation and evaluation.
+  `alerts/service.py` handles persistence (migration 0004: `alerts` and `alert_events`) and
+  `check_all()`. The UI only displays results and schedules checks. Alerts use their own SQLite
+  connection, guarded by a lock and closed safely (as in D-017).
+- **Semantics:**
+  - Only completed daily bars are evaluated; an in-progress session bar is dropped, so nothing
+    fires on a value that can still change.
+  - *Level* conditions (price, daily change, RSI) use hysteresis: they fire when the condition
+    becomes true and re-arm once it is false again. Re-enabling a paused alert re-arms it.
+  - *Event* conditions (EMA or MACD crossovers, N-bar breakouts) fire on the bar where the event
+    happens, at most once per bar.
+- **Scheduling:** checks run 20 seconds after start-up, then every 15 minutes, or on demand. They
+  run only while the app is open; background or tray-only operation is deferred.
+- **Notifications:** status bar message, taskbar flash (`QApplication.alert`), a Windows toast via
+  `QSystemTrayIcon` when available, and a persistent event history.
+- **Problems:** missing data, offline use and unknown symbols are collected per symbol or alert
+  and shown as a tooltip; they never stop the other alerts from being checked.

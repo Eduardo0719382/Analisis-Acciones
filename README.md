@@ -69,6 +69,12 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   EMA 20/50 y MACD/señal recientes (5 barras), volumen > 2× su media de 20, cambio de ATR
   ±30 % en 20 barras y rupturas del máximo/mínimo de 20 barras. Cada señal muestra la regla y
   los valores que la producen. Son descripciones de los datos, no recomendaciones.
+- **Alertas (pestaña del panel derecho):** precio por encima/debajo de X, cambio diario
+  mayor/menor que X %, RSI por encima/debajo de X, cruces de EMAs, cruces MACD/señal y
+  rupturas de máximo/mínimo de N barras. Se comprueban sobre barras diarias cerradas al iniciar
+  el programa y cada 15 minutos mientras está abierto (o con «Comprobar ahora»). Avisan en la
+  barra de estado, con una notificación de Windows y en el historial. Las alertas de nivel
+  avisan una vez y se rearman cuando la condición deja de cumplirse.
 - **Detalles (panel derecho):** precio, cambio, apertura/máximo/mínimo, volumen, rango de 52
   semanas, moneda, mercado, sector. Sin conexión se muestran los datos de la última barra
   guardada, indicándolo.
