@@ -64,20 +64,36 @@ class YahooClient(Protocol):
     def info(self, symbol: str) -> dict[str, Any]: ...
 
 
+def _yfinance() -> Any:
+    """Import yfinance configured to raise errors instead of printing them."""
+    import yfinance as yf
+
+    config = getattr(yf, "config", None)
+    debug = getattr(config, "debug", None)
+    if debug is not None and hasattr(debug, "hide_exceptions"):
+        debug.hide_exceptions = False  # yfinance >= 1.x
+    return yf
+
+
+def _raises_by_config(yf: Any) -> bool:
+    debug = getattr(getattr(yf, "config", None), "debug", None)
+    return debug is not None and hasattr(debug, "hide_exceptions")
+
+
 class YFinanceClient:
     """Thin wrapper over yfinance; the only place that imports it."""
 
     def history(self, symbol: str, start: date | None, end: date | None) -> pd.DataFrame:
-        import yfinance as yf
-
+        yf = _yfinance()
         kwargs: dict[str, Any] = {
             "interval": "1d",
             "auto_adjust": False,
             "actions": True,
             "repair": False,
             "timeout": REQUEST_TIMEOUT_S,
-            "raise_errors": True,
         }
+        if not _raises_by_config(yf):
+            kwargs["raise_errors"] = True  # older yfinance (deprecated in 1.x)
         if start is None:
             kwargs["period"] = "max"
         else:
@@ -88,8 +104,7 @@ class YFinanceClient:
         return frame
 
     def search(self, query: str, limit: int) -> list[dict[str, Any]]:
-        import yfinance as yf
-
+        yf = _yfinance()
         result = yf.Search(
             query,
             max_results=limit,
@@ -102,8 +117,7 @@ class YFinanceClient:
         return list(result.quotes)
 
     def info(self, symbol: str) -> dict[str, Any]:
-        import yfinance as yf
-
+        yf = _yfinance()
         return dict(yf.Ticker(symbol).info or {})
 
 
