@@ -75,6 +75,12 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   el programa y cada 15 minutos mientras está abierto (o con «Comprobar ahora»). Avisan en la
   barra de estado, con una notificación de Windows y en el historial. Las alertas de nivel
   avisan una vez y se rearman cuando la condición deja de cumplirse.
+- **Backtesting:** *Herramientas → Backtesting…* (Ctrl+B) sobre el activo e intervalo del
+  gráfico. Estrategias: cruce de EMAs y reversión con RSI, con parámetros editables, capital,
+  comisión (% y fija) y deslizamiento. Muestra capital final, rentabilidad, operaciones,
+  ganadoras/perdedoras, % de acierto, caída máxima, factor de beneficio, comparación con
+  comprar y mantener, curva de capital y lista de operaciones. Señal al cierre, ejecución en la
+  apertura siguiente (sin ventaja de información futura).
 - **Detalles (panel derecho):** precio, cambio, apertura/máximo/mínimo, volumen, rango de 52
   semanas, moneda, mercado, sector. Sin conexión se muestran los datos de la última barra
   guardada, indicándolo.

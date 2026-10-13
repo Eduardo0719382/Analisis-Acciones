@@ -199,3 +199,48 @@ ALERT_EOD_NOTE = (
     "se rearma cuando deja de cumplirse."
 )
 ALERT_NOTIFY_TITLE = "Alerta: {description}"
+
+MENU_TOOLS = "&Herramientas"
+ACTION_BACKTEST = "&Backtesting…"
+BT_NEED_DATA = "Abra primero un activo en el gráfico para probar estrategias sobre sus datos."
+BT_TITLE = "Backtesting · {title}"
+BT_STRATEGY = "Estrategia"
+BT_COSTS = "Capital y costes"
+BT_CAPITAL = "Capital inicial"
+BT_COMMISSION = "Comisión"
+BT_FIXED = "Comisión fija por orden"
+BT_SLIPPAGE = "Deslizamiento"
+BT_RUN = "Ejecutar backtest"
+BT_FAILED = "No se pudo ejecutar el backtest. Consulte el registro."
+BT_TIMING = (
+    "Sin ventaja de información futura: las señales se calculan al cierre de cada barra y las "
+    "órdenes se ejecutan en la apertura de la barra siguiente. Solo posiciones largas, con todo "
+    "el capital disponible y acciones enteras."
+)
+BT_STATS = (
+    ("initial", "Capital inicial"),
+    ("final", "Capital final"),
+    ("return", "Rentabilidad total"),
+    ("trades", "Operaciones cerradas"),
+    ("winning", "Ganadoras"),
+    ("losing", "Perdedoras"),
+    ("win_rate", "% de acierto"),
+    ("drawdown", "Caída máxima"),
+    ("profit_factor", "Factor de beneficio"),
+    ("buy_hold", "Comprar y mantener"),
+    ("exposure", "Tiempo invertido"),
+    ("commissions", "Comisiones pagadas"),
+)
+BT_TRADE_COLUMNS = ["Entrada", "Precio", "Salida", "Precio", "Acciones", "Resultado"]
+BT_EQUITY = "Estrategia"
+BT_BUY_HOLD = "Comprar y mantener"
+BT_OPEN = "abierta"
+BT_OPEN_NOTE = (
+    "La última operación sigue abierta: se valora al último cierre y no cuenta en las estadísticas "
+    "de operaciones cerradas."
+)
+BT_PF_UNDEFINED = "Factor de beneficio no definido: no hubo operaciones perdedoras."
+BT_DISCLAIMER = (
+    "Simulación sobre datos históricos con supuestos simplificados. Los resultados pasados no "
+    "garantizan resultados futuros y no constituyen una recomendación de inversión."
+)

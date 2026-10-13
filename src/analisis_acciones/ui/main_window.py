@@ -39,6 +39,7 @@ from analisis_acciones.services.watchlist_service import WatchlistService
 from analisis_acciones.ui import strings
 from analisis_acciones.ui.alerts_panel import AlertsPanel
 from analisis_acciones.ui.analysis_panel import AnalysisPanel
+from analisis_acciones.ui.backtest_dialog import BacktestDialog
 from analisis_acciones.ui.details_panel import DetailsPanel
 from analisis_acciones.ui.disclaimer import DisclaimerDialog
 from analisis_acciones.ui.indicator_dialog import IndicatorDialog
@@ -213,6 +214,12 @@ class MainWindow(QMainWindow):
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
 
+        tools_menu = menu_bar.addMenu(strings.MENU_TOOLS)
+        self.backtest_action = QAction(strings.ACTION_BACKTEST, self)
+        self.backtest_action.setShortcut(QKeySequence("Ctrl+B"))
+        self.backtest_action.triggered.connect(self.open_backtest)
+        tools_menu.addAction(self.backtest_action)
+
         view_menu = menu_bar.addMenu(strings.MENU_VIEW)
         self.dark_theme_action = QAction(strings.ACTION_DARK_THEME, self)
         self.dark_theme_action.setCheckable(True)
@@ -311,6 +318,18 @@ class MainWindow(QMainWindow):
     def start_alert_schedule(self) -> None:
         if self.alerts_panel is not None:
             self.alerts_panel.start_schedule()
+
+    def open_backtest(self) -> None:
+        series = self.chart.current_series
+        if series is None:
+            QMessageBox.information(self, strings.ACTION_BACKTEST.replace("&", ""),
+                                    strings.BT_NEED_DATA)  # fmt: skip
+            return
+        interval = strings.INTERVAL_LABELS.get(series.interval.value, series.interval.value)
+        dialog = BacktestDialog(series, f"{series.symbol} · {interval}",
+                                tokens_for(self._settings.theme()), self)  # fmt: skip
+        dialog.show()
+        self._backtest_dialog = dialog
 
     def edit_indicators(self) -> None:
         dialog = IndicatorDialog(self.chart.indicators, self)

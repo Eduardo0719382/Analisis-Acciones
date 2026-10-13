@@ -334,3 +334,31 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   `QSystemTrayIcon` when available, and a persistent event history.
 - **Problems:** missing data, offline use and unknown symbols are collected per symbol or alert
   and shown as a tooltip; they never stop the other alerts from being checked.
+
+## D-020 — Backtesting (Phase 8)
+
+- **Separation (as in D-008):**
+  - data: the `BarSeries` on the chart, at the current interval;
+  - strategies (`strategies/registry.py`): signals only, entry/exit booleans computed from data
+    up to each bar;
+  - engine (`backtesting/engine.py`): execution, costs and the equity curve;
+  - statistics (`backtesting/statistics.py`): derived only from the engine result;
+  - visualisation (`ui/backtest_dialog.py`, `ui/equity_chart.py`).
+- **Execution model:**
+  - a signal at the close of bar t is filled at the open of bar t+1;
+  - a signal on the final bar is reported as pending, never filled at a made-up price;
+  - long-only, all available cash, whole shares;
+  - percentage and fixed commission per order, and slippage against the trader;
+  - an open position at the end is marked to the last close and kept out of the closed-trade
+    statistics (and said so).
+- **Statistics:**
+  - the profit factor is undefined (shown as "—" with a note) when there are no losing trades;
+  - maximum drawdown is computed peak to trough on the equity curve;
+  - buy-and-hold (first open to last close, no costs) is shown for comparison.
+- **Verification:**
+  - fills, commissions, P&L and equity are checked by hand on small series;
+  - a no-look-ahead test changes every bar after t and asserts that trades and equity before t
+    are identical;
+  - the UI test checks that the dialog shows exactly the engine's numbers.
+- **Equity chart:** a small native `QPainter` widget rather than a second web engine page, which
+  is cheaper and enough for one or two lines.
