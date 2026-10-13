@@ -163,6 +163,10 @@
   runs with no crash.
 - **Status:** monitored. Because the root cause was not proven, this is recorded as a mitigation
   rather than a fix.
+- **Update:** the crash happened again (2 of about 27 full runs), always while tearing down
+  `test_main_window_notifies`. That test triggers `QApplication.alert()` on a window that was never
+  shown, so no native window exists to flash. The call is now made only for visible windows. The
+  real app always shows its window, so this case does not occur in normal use.
 
 ## P-016 — Initial visible range depended on layout timing (Phase 9, test)
 

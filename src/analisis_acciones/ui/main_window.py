@@ -336,7 +336,10 @@ class MainWindow(QMainWindow):
         """Tell the user about new alerts: status bar, taskbar flash and a desktop toast."""
         lines = [AlertsPanel.format_event(e) for e in events]
         self.statusBar().showMessage(lines[0] + (f" (+{len(lines) - 1})" if len(lines) > 1 else ""))
-        QApplication.alert(self)
+        if self.isVisible():
+            # Taskbar flash; only for a window that exists on screen (a never-shown
+            # window has no native window to flash — see PROBLEMS.md P-015).
+            QApplication.alert(self)
         if QSystemTrayIcon.isSystemTrayAvailable():
             if self._tray is None:
                 icon = self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation)
