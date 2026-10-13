@@ -255,7 +255,11 @@
       ensureChart();
       buildSeries();
       if (keep) state.chart.timeScale().setVisibleLogicalRange(keep);
-      else showInitialRange();
+      else {
+        showInitialRange();
+        // Re-apply once layout has settled (the first size may still be provisional).
+        requestAnimationFrame(() => { if (state.payload === payload) showInitialRange(); });
+      }
       renderLegend(payload.candles.length - 1);
     },
     setIndicators(indicators) {

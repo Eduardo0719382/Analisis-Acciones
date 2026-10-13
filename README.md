@@ -81,6 +81,11 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   ganadoras/perdedoras, % de acierto, caída máxima, factor de beneficio, comparación con
   comprar y mantener, curva de capital y lista de operaciones. Señal al cierre, ejecución en la
   apertura siguiente (sin ventaja de información futura).
+- **Exportar:** *Archivo → Exportar gráfico como imagen (PNG)*, *Exportar datos (CSV)* (barras
+  e indicadores visibles) y *Exportar informe (PDF)* (gráfico, detalles y análisis). En el
+  backtesting, *Exportar resultados…* guarda operaciones, resumen y curva de capital en CSV.
+  Los textos que empiezan por `=`, `+`, `-` o `@` se escriben precedidos de `'` para que una
+  hoja de cálculo nunca los ejecute como fórmula.
 - **Detalles (panel derecho):** precio, cambio, apertura/máximo/mínimo, volumen, rango de 52
   semanas, moneda, mercado, sector. Sin conexión se muestran los datos de la última barra
   guardada, indicándolo.

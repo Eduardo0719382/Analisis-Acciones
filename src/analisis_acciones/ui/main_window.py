@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QByteArray, Qt, QTimer
+from PySide6.QtCore import QByteArray, QLocale, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 from analisis_acciones import __version__
 from analisis_acciones.alerts.service import AlertEvent, AlertService
 from analisis_acciones.charts.chart_widget import ChartWidget
+from analisis_acciones.data.export import bars_to_csv
 from analisis_acciones.indicators.registry import IndicatorConfig
 from analisis_acciones.models.market import Interval
 from analisis_acciones.services.market_data_service import LoadResult, MarketDataService
@@ -45,6 +46,7 @@ from analisis_acciones.ui.disclaimer import DisclaimerDialog
 from analisis_acciones.ui.indicator_dialog import IndicatorDialog
 from analisis_acciones.ui.market_controller import MarketController
 from analisis_acciones.ui.panels import Panel
+from analisis_acciones.ui.report import build_report_html, write_pdf
 from analisis_acciones.ui.search_box import SearchBox
 from analisis_acciones.ui.theme import apply_theme, tokens_for
 from analisis_acciones.ui.update_dialog import UpdateDialog
@@ -209,6 +211,15 @@ class MainWindow(QMainWindow):
         self.import_csv_action.triggered.connect(self._import_csv)
         file_menu.addAction(self.import_csv_action)
         file_menu.addSeparator()
+        self.export_image_action = QAction(strings.ACTION_EXPORT_IMAGE, self)
+        self.export_image_action.triggered.connect(lambda: self.export_image())
+        self.export_csv_action = QAction(strings.ACTION_EXPORT_CSV, self)
+        self.export_csv_action.triggered.connect(lambda: self.export_csv())
+        self.export_pdf_action = QAction(strings.ACTION_EXPORT_PDF, self)
+        self.export_pdf_action.triggered.connect(lambda: self.export_pdf())
+        for action in (self.export_image_action, self.export_csv_action, self.export_pdf_action):
+            file_menu.addAction(action)
+        file_menu.addSeparator()
         quit_action = QAction(strings.ACTION_QUIT, self)
         quit_action.setShortcut(QKeySequence.StandardKey.Quit)
         quit_action.triggered.connect(self.close)
@@ -318,6 +329,67 @@ class MainWindow(QMainWindow):
     def start_alert_schedule(self) -> None:
         if self.alerts_panel is not None:
             self.alerts_panel.start_schedule()
+
+    # Export --------------------------------------------------------------------
+    def _export_target(self, suffix: str, file_filter: str, path: Path | None) -> Path | None:
+        series = self.chart.current_series
+        if series is None:
+            QMessageBox.information(self, strings.APP_TITLE, strings.EXPORT_NOTHING)
+            return None
+        if path is not None:
+            return path
+        stem = series.symbol.replace(":", "_")
+        default = f"{stem}_{series.interval.value}_{series.last_date:%Y%m%d}.{suffix}"
+        chosen, _ = QFileDialog.getSaveFileName(self, strings.APP_TITLE, default, file_filter)
+        return Path(chosen) if chosen else None
+
+    def _report_saved(self, ok: bool, path: Path, error: str = "") -> None:
+        if ok:
+            self.statusBar().showMessage(strings.EXPORT_DONE.format(path=path))
+        else:
+            QMessageBox.warning(self, strings.APP_TITLE, strings.EXPORT_FAILED.format(error=error))
+
+    def export_image(self, path: Path | None = None) -> None:
+        target = self._export_target("png", strings.EXPORT_IMAGE_FILTER, path)
+        if target is None:
+            return
+        ok = self.chart.view.grab().save(str(target), "PNG")
+        self._report_saved(ok, target, "PNG")
+
+    def export_csv(self, path: Path | None = None) -> None:
+        target = self._export_target("csv", strings.EXPORT_CSV_FILTER, path)
+        series = self.chart.current_series
+        if target is None or series is None:
+            return
+        try:
+            target.write_text(bars_to_csv(series, self.chart.indicators), encoding="utf-8")
+        except (OSError, ValueError) as exc:
+            logger.exception("CSV export failed")
+            self._report_saved(False, target, str(exc))
+            return
+        self._report_saved(True, target)
+
+    def export_pdf(self, path: Path | None = None) -> None:
+        target = self._export_target("pdf", strings.EXPORT_PDF_FILTER, path)
+        series = self.chart.current_series
+        if target is None or series is None:
+            return
+        locale = QLocale()
+        interval = strings.INTERVAL_LABELS.get(series.interval.value, series.interval.value)
+        html = build_report_html(
+            f"{series.symbol} · {interval}",
+            self.chart.view.grab(),
+            self.details_panel.details,
+            self.analysis_panel.report,
+            [c.label for c in self.chart.indicators if c.visible],
+            lambda v: locale.toString(float(v), "f", 2),
+        )
+        try:
+            write_pdf(target, html)
+        except OSError as exc:
+            self._report_saved(False, target, str(exc))
+            return
+        self._report_saved(target.exists(), target, "PDF")
 
     def open_backtest(self) -> None:
         series = self.chart.current_series

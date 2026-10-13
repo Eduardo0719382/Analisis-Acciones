@@ -149,3 +149,27 @@
 - **Solution:** a trend is reported only when the EMAs differ by at least 0.5 % and the close is on
   the same side. Otherwise the market is reported as sideways, and the actual separation appears
   in the evidence.
+
+## P-015 — Rare crash in a Chromium thread during test teardown (Phase 9)
+
+- **Symptom:** about 1 in 8 full test runs ended with a segmentation fault in a non-Python thread
+  while pytest-qt processed events after `test_main_window_notifies`. It never reproduced with
+  the UI tests alone (10 runs), in a stress test that created and destroyed 40 charts, or in
+  real start-to-exit runs of the app.
+- **Probable cause:** dozens of `QWebEngineView` pages from earlier tests stayed alive until the end
+  of the session, and Chromium tore some of them down in the wrong order.
+- **Mitigation:** an autouse fixture in `tests/ui/conftest.py` now destroys each test's windows and
+  pages, and flushes deferred deletions, before the next test starts. After the change: 8 full
+  runs with no crash.
+- **Status:** monitored. Because the root cause was not proven, this is recorded as a mitigation
+  rather than a fix.
+
+## P-016 — Initial visible range depended on layout timing (Phase 9, test)
+
+- **Symptom:** a chart test sometimes saw the visible range start at bar 45 instead of about 120.
+- **Cause:** the initial range was applied before the widget's final size was known; Lightweight
+  Charts then keeps the bar spacing when it resizes, which changes how many bars fit.
+- **Solution:**
+  - The page re-applies the initial range on the next animation frame.
+  - The test now checks what is actually intended: the right edge sits at the last bar and the
+    full history is not shown.

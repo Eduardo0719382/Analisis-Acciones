@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 from pytestqt.qtbot import QtBot
@@ -69,3 +71,18 @@ def test_menu_requires_open_series(
     qtbot.addWidget(window)
     window.backtest_action.trigger()
     assert shown == [strings.BT_NEED_DATA]
+
+
+def test_export_results(qtbot: QtBot, tmp_path: Path) -> None:
+    dialog = BacktestDialog(SERIES, "TEST", DARK)
+    qtbot.addWidget(dialog)
+    assert not dialog.export_button.isEnabled()
+    dialog.run()
+    qtbot.waitUntil(lambda: dialog.outcome is not None, timeout=10000)
+    files = dialog.export(tmp_path / "bt.csv")
+    assert sorted(p.name for p in files) == [
+        "bt_capital.csv",
+        "bt_operaciones.csv",
+        "bt_resumen.csv",
+    ]
+    assert all(p.exists() and p.stat().st_size > 0 for p in files)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 
 import pandas as pd
 import shiboken6
@@ -13,6 +14,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDoubleSpinBox,
+    QFileDialog,
     QFormLayout,
     QGridLayout,
     QGroupBox,
@@ -29,6 +31,7 @@ from PySide6.QtWidgets import (
 
 from analisis_acciones.backtesting.engine import BacktestConfig, BacktestResult, run_backtest
 from analisis_acciones.backtesting.statistics import Statistics, compute_statistics
+from analisis_acciones.data.export import backtest_summary_csv, backtest_trades_csv, equity_csv
 from analisis_acciones.models.errors import AppError, user_message_for
 from analisis_acciones.models.market import BarSeries
 from analisis_acciones.strategies.registry import (
@@ -107,6 +110,9 @@ class BacktestDialog(QDialog):
         costs.addRow(strings.BT_SLIPPAGE, self.slippage)
         self.run_button = QPushButton(strings.BT_RUN)
         self.run_button.clicked.connect(self.run)
+        self.export_button = QPushButton(strings.BT_EXPORT)
+        self.export_button.setEnabled(False)
+        self.export_button.clicked.connect(lambda: self.export())
         self.error = QLabel()
         self.error.setObjectName("panelEmpty")
         self.error.setProperty("error", True)
@@ -123,6 +129,7 @@ class BacktestDialog(QDialog):
         settings.addWidget(strategy_box)
         settings.addWidget(costs_box)
         settings.addWidget(self.run_button)
+        settings.addWidget(self.export_button)
         settings.addWidget(self.error)
         timing = QLabel(strings.BT_TIMING)
         timing.setObjectName("detailsSource")
@@ -222,8 +229,48 @@ class BacktestDialog(QDialog):
         worker.signals.succeeded.connect(lambda _r: self._workers.discard(worker))
         worker.signals.failed.connect(lambda _e: self._workers.discard(worker))
 
+    def export(self, base: Path | None = None) -> list[Path]:
+        """Write trades, summary and equity CSV files next to ``base``."""
+        if self.outcome is None:
+            return []
+        if base is None:
+            chosen, _ = QFileDialog.getSaveFileName(
+                self, strings.BT_EXPORT, f"backtest_{self._series.symbol.replace(':', '_')}.csv",
+                strings.EXPORT_CSV_FILTER,
+            )  # fmt: skip
+            if not chosen:
+                return []
+            base = Path(chosen)
+        stem = base.with_suffix("")
+        outcome = self.outcome
+        spec = STRATEGY_REGISTRY[str(self.strategy.currentData())]
+        entry, exit_ = spec.describe(self._params())
+        cfg = outcome.result.config
+        context = {
+            "symbol": self._series.symbol, "interval": self._series.interval.value,
+            "from": str(self._series.first_date), "to": str(self._series.last_date),
+            "strategy": spec.name, "entry_rule": entry, "exit_rule": exit_,
+            "commission_pct": cfg.commission_pct, "commission_fixed": cfg.commission_fixed,
+            "slippage_pct": cfg.slippage_pct,
+        }  # fmt: skip
+        last_close = float(self._series.bars["close"].iloc[-1])
+        files = {
+            Path(f"{stem}_operaciones.csv"): backtest_trades_csv(outcome.result, last_close),
+            Path(f"{stem}_resumen.csv"): backtest_summary_csv(outcome.stats, context),
+            Path(f"{stem}_capital.csv"): equity_csv(outcome.result),
+        }
+        try:
+            for path, text in files.items():
+                path.write_text(text, encoding="utf-8")
+        except OSError as exc:
+            self.error.setText(strings.EXPORT_FAILED.format(error=exc))
+            return []
+        self.notes.setText(strings.BT_EXPORT_DONE.format(files=", ".join(p.name for p in files)))
+        return list(files)
+
     def show_outcome(self, outcome: BacktestOutcome) -> None:
         self.outcome = outcome
+        self.export_button.setEnabled(True)
         loc = QLocale()
         s = outcome.stats
 

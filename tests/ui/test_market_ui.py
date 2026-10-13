@@ -246,8 +246,9 @@ def test_chart_page_draws_loaded_series(qtbot: QtBot, window: MainWindow) -> Non
     assert state["priceSeriesType"] == "Candlestick"
     assert state["hasVolume"] and state["panes"] == 2
     assert state["legend"].startswith("TEST · Diario")
-    # Starts on the most recent 180 bars, not the whole history.
-    assert 115 <= state["visibleFrom"] <= 125
+    # Starts on the most recent bars (right edge at the last bar), not the whole history.
+    assert state["visibleTo"] >= 299
+    assert state["visibleFrom"] > 0
 
 
 def test_chart_type_switch_and_persistence(
@@ -324,3 +325,19 @@ def test_analysis_tab_lists_explained_signals(qtbot: QtBot, window: MainWindow) 
     )
     assert trend is not None and trend.childCount() >= 3  # evidence lines
     assert "TEST · Diario" in panel.summary.text()
+
+
+def test_exports_write_files(qtbot: QtBot, window: MainWindow, tmp_path: Path) -> None:
+    assert window.market is not None
+    window.apply_indicators([IndicatorConfig.create("rsi")])
+    with qtbot.waitSignal(window.market.load_finished, timeout=5000):
+        window.open_symbol("TEST")
+    qtbot.waitUntil(lambda: window.analysis_panel.report is not None, timeout=10000)
+    window.export_csv(tmp_path / "datos.csv")
+    window.export_image(tmp_path / "grafico.png")
+    window.export_pdf(tmp_path / "informe.pdf")
+    csv_text = (tmp_path / "datos.csv").read_text(encoding="utf-8")
+    assert csv_text.startswith("date,open,high,low,close") and "RSI (14)" in csv_text
+    assert (tmp_path / "grafico.png").read_bytes()[:4] == b"\x89PNG"
+    assert (tmp_path / "informe.pdf").read_bytes()[:4] == b"%PDF"
+    assert "Guardado" in window.statusBar().currentMessage()

@@ -33,6 +33,7 @@ class DetailsPanel(QFrame):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("panel")
+        self.details: AssetDetails | None = None
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
@@ -82,6 +83,7 @@ class DetailsPanel(QFrame):
         self.source_label.setText(strings.DETAILS_LOADING)
 
     def show_details(self, details: AssetDetails) -> None:
+        self.details = details
         locale = QLocale()
         self.symbol_label.setText(details.symbol)
         self.name_label.setText(details.name or "")

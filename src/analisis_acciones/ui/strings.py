@@ -244,3 +244,18 @@ BT_DISCLAIMER = (
     "Simulación sobre datos históricos con supuestos simplificados. Los resultados pasados no "
     "garantizan resultados futuros y no constituyen una recomendación de inversión."
 )
+
+ACTION_EXPORT_IMAGE = "Exportar gráfico como &imagen…"
+ACTION_EXPORT_CSV = "Exportar &datos (CSV)…"
+ACTION_EXPORT_PDF = "Exportar &informe (PDF)…"
+EXPORT_NOTHING = "Abra primero un activo en el gráfico."
+EXPORT_DONE = "Guardado: {path}"
+EXPORT_FAILED = "No se pudo guardar el archivo: {error}"
+EXPORT_IMAGE_FILTER = "Imagen PNG (*.png)"
+EXPORT_CSV_FILTER = "CSV (*.csv)"
+EXPORT_PDF_FILTER = "PDF (*.pdf)"
+REPORT_GENERATED = "Generado el {when} con Análisis de Acciones {version}"
+REPORT_INDICATORS = "Indicadores en el gráfico"
+REPORT_ANALYSIS_DATE = "Datos hasta {date} ({bars} barras)."
+BT_EXPORT = "Exportar resultados…"
+BT_EXPORT_DONE = "Resultados guardados en: {files}"

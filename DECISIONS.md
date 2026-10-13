@@ -362,3 +362,15 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   - the UI test checks that the dialog shows exactly the engine's numbers.
 - **Equity chart:** a small native `QPainter` widget rather than a second web engine page, which
   is cheaper and enough for one or two lines.
+
+## D-021 — Export (Phase 9)
+
+- **CSV generation:** pure functions in `data/export.py` with no file I/O and no Qt, so they are
+  unit-tested.
+  - Values are numbers rounded to 6 decimals; missing values are empty, never 0.
+  - Text cells starting with `= + - @` (or tab/CR) are prefixed with `'` to prevent CSV or formula
+    injection in spreadsheets.
+- **Image:** a PNG grab of the chart view.
+- **PDF:** HTML rendered with `QTextDocument` and `QPdfWriter` (A4). Every piece of external text
+  is HTML-escaped. It contains the chart image, details, analysis evidence and the disclaimer.
+- **Backtest export:** three CSV files (trades, summary with run context, equity curve).
