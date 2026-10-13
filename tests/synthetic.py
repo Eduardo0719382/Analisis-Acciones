@@ -6,6 +6,7 @@ validation, caching and resampling logic.
 
 from __future__ import annotations
 
+import itertools
 from datetime import date
 
 import numpy as np
@@ -89,3 +90,15 @@ class FakeYahooClient:
         if self.error:
             raise self.error
         return self.info_payload
+
+
+def path(*prices: float, leg: int = 10, start: str = "2024-01-01") -> pd.DataFrame:
+    """Bars moving linearly between the given turning points (high = low = close)."""
+    values = [float(prices[0])]
+    for a, b in itertools.pairwise(prices):
+        values += list(np.linspace(a, b, leg + 1)[1:])
+    index = pd.bdate_range(start, periods=len(values), name="date")
+    close = pd.Series(values, index=index)
+    return pd.DataFrame({"open": close, "high": close, "low": close, "close": close,
+                         "adj_close": close, "volume": 1_000.0, "dividends": 0.0,
+                         "splits": 0.0})  # fmt: skip

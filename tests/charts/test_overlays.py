@@ -5,8 +5,10 @@ import json
 import numpy as np
 import pytest
 
-from analisis_acciones.charts.overlays import projection_overlay
+from analisis_acciones.charts.overlays import elliott_overlay, projection_overlay
 from analisis_acciones.forecast.projection import regression_channel, volatility_cone
+from analisis_acciones.patterns.elliott import analyze
+from tests.synthetic import path
 
 
 def test_projection_overlay_lines_start_at_last_close() -> None:
@@ -33,3 +35,23 @@ def test_regression_overlay_includes_fitted_channel() -> None:
     assert len(median) == 30 + 2
     assert median[0]["time"] == past[-30]
     assert median[29]["value"] == pytest.approx(closes[-1])
+
+
+def test_elliott_overlay_labels_and_levels() -> None:
+    bars = path(100, 120, 108, 150, 135, 165, 148, 158, 138, 150)
+    result = analyze(bars, threshold=0.05)
+    dates = bars.index.strftime("%Y-%m-%d").tolist()
+    colors = {"up": "#0f0", "down": "#f00", "correction": "#888", "current": "#0af",
+              "invalid": "#f0f"}  # fmt: skip
+    selected = result.current[0]
+    items = elliott_overlay([*result.past, *result.current], dates, selected, colors)
+    impulse, correction, current = items[:3]
+    assert [lbl["text"] for lbl in impulse["labels"]] == ["0", "1", "2", "3", "4", "5"]
+    assert impulse["labels"][1]["position"] == "aboveBar"  # wave 1 ends at a high
+    assert impulse["color"] == "#0f0" and correction["color"] == "#888"
+    assert [lbl["text"] for lbl in correction["labels"]] == ["A", "B", "C"]
+    assert current["style"] == 2 and current["width"] == 2
+    levels = [item for item in items if item["kind"] == "level"]
+    assert len(levels) == len(selected.targets) + 1
+    assert levels[-1]["price"] == 158 and levels[-1]["color"] == "#f0f"
+    json.dumps(items, allow_nan=False)

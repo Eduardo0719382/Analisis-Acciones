@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
 from analisis_acciones import __version__
 from analisis_acciones.alerts.service import AlertEvent, AlertService
 from analisis_acciones.charts.chart_widget import ChartWidget
-from analisis_acciones.charts.overlays import projection_overlay
+from analisis_acciones.charts.overlays import elliott_overlay, projection_overlay
 from analisis_acciones.charts.payload import future_times
 from analisis_acciones.data.export import bars_to_csv
 from analisis_acciones.indicators.registry import IndicatorConfig
@@ -52,6 +52,7 @@ from analisis_acciones.ui.backtest_dialog import BacktestDialog
 from analisis_acciones.ui.comparison_dialog import ComparisonDialog
 from analisis_acciones.ui.details_panel import DetailsPanel
 from analisis_acciones.ui.disclaimer import DisclaimerDialog
+from analisis_acciones.ui.elliott_panel import ElliottPanel, ElliottView
 from analisis_acciones.ui.indicator_dialog import IndicatorDialog
 from analisis_acciones.ui.market_controller import MarketController
 from analisis_acciones.ui.panels import Panel
@@ -205,6 +206,9 @@ class MainWindow(QMainWindow):
         self.projection_panel = ProjectionPanel()
         self.projection_panel.projection_ready.connect(self._draw_projection)
         self.right_tabs.addTab(self.projection_panel, strings.TAB_PROJECTION)
+        self.elliott_panel = ElliottPanel()
+        self.elliott_panel.overlay_ready.connect(self._draw_elliott)
+        self.right_tabs.addTab(self.elliott_panel, strings.TAB_ELLIOTT)
         self.alerts_panel: AlertsPanel | None = None
         if self._alert_service is not None:
             self.alerts_panel = AlertsPanel(self._alert_service)
@@ -395,6 +399,17 @@ class MainWindow(QMainWindow):
             tokens.accent,
         )
         self.chart.set_overlay("projection", items)
+
+    def _draw_elliott(self, view: object) -> None:
+        if not isinstance(view, ElliottView):
+            self.chart.set_overlay("elliott", [])
+            return
+        tokens = tokens_for(self._settings.theme())
+        dates = pd.DatetimeIndex(view.series.bars.index).strftime("%Y-%m-%d").tolist()
+        colors = {"up": tokens.up, "down": tokens.down, "correction": tokens.text_muted,
+                  "current": tokens.accent, "invalid": tokens.down}  # fmt: skip
+        items = elliott_overlay(view.counts, dates, view.selected, colors)
+        self.chart.set_overlay("elliott", items)
 
     # Drawings ----------------------------------------------------------------
     def _drawing_symbol(self) -> str | None:
@@ -611,6 +626,7 @@ class MainWindow(QMainWindow):
         self.chart.show_series(series, f"{series.symbol} · {interval_label}")
         self._refresh_drawings()
         self.projection_panel.set_series(series)
+        self.elliott_panel.set_series(series)
         self.analysis_panel.analyze(
             series, f"{series.symbol} · {interval_label}", result.session_in_progress
         )

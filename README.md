@@ -91,6 +91,13 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   el mismo cálculo en fechas pasadas usando solo los datos disponibles entonces y se indica
   cuántas veces el precio real terminó dentro del rango del 90 % y del 50 %. No es una
   predicción: es un rango de escenarios con supuestos explícitos.
+- **Elliott (pestaña del panel derecho):** «Buscar ondas» localiza los giros del precio con un
+  ZigZag (umbral automático según la volatilidad, o el que usted elija) y busca **impulsos
+  1-2-3-4-5 y correcciones A-B-C pasadas** que cumplan las reglas clásicas (la onda 2 no
+  retrocede más allá del inicio de la 1, la onda 3 no es la más corta, la onda 4 no entra en
+  el territorio de la 1). También muestra las **posibles cuentas en curso** con sus niveles de
+  Fibonacci de referencia y el precio que las invalidaría. Cada cuenta lista las reglas y pautas
+  comprobadas con sus valores. Es una interpretación: suele haber varias cuentas posibles.
 - **Alertas (pestaña del panel derecho):** precio por encima/debajo de X, cambio diario
   mayor/menor que X %, RSI por encima/debajo de X, cruces de EMAs, cruces MACD/señal y
   rupturas de máximo/mínimo de N barras. Se comprueban sobre barras diarias cerradas al iniciar

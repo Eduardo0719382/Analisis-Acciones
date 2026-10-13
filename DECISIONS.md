@@ -460,3 +460,27 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   and the median error of the median line. A regression channel is often badly calibrated
   (ignoring parameter uncertainty and trend changes); showing that number is the point.
 - **Not done:** models with fitted parameters that would invite over-trust (ARIMA, ML).
+
+## D-027 — Elliott wave detection
+
+- **Pivots:** ZigZag on highs/lows (`patterns/zigzag.py`). A swing is confirmed once price moves
+  the threshold away from it; the extreme of the leg in progress is kept as a provisional last
+  pivot. Default threshold: 3 × the median ATR(14)/close of the last 100 bars, clamped to
+  2–30 %. The threshold sets the wave degree; the user can change it.
+- **Counts only when the hard rules hold** (`patterns/elliott.py`): wave 2 does not retrace past
+  the start of wave 1; wave 3 ends beyond wave 1; wave 4 does not overlap wave 1; wave 3 is not
+  the shortest. A-B-C corrections are searched only right after a detected impulse (the 5-3
+  structure). Without that restriction, any lower high/lower low sequence would qualify.
+  Corrections must be zigzags: B stays inside A's start, and C goes beyond A's end.
+- **Guidelines only score.** These are wave-2/4 retracements, the wave-3 and wave-5 ratios,
+  alternation, no truncation and wave 3 being the longest. Every check is shown with its
+  measured value.
+- **Past impulses** come from all 6-pivot windows that pass the rules. Higher scores are picked
+  first and impulses do not overlap.
+- **Counts in progress** fit the last 3–6 pivots, ending at the provisional pivot. They include
+  Fibonacci reference levels and the invalidation price. For these counts, the guidelines of
+  the last (unfinished) wave are not judged.
+- **Display:** only the selected count in progress is drawn, because alternative counts share
+  pivots and their labels would stack. Past counts are always drawn.
+- **Not done:** nested degrees (sub-waves), triangles, diagonals and complex corrections
+  (W-X-Y). Labelling them automatically would be far more subjective.
