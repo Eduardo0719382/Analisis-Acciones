@@ -293,6 +293,12 @@ class ChartWidget(QWidget):
     def indicators(self) -> list[IndicatorConfig]:
         return list(self._indicators)
 
+    # Overlays ----------------------------------------------------------------
+    def set_overlay(self, group: str, items: list[dict[str, Any]]) -> None:
+        """Replace one named group of overlay items (projection, Elliott, ...)."""
+        self._run(f"window.chartApp && window.chartApp.setOverlay({json.dumps(group)}, "
+                  f"{json.dumps(items, allow_nan=False)});")  # fmt: skip
+
     # Drawings ----------------------------------------------------------------
     def set_drawings(self, drawings: list[Drawing]) -> None:
         self._run(self._call("setDrawings", [d.to_payload() for d in drawings]))

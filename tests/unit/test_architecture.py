@@ -18,6 +18,7 @@ CORE_LAYERS = [
     "alerts",
     "strategies",
     "backtesting",
+    "forecast",
     "storage",
     "services",
     "utils",

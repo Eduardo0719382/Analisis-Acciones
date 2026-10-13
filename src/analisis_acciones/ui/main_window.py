@@ -8,6 +8,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 from PySide6.QtCore import QByteArray, QLocale, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
@@ -33,6 +34,8 @@ from PySide6.QtWidgets import (
 from analisis_acciones import __version__
 from analisis_acciones.alerts.service import AlertEvent, AlertService
 from analisis_acciones.charts.chart_widget import ChartWidget
+from analisis_acciones.charts.overlays import projection_overlay
+from analisis_acciones.charts.payload import future_times
 from analisis_acciones.data.export import bars_to_csv
 from analisis_acciones.indicators.registry import IndicatorConfig
 from analisis_acciones.models.errors import UserError
@@ -52,6 +55,7 @@ from analisis_acciones.ui.disclaimer import DisclaimerDialog
 from analisis_acciones.ui.indicator_dialog import IndicatorDialog
 from analisis_acciones.ui.market_controller import MarketController
 from analisis_acciones.ui.panels import Panel
+from analisis_acciones.ui.projection_panel import ProjectionOutcome, ProjectionPanel
 from analisis_acciones.ui.report import build_report_html, write_pdf
 from analisis_acciones.ui.search_box import SearchBox
 from analisis_acciones.ui.theme import apply_theme, tokens_for
@@ -198,6 +202,9 @@ class MainWindow(QMainWindow):
         self.right_tabs.setObjectName("rightTabs")
         self.right_tabs.addTab(self.details_panel, strings.TAB_DETAILS)
         self.right_tabs.addTab(self.analysis_panel, strings.TAB_ANALYSIS)
+        self.projection_panel = ProjectionPanel()
+        self.projection_panel.projection_ready.connect(self._draw_projection)
+        self.right_tabs.addTab(self.projection_panel, strings.TAB_PROJECTION)
         self.alerts_panel: AlertsPanel | None = None
         if self._alert_service is not None:
             self.alerts_panel = AlertsPanel(self._alert_service)
@@ -370,6 +377,24 @@ class MainWindow(QMainWindow):
     def start_alert_schedule(self) -> None:
         if self.alerts_panel is not None:
             self.alerts_panel.start_schedule()
+
+    def _draw_projection(self, outcome: object) -> None:
+        if not isinstance(outcome, ProjectionOutcome):
+            self.chart.set_overlay("projection", [])
+            return
+        bars = outcome.series.bars
+        tokens = tokens_for(self._settings.theme())
+        items = projection_overlay(
+            outcome.projection,
+            [
+                pd.Timestamp(t).strftime("%Y-%m-%d")
+                for t in bars.index[-max(len(outcome.projection.fitted.get("p50", [])), 1) :]
+            ],
+            future_times(bars, outcome.projection.horizon),
+            tokens.text_muted,
+            tokens.accent,
+        )
+        self.chart.set_overlay("projection", items)
 
     # Drawings ----------------------------------------------------------------
     def _drawing_symbol(self) -> str | None:
@@ -585,6 +610,7 @@ class MainWindow(QMainWindow):
         interval_label = strings.INTERVAL_LABELS.get(series.interval.value, series.interval.value)
         self.chart.show_series(series, f"{series.symbol} · {interval_label}")
         self._refresh_drawings()
+        self.projection_panel.set_series(series)
         self.analysis_panel.analyze(
             series, f"{series.symbol} · {interval_label}", result.session_in_progress
         )

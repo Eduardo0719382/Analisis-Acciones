@@ -14,6 +14,9 @@
     priceSeries: null,
     volumeSeries: null,
     indicatorSeries: [],
+    overlays: {},
+    overlaySeries: [],
+    overlayLines: [],
     drawings: [],
     drawingSeries: [],
     drawingLines: [],
@@ -84,6 +87,9 @@
     if (state.volumeSeries) state.chart.removeSeries(state.volumeSeries);
     for (const s of state.indicatorSeries) state.chart.removeSeries(s);
     for (const s of state.drawingSeries) state.chart.removeSeries(s);
+    for (const s of state.overlaySeries) state.chart.removeSeries(s);
+    state.overlaySeries = [];
+    state.overlayLines = [];
     state.drawingSeries = [];
     state.drawingLines = [];
     state.drawingMarkers = null;
@@ -160,6 +166,58 @@
     }
     addIndicators(p.volume ? 2 : 1);
     renderDrawings();
+    renderOverlays();
+  }
+
+  // Overlays (projections, wave counts): computed in Python, drawn here --------
+  function renderOverlays() {
+    if (!state.chart || !state.priceSeries) return;
+    for (const s of state.overlaySeries) state.chart.removeSeries(s);
+    for (const l of state.overlayLines) state.priceSeries.removePriceLine(l);
+    state.overlaySeries = [];
+    state.overlayLines = [];
+    for (const items of Object.values(state.overlays)) {
+      for (const item of items) {
+        if (item.kind === "line" && item.points.length >= 2) {
+          const s = state.chart.addSeries(LWC.LineSeries, {
+            color: item.color, lineWidth: item.width || 1, lineStyle: item.style || 0,
+            priceLineVisible: false, lastValueVisible: !!item.lastValue,
+            crosshairMarkerVisible: false, title: item.title || "",
+          }, 0);
+          s.setData(item.points);
+          state.overlaySeries.push(s);
+          if (item.labels && item.labels.length) {
+            LWC.createSeriesMarkers(s, item.labels.map((l) => ({
+              time: l.time, position: l.position || "aboveBar", color: l.color || item.color,
+              shape: "circle", size: 0, text: l.text,
+            })));
+          }
+        } else if (item.kind === "level") {
+          state.overlayLines.push(state.priceSeries.createPriceLine({
+            price: item.price, color: item.color, lineWidth: 1, lineStyle: item.style || 2,
+            axisLabelVisible: true, title: item.title || "",
+          }));
+        }
+      }
+    }
+  }
+
+  // When an overlay reaches past the last bar and the user is looking at the
+  // latest bars, widen the view so the projected part is visible.
+  function revealFuture(items) {
+    const candles = state.payload ? state.payload.candles : [];
+    if (!state.chart || !candles.length) return;
+    const lastTime = candles[candles.length - 1].time;
+    let extra = 0;
+    for (const item of items) {
+      if (item.kind !== "line") continue;
+      extra = Math.max(extra, item.points.filter((p) => p.time > lastTime).length);
+    }
+    const ts = state.chart.timeScale();
+    const range = ts.getVisibleLogicalRange();
+    const lastIndex = candles.length - 1;
+    if (!extra || !range || range.to < lastIndex - 1) return;
+    ts.setVisibleLogicalRange({ from: range.from + extra / 2, to: lastIndex + extra + 3 });
   }
 
   // Drawings -------------------------------------------------------------------
@@ -403,6 +461,12 @@
         renderLegend(state.payload.candles.length - 1);
       }
     },
+    setOverlay(group, items) {
+      if (items && items.length) state.overlays[group] = items;
+      else delete state.overlays[group];
+      renderOverlays();
+      revealFuture(items || []);
+    },
     setDrawings(drawings) {
       state.drawings = drawings || [];
       renderDrawings();
@@ -449,6 +513,9 @@
         hasVolume: !!state.volumeSeries,
         indicators: state.indicators.map((i) => i.label),
         drawings: state.drawings.length,
+        overlayGroups: Object.fromEntries(Object.entries(state.overlays).map(([k, v]) => [k, v.length])),
+        overlaySeries: state.overlaySeries.length,
+        overlayLines: state.overlayLines.length,
         drawingLines: state.drawingLines.length,
         drawingSeries: state.drawingSeries.length,
         drawMode: state.drawMode,

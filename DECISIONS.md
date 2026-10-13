@@ -442,3 +442,21 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   - OBV becomes unknown (NaN) from the first missing volume onwards, never 0-filled;
   - Supertrend is one line coloured per point by direction. Splitting it into two series with
     gaps drew false diagonal connections (PROBLEMS.md P-017).
+
+## D-026 — Price projection as calibrated statistical ranges
+
+- **Request:** "something to predict the price". The application must not present predictions
+  as certainties, so it shows **ranges with explicit assumptions**, never a single target price.
+- **Methods** (`forecast/projection.py`, Qt-free, deterministic):
+  - *Volatility cone:* log returns over the window give σ; bands at the normal quantiles
+    (5/25/50/75/95 %) of `close · exp(z·σ·√h)`. Zero drift by default: extrapolating the
+    historical mean return would imply a trend nobody can know.
+  - *Regression channel:* least-squares line on log prices over the window, bands at ±1 and ±2
+    residual standard deviations, drawn over the fitted window and extended forward. It only
+    extends the recent trend; the panel says so and shows R².
+- **Calibration is always shown.** Walk-forward: every 5 bars (at most 400 origins), the same
+  method is applied using only data up to that bar and the outcome `h` bars later is compared
+  with the bands. The panel reports how often the price ended inside the 90 % and 50 % ranges
+  and the median error of the median line. A regression channel is often badly calibrated
+  (ignoring parameter uncertainty and trend changes); showing that number is the point.
+- **Not done:** models with fitted parameters that would invite over-trust (ARIMA, ML).

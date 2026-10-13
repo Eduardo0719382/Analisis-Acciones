@@ -83,6 +83,14 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   EMA 20/50 y MACD/señal recientes (5 barras), volumen > 2× su media de 20, cambio de ATR
   ±30 % en 20 barras y rupturas del máximo/mínimo de 20 barras. Cada señal muestra la regla y
   los valores que la producen. Son descripciones de los datos, no recomendaciones.
+- **Proyección (pestaña del panel derecho):** rangos estadísticos para las próximas N barras,
+  dibujados sobre el gráfico (P5, P25, mediana, P75, P95). *Cono de volatilidad*: parte del
+  último cierre, sin tendencia supuesta, con la volatilidad de la ventana elegida. *Canal de
+  regresión*: prolonga la tendencia lineal (logarítmica) de la ventana con bandas de ±1 y ±2
+  desviaciones de los residuos. Cada proyección incluye una **calibración histórica**: se repite
+  el mismo cálculo en fechas pasadas usando solo los datos disponibles entonces y se indica
+  cuántas veces el precio real terminó dentro del rango del 90 % y del 50 %. No es una
+  predicción: es un rango de escenarios con supuestos explícitos.
 - **Alertas (pestaña del panel derecho):** precio por encima/debajo de X, cambio diario
   mayor/menor que X %, RSI por encima/debajo de X, cruces de EMAs, cruces MACD/señal y
   rupturas de máximo/mínimo de N barras. Se comprueban sobre barras diarias cerradas al iniciar

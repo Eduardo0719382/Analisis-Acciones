@@ -297,3 +297,30 @@ CMP_NOTE = (
     "Rendimiento normalizado a 0 % en la primera sesión común, con cierres diarios. Volatilidad: "
     "desviación típica anualizada de los rendimientos logarítmicos diarios (×√252)."
 )
+
+TAB_PROJECTION = "Proyección"
+PROJ_METHOD = "Método"
+PROJ_CONE = "Cono de volatilidad"
+PROJ_REGRESSION = "Canal de regresión"
+PROJ_HORIZON = "Horizonte"
+PROJ_LOOKBACK = "Ventana histórica"
+PROJ_BARS_SUFFIX = " barras"
+PROJ_SHOW = "Mostrar en el gráfico"
+PROJ_RUN = "Calcular proyección"
+PROJ_RUNNING = "Calculando y comprobando en el historial…"
+PROJ_EMPTY = "Abra un activo y pulse «Calcular proyección»."
+PROJ_STALE = "Los datos del gráfico cambiaron: vuelva a calcular la proyección."
+PROJ_MEDIAN = "Mediana (P50)"
+PROJ_HEADER = "{method}: rango estimado dentro de {horizon} barras (desde {base})"
+PROJ_NO_CALIBRATION = "Historial insuficiente para comprobar la fiabilidad del método."
+PROJ_CALIBRATION = (
+    "Comprobación histórica ({samples} pruebas, cada {step} barras, usando solo datos "
+    "anteriores a cada fecha): el precio real {horizon} barras después quedó dentro del "
+    "rango P5–P95 el {in90:.0f} % de las veces (ideal: 90 %) y dentro de P25–P75 el "
+    "{in50:.0f} % (ideal: 50 %). Error mediano frente a la mediana: {error:.1f} %."
+)
+PROJ_DISCLAIMER = (
+    "Rangos estadísticos basados en el comportamiento pasado, no predicciones. El precio "
+    "puede salir del rango; los movimientos extremos son más frecuentes de lo que suponen "
+    "estos modelos. No es una recomendación de inversión."
+)

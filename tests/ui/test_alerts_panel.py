@@ -78,7 +78,9 @@ def test_main_window_notifies(
     window = MainWindow(settings, market_service=market, alert_service=alerts)
     qtbot.addWidget(window)
     assert window.alerts_panel is not None
-    assert window.right_tabs.tabText(2) == strings.TAB_ALERTS
+    assert window.right_tabs.tabText(window.right_tabs.indexOf(window.alerts_panel)) == (
+        strings.TAB_ALERTS
+    )
     with qtbot.waitSignal(window.alerts_panel.alerts_triggered, timeout=10000):
         window.alerts_panel.check_now()
     assert "Cierre > 105.00" in window.statusBar().currentMessage()
