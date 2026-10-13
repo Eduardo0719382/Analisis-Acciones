@@ -276,3 +276,25 @@ Format: DECISION / CONTEXT / ALTERNATIVES / CHOICE / RATIONALE / CONSEQUENCES.
 - **Threading:** computing all six indicators and serialising about 12k bars took about 190 ms on
   the UI thread. Building the chart payload now runs in a worker thread, and only the latest
   request is applied. Changing indicators keeps the visible range.
+
+## D-016 — Watchlists (Phase 5)
+
+- **Storage:** SQLite tables `watchlists` (unique, case-insensitive names) and `watchlist_items`
+  (ordered by position; `ON DELETE CASCADE`). A "Favoritos" list is created when none exist, and
+  the last remaining list cannot be deleted.
+- **Values:** each row shows the last daily close and its change from the previous close, taken
+  from `MarketDataService.snapshot()` (cache-first, only stale symbols are refreshed). A failing
+  symbol shows "—" with the reason in its tooltip and never hides the other rows. Snapshots run in
+  a worker thread, and stale replies are dropped.
+- **Reordering:** up/down buttons rather than drag-and-drop. They are simpler, accessible from the
+  keyboard and easy to test. Drag-and-drop can be added later.
+
+## D-017 — Shutdown and worker lifetime
+
+Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules:
+
+- `MarketDataService.close()` closes its connection under the same lock that guards every query,
+  so a worker thread can never use a connection while it is being closed.
+- Worker results are delivered only if the receiving Qt object still exists (`shiboken6.isValid`).
+- On exit, deferred deletions are flushed explicitly, so the chart's `QWebEnginePage` is destroyed
+  before the `QApplication`.

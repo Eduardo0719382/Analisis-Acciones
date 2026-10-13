@@ -106,3 +106,37 @@
     the earlier quote.
 - **Solution:** the test now waits for the specific reply it triggers and does not rely on a quote
   being refetched. Three consecutive full runs passed.
+
+## P-011 — Crash at process exit with the chart (Phases 3–5)
+
+- **Symptom:** the test process sometimes ended with a segmentation fault after all tests had
+  passed, and printed "Release of profile requested but WebEnginePage still not deleted".
+- **Cause:** `QWebEnginePage` objects were still alive when the `QApplication` and the Chromium
+  profile were torn down. `processEvents()` does not run deferred deletions, so `deleteLater()`
+  had not taken effect.
+- **Solution:**
+  - `main()` calls `QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)` after
+    scheduling the window's deletion.
+  - A session fixture in the tests deletes every top-level widget before exit.
+  - A real start-to-exit run of `main()` now ends with exit code 0.
+- **How it surfaced:** it appeared in Phase 3 but was not caught because CI happened to exit
+  cleanly. It was found while bisecting P-012.
+
+## P-012 — SQLite connection closed while a worker used it (Phase 5)
+
+- **Symptom:** a segmentation fault inside `sqlite3` during watchlist tests.
+- **Cause:** the test fixture closed the market-data connection while snapshot workers were still
+  running queries on it. The same could happen in the real app if a slow network request outlived
+  the 5-second shutdown wait.
+- **Solution:**
+  - `MarketDataService.close()` takes the query lock; every query checks that the service is still
+    open and raises a clean error otherwise.
+  - Test fixtures wait for the thread pool before closing.
+  - The watchlist's reply handler no longer reads settings from the database.
+
+## P-013 — "Signal source has been deleted" after closing a window (Phase 5)
+
+- **Symptom:** an intermittent error after a test, roughly 1 run in 10.
+- **Cause:** a background reply arrived after its window (and controller) had been destroyed.
+- **Solution:** the controller and chart callbacks return early when `shiboken6.isValid(self)` is
+  false. After the fix: 12 consecutive runs of the file and 3 full runs with no failures.

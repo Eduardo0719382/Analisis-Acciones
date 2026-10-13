@@ -230,3 +230,13 @@ def test_details_for_csv_never_uses_network(
     details = service.details("CSV:D")
     assert details.price == 11.0
     assert details.change == pytest.approx(0.5)
+
+
+def test_snapshot_rows(service: MarketDataService, client: FakeYahooClient) -> None:
+    rows = service.snapshot(["TEST", "NOPE"])
+    ok, bad = rows
+    assert ok.last_close == pytest.approx(FULL["close"].iloc[99])
+    expected = (FULL["close"].iloc[99] / FULL["close"].iloc[98] - 1) * 100
+    assert ok.change_pct == pytest.approx(expected)
+    assert ok.error is None
+    assert bad.last_close is None and bad.error and "NOPE" in bad.error

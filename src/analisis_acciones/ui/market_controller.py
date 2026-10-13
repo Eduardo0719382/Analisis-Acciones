@@ -11,6 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+import shiboken6
 from PySide6.QtCore import QObject, Signal
 
 from analisis_acciones.models.errors import user_message_for
@@ -29,6 +30,7 @@ class MarketController(QObject):
     load_failed = Signal(str, str)  # symbol, user message
     details_finished = Signal(object)  # AssetDetails
     details_failed = Signal(str, str)  # symbol, user message
+    snapshot_finished = Signal(list)  # list[WatchRow]
 
     def __init__(self, service: MarketDataService, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -36,6 +38,7 @@ class MarketController(QObject):
         self._search_seq = 0
         self._load_seq = 0
         self._details_seq = 0
+        self._snapshot_seq = 0
         self._workers: set[Worker] = set()
 
     def _start(
@@ -47,10 +50,14 @@ class MarketController(QObject):
         holder: list[Worker] = []
 
         def done_ok(result: object) -> None:
+            if not shiboken6.isValid(self):
+                return  # window closed while the request was running
             self._workers.discard(holder[0])
             on_success(result)
 
         def done_err(exc: BaseException) -> None:
+            if not shiboken6.isValid(self):
+                return
             self._workers.discard(holder[0])
             on_failure(exc)
 
@@ -122,6 +129,20 @@ class MarketController(QObject):
                 self.details_failed.emit(symbol, user_message_for(exc))
 
         self._start(lambda: self.service.details(symbol), ok, fail)
+
+    def snapshot(self, symbols: list[str]) -> None:
+        self._snapshot_seq += 1
+        seq = self._snapshot_seq
+        wanted = list(symbols)
+
+        def ok(rows: object) -> None:
+            if seq == self._snapshot_seq:
+                self.snapshot_finished.emit(rows)
+
+        def fail(exc: BaseException) -> None:  # snapshot() never raises; defensive only
+            logger.error("Watchlist refresh failed: %s", exc)
+
+        self._start(lambda: self.service.snapshot(wanted), ok, fail)
 
     def remember(self, symbol: str, name: str | None) -> None:
         try:

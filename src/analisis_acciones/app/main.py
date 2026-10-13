@@ -7,7 +7,7 @@ import sqlite3
 import sys
 from collections.abc import Sequence
 
-from PySide6.QtCore import QProcess, QThreadPool
+from PySide6.QtCore import QCoreApplication, QEvent, QProcess, QThreadPool
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
 from analisis_acciones import __version__
@@ -19,6 +19,7 @@ from analisis_acciones.providers.yahoo import YahooFinanceProvider
 from analisis_acciones.services.market_data_service import MarketDataService
 from analisis_acciones.services.settings_service import SettingsService
 from analisis_acciones.services.update_service import UpdateService
+from analisis_acciones.services.watchlist_service import WatchlistService
 from analisis_acciones.storage.database import open_database
 from analisis_acciones.storage.settings_repository import SettingsRepository
 from analisis_acciones.ui import strings
@@ -65,6 +66,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     window: MainWindow | None = None
+    market: MarketDataService | None = None
     try:
         settings = SettingsService(SettingsRepository(conn))
         apply_theme(app, settings.theme())
@@ -76,7 +78,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             settings.accept_disclaimer()
 
         market = MarketDataService(YahooFinanceProvider(), market_conn)
-        window = MainWindow(settings, update_service=UpdateService(), market_service=market)
+        window = MainWindow(
+            settings,
+            update_service=UpdateService(),
+            market_service=market,
+            watchlist_service=WatchlistService(conn),
+        )
         window.show()
         window.restore_last_symbol()
         window.schedule_startup_update_check()
@@ -87,9 +94,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             # Destroy the window before its services' connections are closed.
             window.hide()
             window.deleteLater()
+            # processEvents() does not run deferred deletions; without this the
+            # chart's web page outlives the application and Chromium crashes on exit.
+            QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
             app.processEvents()
         QThreadPool.globalInstance().waitForDone(5000)
-        market_conn.close()
+        # Closing through the service waits for any worker still inside a query
+        # (a slow network request may outlive the wait above).
+        if market is not None:
+            market.close()
+        else:
+            market_conn.close()
         conn.close()
         logger.info("Shutdown complete")
 

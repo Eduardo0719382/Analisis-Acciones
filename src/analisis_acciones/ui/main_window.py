@@ -31,6 +31,7 @@ from analisis_acciones.models.market import Interval
 from analisis_acciones.services.market_data_service import LoadResult, MarketDataService
 from analisis_acciones.services.settings_service import SettingsService, Theme
 from analisis_acciones.services.update_service import UpdateCheck, UpdateService
+from analisis_acciones.services.watchlist_service import WatchlistService
 from analisis_acciones.ui import strings
 from analisis_acciones.ui.details_panel import DetailsPanel
 from analisis_acciones.ui.disclaimer import DisclaimerDialog
@@ -40,6 +41,7 @@ from analisis_acciones.ui.panels import Panel
 from analisis_acciones.ui.search_box import SearchBox
 from analisis_acciones.ui.theme import apply_theme, tokens_for
 from analisis_acciones.ui.update_dialog import UpdateDialog
+from analisis_acciones.ui.watchlist_panel import WatchlistPanel
 from analisis_acciones.ui.workers import Worker, start_worker
 
 logger = logging.getLogger(__name__)
@@ -57,11 +59,13 @@ class MainWindow(QMainWindow):
         *,
         update_service: UpdateService | None = None,
         market_service: MarketDataService | None = None,
+        watchlist_service: WatchlistService | None = None,
     ) -> None:
         super().__init__(parent)
         self._settings = settings
         self._update_service = update_service
         self.market = MarketController(market_service, self) if market_service else None
+        self._watchlists = watchlist_service
         self.current_symbol: str | None = None
         self.current_result: LoadResult | None = None
         self.restart_requested = False
@@ -121,7 +125,16 @@ class MainWindow(QMainWindow):
         self.toolbar = bar
 
     def _build_regions(self) -> None:
-        self.watchlist_panel = Panel(strings.PANEL_WATCHLIST, strings.EMPTY_WATCHLIST)
+        self.watchlist_panel: Panel | WatchlistPanel
+        if self._watchlists is not None:
+            panel = WatchlistPanel(self._watchlists, self.market, self._settings)
+            panel.symbol_activated.connect(self.open_symbol)
+            panel.current_symbol_provider = lambda: (
+                self.current_result.series.symbol if self.current_result else None
+            )
+            self.watchlist_panel = panel
+        else:
+            self.watchlist_panel = Panel(strings.PANEL_WATCHLIST, strings.EMPTY_WATCHLIST)
         # Price, volume and (later) indicator panes live inside one chart so their
         # time axes and crosshair stay synchronised (DECISIONS.md D-014).
         self.chart = ChartWidget()
@@ -380,6 +393,8 @@ class MainWindow(QMainWindow):
         if isinstance(app, QApplication):
             apply_theme(app, theme)
         self.chart.set_theme(tokens_for(theme))
+        if isinstance(self.watchlist_panel, WatchlistPanel):
+            self.watchlist_panel.set_theme(tokens_for(theme))
         logger.info("Theme changed to %s", theme.value)
 
     # Layout persistence ----------------------------------------------------

@@ -60,6 +60,10 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   La configuración se guarda. Las fórmulas y convenciones están documentadas en
   `src/analisis_acciones/indicators/functions.py` y verificadas contra implementaciones de
   referencia independientes.
+- **Listas de seguimiento (panel izquierdo):** lista «Favoritos» por defecto; menú «⋯» para
+  crear, renombrar o eliminar listas. «+» añade el activo del gráfico, «-» (o Supr) lo quita,
+  ▲/▼ reordenan, ⟳ actualiza. Cada fila muestra el último cierre diario y su cambio %; un
+  clic abre el activo. Todo se guarda localmente.
 - **Detalles (panel derecho):** precio, cambio, apertura/máximo/mínimo, volumen, rango de 52
   semanas, moneda, mercado, sector. Sin conexión se muestran los datos de la última barra
   guardada, indicándolo.

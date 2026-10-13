@@ -14,6 +14,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
+import shiboken6
 from PySide6.QtCore import QLocale, Qt, QUrl, Signal
 from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -237,7 +238,7 @@ class ChartWidget(QWidget):
             return self._call("setData", payload), failed
 
         def done(result: tuple[str, list[str]]) -> None:
-            if seq != self._render_seq:
+            if not shiboken6.isValid(self) or seq != self._render_seq:
                 return  # superseded by a newer request
             script, failed = result
             self._run(script)
@@ -247,7 +248,7 @@ class ChartWidget(QWidget):
 
         def fail(exc: BaseException) -> None:
             logger.error("Could not prepare chart data: %s", exc, exc_info=exc)
-            if seq == self._render_seq:
+            if shiboken6.isValid(self) and seq == self._render_seq:
                 self.show_message(strings.CHART_LOAD_ERROR, error=True)
 
         worker = start_worker(job, done, fail)

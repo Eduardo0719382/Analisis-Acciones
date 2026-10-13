@@ -29,6 +29,7 @@ KEY_CHECK_UPDATES = "updates.check_on_startup"
 KEY_LAST_SYMBOL = "market.last_symbol"
 KEY_CHART_TYPE = "chart.type"
 KEY_INDICATORS = "chart.indicators"
+KEY_WATCHLIST = "watchlist.current"
 CHART_TYPES = ("candles", "line")
 KEY_LAST_INTERVAL = "market.last_interval"
 
@@ -104,6 +105,14 @@ class SettingsService:
 
     def set_indicators(self, configs: list[IndicatorConfig]) -> None:
         self._repo.set(KEY_INDICATORS, [c.to_dict() for c in configs])
+
+    # Watchlist -----------------------------------------------------------------
+    def current_watchlist(self) -> int | None:
+        raw = self._repo.get(KEY_WATCHLIST)
+        return raw if isinstance(raw, int) and not isinstance(raw, bool) else None
+
+    def set_current_watchlist(self, list_id: int) -> None:
+        self._repo.set(KEY_WATCHLIST, int(list_id))
 
     # Layout ----------------------------------------------------------------
     def layout(self) -> dict[str, Any]:

@@ -20,7 +20,8 @@ from __future__ import annotations
 import logging
 import sqlite3
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -32,7 +33,14 @@ from analisis_acciones.data.csv_import import read_csv_bars
 from analisis_acciones.data.details import AssetDetails, build_details
 from analisis_acciones.data.freshness import needs_refresh, session_in_progress
 from analisis_acciones.data.resample import resample_daily
-from analisis_acciones.models.errors import DataError, NetworkError, ProviderError, UserError
+from analisis_acciones.models.errors import (
+    AppError,
+    DataError,
+    InternalError,
+    NetworkError,
+    ProviderError,
+    UserError,
+)
 from analisis_acciones.models.market import BarSeries, CompanyInfo, Interval, Quote, SearchResult
 from analisis_acciones.providers.base import MarketDataProvider, normalize_symbol
 from analisis_acciones.storage.bar_repository import BarRepository
@@ -58,6 +66,16 @@ class LoadResult:
     notices: tuple[str, ...] = field(default=())
 
 
+@dataclass(frozen=True)
+class WatchRow:
+    symbol: str
+    last_close: float | None
+    change_pct: float | None
+    as_of: date | None
+    stale: bool = False
+    error: str | None = None
+
+
 def is_csv_symbol(symbol: str) -> bool:
     return symbol.upper().startswith(CSV_PREFIX)
 
@@ -74,7 +92,27 @@ class MarketDataService:
         self._recent = RecentSymbolRepository(conn)
         self._clock = clock
         self._lock = threading.RLock()  # one connection shared by worker threads
+        self._conn = conn
+        self._closed = False
         self._search_cache: dict[str, tuple[datetime, list[SearchResult]]] = {}
+
+    @contextmanager
+    def _db(self) -> Iterator[None]:
+        """Serialise database access; refuse it once the service is closed."""
+        with self._lock:
+            if self._closed:
+                raise InternalError(
+                    "market data service is closed",
+                    user_message="La aplicación se está cerrando.",
+                )
+            yield
+
+    def close(self) -> None:
+        """Close the connection without racing worker threads that are using it."""
+        with self._lock:
+            if not self._closed:
+                self._closed = True
+                self._conn.close()
 
     @property
     def provider_name(self) -> str:
@@ -91,21 +129,21 @@ class MarketDataService:
         if not key:
             return []
         now = self._clock()
-        with self._lock:
+        with self._db():
             cached = self._search_cache.get(key)
         if cached and now - cached[0] < SEARCH_CACHE_TTL:
             return cached[1]
         results = self._provider.search_symbol(query, limit)
-        with self._lock:
+        with self._db():
             self._search_cache[key] = (now, results)
         return results
 
     def recent(self, limit: int = 10) -> list[SearchResult]:
-        with self._lock:
+        with self._db():
             return self._recent.list(limit)
 
     def remember(self, symbol: str, name: str | None = None) -> None:
-        with self._lock:
+        with self._db():
             self._recent.add(symbol, name, self._clock())
 
     # Bars ------------------------------------------------------------------
@@ -136,7 +174,7 @@ class MarketDataService:
             return self._load_csv(raw_symbol)
         symbol = normalize_symbol(raw_symbol)
         now = self._clock()
-        with self._lock:
+        with self._db():
             meta = self._bars.meta(symbol)
             cached = self._bars.load(symbol) if meta else None
 
@@ -154,7 +192,7 @@ class MarketDataService:
             return self._result(symbol, bars, source, now, now, False)
 
         series = self._provider.get_historical_data(symbol, Interval.D1)
-        with self._lock:
+        with self._db():
             self._bars.replace(symbol, series.source, series.bars, now)
         return self._result(
             symbol, series.bars, series.source, now, now, False, notices=series.warnings
@@ -169,18 +207,18 @@ class MarketDataService:
         new = recent.bars
 
         if new.empty:
-            with self._lock:
+            with self._db():
                 self._bars.touch(symbol, now)
             return cached, recent.source
 
         if self._history_changed(cached, new):
             logger.info("%s: history re-adjusted at source; refetching all", symbol)
             full = self._provider.get_historical_data(symbol, Interval.D1)
-            with self._lock:
+            with self._db():
                 self._bars.replace(symbol, full.source, full.bars, now)
                 return self._bars.load(symbol), full.source
 
-        with self._lock:
+        with self._db():
             self._bars.upsert(symbol, recent.source, new, now)
             return self._bars.load(symbol), recent.source
 
@@ -223,6 +261,25 @@ class MarketDataService:
             tuple(notices),
         )
 
+    # Watchlist rows ----------------------------------------------------------
+    def snapshot(self, symbols: list[str]) -> list[WatchRow]:
+        """Last close and daily change for each symbol (cache-first; never raises)."""
+        rows: list[WatchRow] = []
+        for symbol in symbols:
+            try:
+                result = self.load(symbol, Interval.D1)
+            except Exception as exc:  # one bad symbol must not hide the others
+                message = exc.user_message if isinstance(exc, AppError) else str(exc)
+                logger.info("Watchlist row %s unavailable: %s", symbol, exc)
+                rows.append(WatchRow(symbol, None, None, None, error=message))
+                continue
+            closes = result.series.bars["close"]
+            last = float(closes.iloc[-1])
+            previous = float(closes.iloc[-2]) if len(closes) > 1 else None
+            change = (last / previous - 1.0) * 100.0 if previous else None
+            rows.append(WatchRow(symbol, last, change, result.series.last_date, stale=result.stale))
+        return rows
+
     # Details ---------------------------------------------------------------
     def details(self, raw_symbol: str) -> AssetDetails:
         """Details for the info panel: cached bars plus a live quote when reachable.
@@ -232,7 +289,7 @@ class MarketDataService:
         """
         csv = is_csv_symbol(raw_symbol)
         symbol = raw_symbol.strip().upper() if csv else normalize_symbol(raw_symbol)
-        with self._lock:
+        with self._db():
             daily = self._bars.load(symbol)
             names = {r.symbol: r.name for r in self._recent.list(50)}
         fallback_name = names.get(symbol) if names.get(symbol) != symbol else None
@@ -261,14 +318,14 @@ class MarketDataService:
         symbol = f"{CSV_PREFIX}{label}"
         bars, warnings = read_csv_bars(path, symbol)
         now = self._clock()
-        with self._lock:
+        with self._db():
             self._bars.replace(symbol, CSV_SOURCE, bars, now)
         logger.info("Imported %d bars from %s as %s", len(bars), path, symbol)
         return self._result(symbol, bars, CSV_SOURCE, now, now, False, notices=tuple(warnings))
 
     def _load_csv(self, raw_symbol: str) -> LoadResult:
         symbol = raw_symbol.strip().upper()
-        with self._lock:
+        with self._db():
             meta = self._bars.meta(symbol)
             bars = self._bars.load(symbol)
         if meta is None or bars.empty:

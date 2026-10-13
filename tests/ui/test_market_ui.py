@@ -37,8 +37,9 @@ def client() -> FakeYahooClient:
 def market(client: FakeYahooClient) -> Iterator[MarketDataService]:
     conn = open_database(":memory:")
     fixed = datetime(2025, 3, 3, 23, 0, tzinfo=UTC)
-    yield MarketDataService(YahooFinanceProvider(client), conn, clock=lambda: fixed)
-    conn.close()
+    service = MarketDataService(YahooFinanceProvider(client), conn, clock=lambda: fixed)
+    yield service
+    service.close()
 
 
 @pytest.fixture
