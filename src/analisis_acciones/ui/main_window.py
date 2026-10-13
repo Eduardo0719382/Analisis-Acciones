@@ -24,10 +24,12 @@ from PySide6.QtWidgets import (
 
 from analisis_acciones import __version__
 from analisis_acciones.services.settings_service import SettingsService, Theme
+from analisis_acciones.services.update_service import UpdateService
 from analisis_acciones.ui import strings
 from analisis_acciones.ui.disclaimer import DisclaimerDialog
 from analisis_acciones.ui.panels import Panel
 from analisis_acciones.ui.theme import apply_theme
+from analisis_acciones.ui.update_dialog import UpdateDialog
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +39,17 @@ DEFAULT_CENTER_SPLIT = [620, 200]
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, settings: SettingsService, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        settings: SettingsService,
+        parent: QWidget | None = None,
+        *,
+        update_service: UpdateService | None = None,
+    ) -> None:
         super().__init__(parent)
         self._settings = settings
+        self._update_service = update_service
+        self.restart_requested = False
         self.setWindowTitle(strings.APP_TITLE)
         self.setMinimumSize(800, 500)
 
@@ -151,6 +161,10 @@ class MainWindow(QMainWindow):
         disclaimer_action = QAction(strings.ACTION_DISCLAIMER, self)
         disclaimer_action.triggered.connect(self._show_disclaimer)
         help_menu.addAction(disclaimer_action)
+        self.check_updates_action = QAction(strings.ACTION_CHECK_UPDATES, self)
+        self.check_updates_action.triggered.connect(self.check_for_updates)
+        self.check_updates_action.setEnabled(self._update_service is not None)
+        help_menu.addAction(self.check_updates_action)
         about_action = QAction(strings.ACTION_ABOUT, self)
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
@@ -230,6 +244,16 @@ class MainWindow(QMainWindow):
     # Dialogs ---------------------------------------------------------------
     def _show_disclaimer(self) -> None:
         DisclaimerDialog(self, require_acceptance=False).exec()
+
+    def check_for_updates(self) -> None:
+        if self._update_service is None:
+            return
+        dialog = UpdateDialog(self._update_service, self)
+        dialog.start()
+        dialog.exec()
+        if dialog.restart_requested:
+            self.restart_requested = True
+            self.close()
 
     def _show_about(self) -> None:
         QMessageBox.about(

@@ -102,3 +102,7 @@ def test_disclaimer_dialog_buttons(qtbot: QtBot) -> None:
     info = DisclaimerDialog(require_acceptance=False)
     qtbot.addWidget(info)
     assert len(info.buttons.buttons()) == 1
+
+
+def test_update_action_disabled_without_service(window: MainWindow) -> None:
+    assert not window.check_updates_action.isEnabled()

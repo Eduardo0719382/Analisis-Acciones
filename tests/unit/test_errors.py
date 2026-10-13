@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import pytest
 
-from analisis_acciones.app.error_handler import user_message_for
 from analisis_acciones.models.errors import (
     AppError,
     DataError,
@@ -11,6 +10,7 @@ from analisis_acciones.models.errors import (
     NetworkError,
     ProviderError,
     UserError,
+    user_message_for,
 )
 
 

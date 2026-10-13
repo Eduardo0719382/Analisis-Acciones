@@ -6,15 +6,9 @@ import logging
 import sys
 from types import TracebackType
 
-from analisis_acciones.models.errors import AppError, InternalError
+from analisis_acciones.models.errors import user_message_for
 
 logger = logging.getLogger(__name__)
-
-
-def user_message_for(exc: BaseException) -> str:
-    if isinstance(exc, AppError):
-        return exc.user_message
-    return InternalError.default_user_message
 
 
 def install_excepthook() -> None:

@@ -7,14 +7,16 @@ import sqlite3
 import sys
 from collections.abc import Sequence
 
+from PySide6.QtCore import QProcess
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
 from analisis_acciones import __version__
-from analisis_acciones.app.error_handler import install_excepthook, user_message_for
+from analisis_acciones.app.error_handler import install_excepthook
 from analisis_acciones.app.logging_setup import configure_logging
 from analisis_acciones.app.paths import APP_NAME, AppPaths
-from analisis_acciones.models.errors import AppError
+from analisis_acciones.models.errors import AppError, user_message_for
 from analisis_acciones.services.settings_service import SettingsService
+from analisis_acciones.services.update_service import UpdateService
 from analisis_acciones.storage.database import open_database
 from analisis_acciones.storage.settings_repository import SettingsRepository
 from analisis_acciones.ui import strings
@@ -68,9 +70,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return 0
             settings.accept_disclaimer()
 
-        window = MainWindow(settings)
+        window = MainWindow(settings, update_service=UpdateService())
         window.show()
-        return app.exec()
+        code = app.exec()
+        restart = window.restart_requested
     finally:
         conn.close()
         logger.info("Shutdown complete")
+
+    if restart:
+        logger.info("Restarting after update")
+        QProcess.startDetached(sys.executable, ["-m", "analisis_acciones"])
+    return code

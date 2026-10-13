@@ -51,3 +51,10 @@ class ProviderError(AppError):
 
 class InternalError(AppError):
     category = ErrorCategory.INTERNAL
+
+
+def user_message_for(exc: BaseException) -> str:
+    """Spanish message suitable for showing to the user for any exception."""
+    if isinstance(exc, AppError):
+        return exc.user_message
+    return InternalError.default_user_message

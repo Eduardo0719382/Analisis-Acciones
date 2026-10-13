@@ -146,3 +146,33 @@ Format: DECISION / CONTEXT / ALTERNATIVES / CHOICE / RATIONALE / CONSEQUENCES.
   better than hand-written lists of sizes (see PROBLEMS.md P-002).
 - **Consequences:** The stored values are opaque and Qt-specific. That is acceptable because
   only the UI layer reads them.
+
+## D-012 — In-app updates
+
+- **Context:** The user asked for an update option inside the program. The app is installed from
+  a `git clone` plus `pip install -e`. There is no installer yet.
+- **Alternatives:**
+  - instructions only (`git pull`);
+  - download a ZIP of the branch and overwrite files;
+  - fast-forward the git checkout from inside the app;
+  - a real auto-updater on top of an installer (phase 9).
+- **Choice:** Help → "Buscar actualizaciones…", backed by a Qt-free `UpdateService`:
+  1. `git fetch` the branch's upstream and list the new commit subjects.
+  2. `git merge --ff-only @{u}`.
+  3. `pip install -e .` only when `pyproject.toml` changed.
+  4. Offer to restart.
+
+  The git and pip calls run in a worker thread so the window never freezes.
+- **Rationale:**
+  - It is the smallest safe mechanism for the current installation method.
+  - A fast-forward never discards anything: it refuses when files have local changes, the local
+    branch has diverged, there is no upstream, the checkout is detached, or Git is missing.
+    Each case gets a clear Spanish message.
+- **Consequences:**
+  - ZIP installs are not supported; the dialog says to reinstall with `git clone`.
+  - Updates follow whichever branch was cloned (currently `claude/bold-knuth-wbixh5`). If
+    development moves to `main`, the user must switch branches once.
+  - If a dependency upgrade fails while the app holds DLLs open (Windows), the user is told to
+    close the app and run `pip install -e .` manually.
+  - Commit messages are external data and are shown only as plain text.
+  - To be revisited when the installer is built in phase 9.
