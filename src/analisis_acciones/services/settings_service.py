@@ -23,6 +23,7 @@ class Theme(StrEnum):
 KEY_THEME = "ui.theme"
 KEY_DISCLAIMER = "app.disclaimer_accepted"
 KEY_LAYOUT = "ui.layout"
+KEY_CHECK_UPDATES = "updates.check_on_startup"
 
 
 class SettingsService:
@@ -49,6 +50,13 @@ class SettingsService:
 
     def accept_disclaimer(self) -> None:
         self._repo.set(KEY_DISCLAIMER, True)
+
+    # Updates ---------------------------------------------------------------
+    def check_updates_on_startup(self) -> bool:
+        return self._repo.get(KEY_CHECK_UPDATES) is not False
+
+    def set_check_updates_on_startup(self, enabled: bool) -> None:
+        self._repo.set(KEY_CHECK_UPDATES, bool(enabled))
 
     # Layout ----------------------------------------------------------------
     def layout(self) -> dict[str, Any]:

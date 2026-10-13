@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -33,9 +34,11 @@ def configure_logging(log_dir: Path, level: str | None = None) -> Path:
     file_handler.setFormatter(formatter)
     root.addHandler(file_handler)
 
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(formatter)
-    root.addHandler(stream_handler)
+    # Under pythonw.exe (double-click launch) there is no console: sys.stderr is None.
+    if sys.stderr is not None:
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(formatter)
+        root.addHandler(stream_handler)
 
     if level_name not in logging.getLevelNamesMapping():
         logging.getLogger(__name__).warning("Unknown log level %r; using INFO", level_name)

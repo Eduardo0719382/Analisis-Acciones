@@ -92,6 +92,9 @@ def _stylesheet(t: ThemeTokens) -> str:
     QLabel#panelHeader {{ color: {t.text_muted}; font-weight: 600; padding: 6px 10px;
                          border-bottom: 1px solid {t.border}; background: {t.surface_alt}; }}
     QLabel#panelEmpty {{ color: {t.text_muted}; padding: 16px; }}
+    QPushButton#updateNotice {{ background: transparent; border: none; color: {t.accent};
+                               font-weight: 600; padding: 0 8px; }}
+    QPushButton#updateNotice:hover {{ text-decoration: underline; }}
     QLabel#symbolLabel {{ font-weight: 700; font-size: 14px; padding: 0 8px; }}
     QLineEdit, QComboBox, QPushButton {{ background: {t.surface_alt}; color: {t.text};
         border: 1px solid {t.border}; border-radius: 4px; padding: 4px 8px; }}

@@ -66,3 +66,9 @@ def test_unicode_values(conn: sqlite3.Connection) -> None:
     repo = SettingsRepository(conn)
     repo.set("x", "Acción ñ €")
     assert repo.get("x") == "Acción ñ €"
+
+
+def test_check_updates_on_startup_defaults_to_true(settings: SettingsService) -> None:
+    assert settings.check_updates_on_startup() is True
+    settings.set_check_updates_on_startup(False)
+    assert settings.check_updates_on_startup() is False

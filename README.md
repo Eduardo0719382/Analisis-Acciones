@@ -24,7 +24,14 @@ python -m venv .venv
 pip install -e ".[dev]"
 ```
 
-## Ejecutar
+## Abrir con doble clic (Windows)
+
+Haga doble clic en **`Abrir.bat`**. La primera vez crea el entorno e instala el programa
+(tarda unos minutos y muestra una ventana negra); después abre directamente la aplicación.
+Para tener un acceso directo: clic derecho sobre `Abrir.bat` → *Enviar a* → *Escritorio
+(crear acceso directo)*.
+
+## Ejecutar desde la consola
 
 ```bash
 analisis-acciones
@@ -39,7 +46,9 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
 ## Actualizar
 
 Dentro del programa: **Ayuda → Buscar actualizaciones…**. Muestra los cambios nuevos,
-los instala y ofrece reiniciar.
+los instala y ofrece reiniciar. Además, al abrir el programa se comprueba en segundo plano
+y, si hay una versión nueva, aparece «Actualización disponible» en la barra de estado
+(desactivable en **Ayuda → Buscar actualizaciones al iniciar**).
 
 Requisitos: haber instalado con `git clone` (no desde un ZIP) y tener Git en el PATH.
 La actualización solo avanza la copia local hasta la versión de GitHub; si hay archivos

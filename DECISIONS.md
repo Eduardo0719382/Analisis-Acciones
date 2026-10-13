@@ -176,3 +176,16 @@ Format: DECISION / CONTEXT / ALTERNATIVES / CHOICE / RATIONALE / CONSEQUENCES.
     close the app and run `pip install -e .` manually.
   - Commit messages are external data and are shown only as plain text.
   - To be revisited when the installer is built in phase 9.
+
+### D-012 addendum — startup check and double-click launcher
+
+- **Startup check:** three seconds after the window opens, a background check runs. When an update
+  exists, a clickable "Actualización disponible" notice appears in the status bar. Failures are
+  logged but never interrupt the user; offline use and ZIP installs are normal situations. The
+  check can be turned off in Help (setting `updates.check_on_startup`, on by default).
+- **`Abrir.bat`:**
+  - On the first run it creates `.venv` and runs `pip install -e .`; after that it starts the app
+    with `pythonw.exe`, so no console window appears.
+  - Because `pythonw` has no `sys.stderr`, logging adds the console handler only when a console
+    exists.
+  - `.gitattributes` keeps `.bat` files with CRLF line endings.

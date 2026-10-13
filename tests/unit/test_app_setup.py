@@ -45,3 +45,19 @@ def test_unknown_log_level_falls_back_to_info(tmp_path: Path) -> None:
         for handler in list(logging.getLogger().handlers):
             logging.getLogger().removeHandler(handler)
             handler.close()
+
+
+def test_logging_without_console(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # pythonw.exe (double-click launch) has no stderr.
+    monkeypatch.setattr("sys.stderr", None)
+    log_file = configure_logging(tmp_path)
+    try:
+        logging.getLogger("test").warning("sin consola")
+        for handler in logging.getLogger().handlers:
+            handler.flush()
+        assert all(isinstance(h, logging.FileHandler) for h in logging.getLogger().handlers)
+        assert "sin consola" in log_file.read_text(encoding="utf-8")
+    finally:
+        for handler in list(logging.getLogger().handlers):
+            logging.getLogger().removeHandler(handler)
+            handler.close()

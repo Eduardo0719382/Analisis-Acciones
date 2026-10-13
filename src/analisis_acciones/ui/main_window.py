@@ -6,7 +6,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from PySide6.QtCore import QByteArray, Qt
+from PySide6.QtCore import QByteArray, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
@@ -24,18 +24,20 @@ from PySide6.QtWidgets import (
 
 from analisis_acciones import __version__
 from analisis_acciones.services.settings_service import SettingsService, Theme
-from analisis_acciones.services.update_service import UpdateService
+from analisis_acciones.services.update_service import UpdateCheck, UpdateService
 from analisis_acciones.ui import strings
 from analisis_acciones.ui.disclaimer import DisclaimerDialog
 from analisis_acciones.ui.panels import Panel
 from analisis_acciones.ui.theme import apply_theme
 from analisis_acciones.ui.update_dialog import UpdateDialog
+from analisis_acciones.ui.workers import Worker, start_worker
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_SIZE = (1400, 860)
 DEFAULT_MAIN_SPLIT = [240, 900, 280]
 DEFAULT_CENTER_SPLIT = [620, 200]
+STARTUP_UPDATE_CHECK_DELAY_MS = 3000
 
 
 class MainWindow(QMainWindow):
@@ -50,6 +52,7 @@ class MainWindow(QMainWindow):
         self._settings = settings
         self._update_service = update_service
         self.restart_requested = False
+        self._update_worker: Worker | None = None
         self.setWindowTitle(strings.APP_TITLE)
         self.setMinimumSize(800, 500)
 
@@ -134,6 +137,13 @@ class MainWindow(QMainWindow):
         self.last_update_label = QLabel(
             strings.STATUS_LAST_UPDATE.format(when=strings.STATUS_NEVER)
         )
+        self.update_notice = QPushButton(strings.UPDATE_NOTICE)
+        self.update_notice.setObjectName("updateNotice")
+        self.update_notice.setFlat(True)
+        self.update_notice.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.update_notice.clicked.connect(self.check_for_updates)
+        self.update_notice.hide()
+        status.addPermanentWidget(self.update_notice)
         status.addPermanentWidget(self.provider_label)
         status.addPermanentWidget(self.last_update_label)
         status.showMessage(strings.STATUS_READY)
@@ -165,6 +175,12 @@ class MainWindow(QMainWindow):
         self.check_updates_action.triggered.connect(self.check_for_updates)
         self.check_updates_action.setEnabled(self._update_service is not None)
         help_menu.addAction(self.check_updates_action)
+        self.check_on_startup_action = QAction(strings.ACTION_CHECK_UPDATES_ON_STARTUP, self)
+        self.check_on_startup_action.setCheckable(True)
+        self.check_on_startup_action.setChecked(self._settings.check_updates_on_startup())
+        self.check_on_startup_action.setEnabled(self._update_service is not None)
+        self.check_on_startup_action.toggled.connect(self._settings.set_check_updates_on_startup)
+        help_menu.addAction(self.check_on_startup_action)
         about_action = QAction(strings.ACTION_ABOUT, self)
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
@@ -245,9 +261,35 @@ class MainWindow(QMainWindow):
     def _show_disclaimer(self) -> None:
         DisclaimerDialog(self, require_acceptance=False).exec()
 
+    def schedule_startup_update_check(self, delay_ms: int = STARTUP_UPDATE_CHECK_DELAY_MS) -> None:
+        """Quietly check for updates shortly after startup, if enabled."""
+        if self._update_service is None or not self._settings.check_updates_on_startup():
+            return
+        QTimer.singleShot(delay_ms, self._start_background_update_check)
+
+    def _start_background_update_check(self) -> None:
+        if self._update_service is None:
+            return
+        self._update_worker = start_worker(
+            self._update_service.check,
+            self._on_background_update_checked,
+            self._on_background_update_failed,
+        )
+
+    def _on_background_update_checked(self, result: object) -> None:
+        if isinstance(result, UpdateCheck) and result.available:
+            self.update_notice.setToolTip(strings.UPDATE_NOTICE_TOOLTIP.format(count=result.behind))
+            self.update_notice.show()
+
+    def _on_background_update_failed(self, exc: BaseException) -> None:
+        # A background check must not interrupt the user (e.g. offline, ZIP install).
+        # The failure is already logged by the worker; the manual check shows the reason.
+        logger.info("Startup update check skipped: %s", exc)
+
     def check_for_updates(self) -> None:
         if self._update_service is None:
             return
+        self.update_notice.hide()
         dialog = UpdateDialog(self._update_service, self)
         dialog.start()
         dialog.exec()

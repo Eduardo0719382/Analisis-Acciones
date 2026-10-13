@@ -72,6 +72,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         window = MainWindow(settings, update_service=UpdateService())
         window.show()
+        window.schedule_startup_update_check()
         code = app.exec()
         restart = window.restart_requested
     finally:
