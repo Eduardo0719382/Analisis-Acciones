@@ -30,6 +30,7 @@ from analisis_acciones.services.market_data_service import LoadResult, MarketDat
 from analisis_acciones.services.settings_service import SettingsService, Theme
 from analisis_acciones.services.update_service import UpdateCheck, UpdateService
 from analisis_acciones.ui import strings
+from analisis_acciones.ui.details_panel import DetailsPanel
 from analisis_acciones.ui.disclaimer import DisclaimerDialog
 from analisis_acciones.ui.market_controller import MarketController
 from analisis_acciones.ui.panels import Panel
@@ -114,7 +115,7 @@ class MainWindow(QMainWindow):
         self.watchlist_panel = Panel(strings.PANEL_WATCHLIST, strings.EMPTY_WATCHLIST)
         self.chart_panel = Panel(strings.PANEL_CHART, strings.EMPTY_CHART)
         self.lower_panel = Panel(strings.PANEL_LOWER, strings.EMPTY_LOWER)
-        self.details_panel = Panel(strings.PANEL_DETAILS, strings.EMPTY_DETAILS)
+        self.details_panel = DetailsPanel()
 
         self.center_splitter = QSplitter(Qt.Orientation.Vertical)
         self.center_splitter.setObjectName("centerSplitter")
@@ -219,6 +220,10 @@ class MainWindow(QMainWindow):
         self.market.load_started.connect(self._on_load_started)
         self.market.load_finished.connect(self._on_load_finished)
         self.market.load_failed.connect(self._on_load_failed)
+        self.market.details_finished.connect(self.details_panel.show_details)
+        self.market.details_failed.connect(
+            lambda _s, msg: self.details_panel.source_label.setText(msg)
+        )
 
     def current_interval(self) -> Interval:
         value = self.timeframe_combo.currentData()
@@ -277,8 +282,12 @@ class MainWindow(QMainWindow):
 
     def _on_load_finished(self, result: LoadResult) -> None:
         self.unsetCursor()
+        previous = self.current_result.series.symbol if self.current_result else None
         self.current_result = result
         series = result.series
+        if series.symbol != previous and self.market is not None:
+            self.details_panel.show_loading(series.symbol)
+            self.market.load_details(series.symbol)
         self.current_symbol = series.symbol
         self._set_label(self.symbol_label, series.symbol)
         self._set_label(self.provider_label, strings.STATUS_PROVIDER.format(name=series.source))

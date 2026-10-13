@@ -27,12 +27,15 @@ class MarketController(QObject):
     load_started = Signal(str, object)  # symbol, Interval
     load_finished = Signal(object)  # LoadResult
     load_failed = Signal(str, str)  # symbol, user message
+    details_finished = Signal(object)  # AssetDetails
+    details_failed = Signal(str, str)  # symbol, user message
 
     def __init__(self, service: MarketDataService, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self.service = service
         self._search_seq = 0
         self._load_seq = 0
+        self._details_seq = 0
         self._workers: set[Worker] = set()
 
     def _start(
@@ -105,6 +108,20 @@ class MarketController(QObject):
                 self.load_failed.emit(name, user_message_for(exc))
 
         self._start(lambda: self.service.import_csv(path, name), ok, fail)
+
+    def load_details(self, symbol: str) -> None:
+        self._details_seq += 1
+        seq = self._details_seq
+
+        def ok(result: object) -> None:
+            if seq == self._details_seq:
+                self.details_finished.emit(result)
+
+        def fail(exc: BaseException) -> None:
+            if seq == self._details_seq:
+                self.details_failed.emit(symbol, user_message_for(exc))
+
+        self._start(lambda: self.service.details(symbol), ok, fail)
 
     def remember(self, symbol: str, name: str | None) -> None:
         try:

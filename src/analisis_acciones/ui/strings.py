@@ -93,3 +93,29 @@ DATA_SUMMARY = (
 SESSION_IN_PROGRESS = "La última barra corresponde a la sesión en curso (aún no cerrada)."
 STALE_DATA = "Sin conexión: se muestran datos guardados."
 FROM_CACHE = "caché"
+
+DETAIL_PRICE = "Precio"
+DETAIL_CHANGE = "Cambio"
+DETAIL_CHANGE_PCT = "Cambio %"
+DETAIL_OPEN = "Apertura"
+DETAIL_HIGH = "Máximo"
+DETAIL_LOW = "Mínimo"
+DETAIL_PREV_CLOSE = "Cierre anterior"
+DETAIL_VOLUME = "Volumen"
+DETAIL_52W_HIGH = "Máx. 52 semanas"
+DETAIL_52W_LOW = "Mín. 52 semanas"
+DETAIL_CURRENCY = "Moneda"
+DETAIL_EXCHANGE = "Mercado"
+DETAIL_SECTOR = "Sector"
+DETAIL_INDUSTRY = "Industria"
+DETAILS_LOADING = "Cargando detalles…"
+DETAILS_SOURCE_QUOTE = "Cotización del proveedor: {when}"
+DETAILS_SOURCE_BARS = "Datos de la última barra diaria: {when}"
+MARKET_STATES = {
+    "PRE": "Pre-apertura",
+    "PREPRE": "Pre-apertura",
+    "REGULAR": "Mercado abierto",
+    "POST": "Post-cierre",
+    "POSTPOST": "Post-cierre",
+    "CLOSED": "Mercado cerrado",
+}

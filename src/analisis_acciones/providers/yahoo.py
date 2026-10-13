@@ -14,6 +14,7 @@ import logging
 import math
 import re
 import threading
+import time
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Protocol
 
@@ -36,6 +37,7 @@ logger = logging.getLogger(__name__)
 SOURCE_NAME = "Yahoo Finance"
 REQUEST_TIMEOUT_S = 20
 SUPPORTED_ASSET_TYPES = {"EQUITY", "ETF"}
+INFO_CACHE_SECONDS = 60.0
 
 _COLUMN_MAP = {
     "Open": "open",
@@ -184,6 +186,8 @@ class YahooFinanceProvider(MarketDataProvider):
     def __init__(self, client: YahooClient | None = None) -> None:
         self._client: YahooClient = client or YFinanceClient()
         self._lock = threading.Lock()
+        # get_quote() and get_company_info() read the same payload; reuse it briefly.
+        self._info_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
     def get_available_intervals(self) -> list[Interval]:
         # MVP: end-of-day only (PLAN.md Q5). Weekly/monthly are built from daily.
@@ -271,6 +275,10 @@ class YahooFinanceProvider(MarketDataProvider):
         return results
 
     def _info(self, symbol: str) -> dict[str, Any]:
+        now = time.monotonic()
+        cached = self._info_cache.get(symbol)
+        if cached and now - cached[0] < INFO_CACHE_SECONDS:
+            return cached[1]
         try:
             with self._lock:
                 info = self._client.info(symbol)
@@ -278,6 +286,7 @@ class YahooFinanceProvider(MarketDataProvider):
             raise map_yahoo_error(exc, symbol) from exc
         if not isinstance(info, dict):
             raise ProviderError(f"{symbol}: unexpected info payload {type(info)}")
+        self._info_cache[symbol] = (now, info)
         return info
 
     def get_quote(self, symbol: str) -> Quote:

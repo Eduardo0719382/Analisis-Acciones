@@ -196,3 +196,37 @@ def test_csv_series_loads_without_network(
     assert result.series.source == "Archivo CSV"
     with pytest.raises(UserError):
         service.load("CSV:OTRO", Interval.D1)
+
+
+def test_details_with_live_quote(service: MarketDataService, client: FakeYahooClient) -> None:
+    service.load("TEST", Interval.D1)
+    service.remember("TEST", "Test Corp")
+    client.info_payload = {"regularMarketPrice": 50.0, "regularMarketPreviousClose": 40.0,
+                           "longName": "Test Corporation"}  # fmt: skip
+    details = service.details("test")
+    assert details.price_source == "quote"
+    assert details.change_pct == pytest.approx(25.0)
+    assert details.name == "Test Corporation"
+    assert details.notice is None
+
+
+def test_details_offline_uses_bars(service: MarketDataService, client: FakeYahooClient) -> None:
+    service.load("TEST", Interval.D1)
+    client.error = ConnectionError("offline")
+    details = service.details("TEST")
+    assert details.price_source == "bars"
+    assert details.price == pytest.approx(FULL["close"].iloc[99])
+    assert details.notice and "conectar" in details.notice
+
+
+def test_details_for_csv_never_uses_network(
+    service: MarketDataService, client: FakeYahooClient, tmp_path: Path
+) -> None:
+    path = tmp_path / "d.csv"
+    path.write_text("date,open,high,low,close\n2024-01-02,10,11,9,10.5\n2024-01-03,10.5,12,10,11\n",
+                    encoding="utf-8")  # fmt: skip
+    service.import_csv(path, "D")
+    client.error = AssertionError("network must not be used")
+    details = service.details("CSV:D")
+    assert details.price == 11.0
+    assert details.change == pytest.approx(0.5)

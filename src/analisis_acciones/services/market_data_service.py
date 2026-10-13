@@ -29,10 +29,11 @@ import numpy as np
 import pandas as pd
 
 from analisis_acciones.data.csv_import import read_csv_bars
+from analisis_acciones.data.details import AssetDetails, build_details
 from analisis_acciones.data.freshness import needs_refresh, session_in_progress
 from analisis_acciones.data.resample import resample_daily
 from analisis_acciones.models.errors import DataError, NetworkError, ProviderError, UserError
-from analisis_acciones.models.market import BarSeries, Interval, SearchResult
+from analisis_acciones.models.market import BarSeries, CompanyInfo, Interval, Quote, SearchResult
 from analisis_acciones.providers.base import MarketDataProvider, normalize_symbol
 from analisis_acciones.storage.bar_repository import BarRepository
 from analisis_acciones.storage.recent_repository import RecentSymbolRepository
@@ -221,6 +222,33 @@ class MarketDataService:
             session_in_progress(last, now) and not is_csv_symbol(symbol),
             tuple(notices),
         )
+
+    # Details ---------------------------------------------------------------
+    def details(self, raw_symbol: str) -> AssetDetails:
+        """Details for the info panel: cached bars plus a live quote when reachable.
+
+        Network failures never raise here: the bar-based values are returned with
+        a notice explaining that live data is unavailable.
+        """
+        csv = is_csv_symbol(raw_symbol)
+        symbol = raw_symbol.strip().upper() if csv else normalize_symbol(raw_symbol)
+        with self._lock:
+            daily = self._bars.load(symbol)
+            names = {r.symbol: r.name for r in self._recent.list(50)}
+        fallback_name = names.get(symbol) if names.get(symbol) != symbol else None
+        if csv:
+            return build_details(symbol, daily, fallback_name=fallback_name)
+
+        quote: Quote | None = None
+        info: CompanyInfo | None = None
+        notice: str | None = None
+        try:
+            quote = self._provider.get_quote(symbol)
+            info = self._provider.get_company_info(symbol)
+        except (NetworkError, ProviderError, DataError, UserError) as exc:
+            logger.info("Live details for %s unavailable: %s", symbol, exc)
+            notice = exc.user_message
+        return build_details(symbol, daily, quote, info, fallback_name, notice)
 
     # CSV -------------------------------------------------------------------
     def import_csv(self, path: Path, name: str) -> LoadResult:

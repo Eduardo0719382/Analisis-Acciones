@@ -100,6 +100,13 @@ def _stylesheet(t: ThemeTokens) -> str:
     QPushButton#updateNotice {{ background: transparent; border: none; color: {t.accent};
                                font-weight: 600; padding: 0 8px; }}
     QPushButton#updateNotice:hover {{ text-decoration: underline; }}
+    QLabel#detailsSymbol {{ font-size: 18px; font-weight: 700; }}
+    QLabel#detailsName {{ color: {t.text_muted}; padding-bottom: 8px; }}
+    QLabel#detailsCaption {{ color: {t.text_muted}; }}
+    QLabel#detailsValue {{ font-weight: 600; }}
+    QLabel#detailsValue[direction="up"] {{ color: {t.up}; }}
+    QLabel#detailsValue[direction="down"] {{ color: {t.down}; }}
+    QLabel#detailsSource {{ color: {t.text_muted}; font-size: 11px; padding-top: 10px; }}
     QLabel#symbolLabel {{ font-weight: 700; font-size: 14px; padding: 0 8px; }}
     QLineEdit, QComboBox, QPushButton {{ background: {t.surface_alt}; color: {t.text};
         border: 1px solid {t.border}; border-radius: 4px; padding: 4px 8px; }}

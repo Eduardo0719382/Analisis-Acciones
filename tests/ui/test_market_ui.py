@@ -178,3 +178,37 @@ def test_stale_replies_are_ignored(qtbot: QtBot, window: MainWindow) -> None:
     qtbot.waitUntil(lambda: bool(received), timeout=5000)
     qtbot.wait(100)
     assert received == ["TEST"]
+
+
+def test_details_panel_filled_after_load(
+    qtbot: QtBot, window: MainWindow, client: FakeYahooClient
+) -> None:
+    client.info_payload = {"regularMarketPrice": 110.0, "regularMarketPreviousClose": 100.0,
+                           "longName": "Synthetic Test Corp", "currency": "USD",
+                           "marketState": "CLOSED"}  # fmt: skip
+    assert window.market is not None
+    with qtbot.waitSignal(window.market.details_finished, timeout=5000):
+        window.open_symbol("TEST")
+    panel = window.details_panel
+    assert panel.symbol_label.text() == "TEST"
+    assert panel.name_label.text() == "Synthetic Test Corp"
+    assert "110" in panel.values["price"].text()
+    assert panel.values["change_pct"].text().startswith("+10")
+    assert panel.values["change"].property("direction") == "up"
+    assert "Mercado cerrado" in panel.source_label.text()
+
+
+def test_details_offline_shows_bar_data_and_notice(
+    qtbot: QtBot, window: MainWindow, client: FakeYahooClient
+) -> None:
+    assert window.market is not None
+    with qtbot.waitSignal(window.market.load_finished, timeout=5000):
+        window.open_symbol("TEST")
+    window.current_result = None  # force a details refresh on the next load
+    client.error = ConnectionError("offline")
+    with qtbot.waitSignal(window.market.details_finished, timeout=5000):
+        window.open_symbol("TEST")
+    panel = window.details_panel
+    assert panel.values["price"].text() != "—"
+    assert "última barra" in panel.source_label.text()
+    assert "conectar" in panel.source_label.text()
