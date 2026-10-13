@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,7 @@ import pytest
 from PySide6.QtCore import Qt
 from pytestqt.qtbot import QtBot
 
+from analisis_acciones.indicators.registry import IndicatorConfig
 from analisis_acciones.models.market import Interval
 from analisis_acciones.providers.yahoo import YahooFinanceProvider
 from analisis_acciones.services.market_data_service import MarketDataService
@@ -265,3 +267,41 @@ def test_theme_change_reaches_chart(qtbot: QtBot, window: MainWindow) -> None:
     dark_bg = chart_state(qtbot, window)["background"]
     window.dark_theme_action.setChecked(False)
     qtbot.waitUntil(lambda: chart_state(qtbot, window)["background"] != dark_bg, timeout=20000)
+
+
+def test_indicators_drawn_persisted_and_restored(
+    qtbot: QtBot, window: MainWindow, settings: SettingsService, market: MarketDataService
+) -> None:
+    assert window.market is not None
+    with qtbot.waitSignal(window.market.load_finished, timeout=5000):
+        window.open_symbol("TEST")
+    configs = [IndicatorConfig.create(i) for i in ("sma", "bollinger", "rsi", "macd")]
+    window.apply_indicators(configs)
+    qtbot.waitUntil(lambda: len(chart_state(qtbot, window)["indicators"]) == 4, timeout=20000)
+    state = chart_state(qtbot, window)
+    assert state["panes"] == 4  # price + volume + RSI + MACD
+    assert state["indicatorSeries"] == 1 + 3 + 1 + 3
+    assert "RSI (14)" in state["indicatorLegend"]
+    assert settings.indicators() == configs
+
+    # Hidden indicators are kept in the list but not drawn.
+    hidden = [configs[0], replace(configs[2], visible=False)]
+    window.apply_indicators(hidden)
+    qtbot.waitUntil(lambda: chart_state(qtbot, window)["indicators"] == ["SMA (20)"], timeout=20000)
+    assert chart_state(qtbot, window)["panes"] == 2
+
+    # A new window restores the saved indicators.
+    second = MainWindow(settings, market_service=market)
+    qtbot.addWidget(second)
+    assert second.chart.indicators == hidden
+
+
+def test_indicators_follow_interval_change(qtbot: QtBot, window: MainWindow) -> None:
+    assert window.market is not None
+    window.apply_indicators([IndicatorConfig.create("sma", {"period": 5})])
+    with qtbot.waitSignal(window.market.load_finished, timeout=5000):
+        window.open_symbol("TEST")
+    with qtbot.waitSignal(window.market.load_finished, timeout=5000):
+        window.timeframe_combo.setCurrentIndex(1)  # weekly
+    qtbot.waitUntil(lambda: chart_state(qtbot, window)["bars"] == 60, timeout=20000)
+    assert chart_state(qtbot, window)["indicators"] == ["SMA (5)"]

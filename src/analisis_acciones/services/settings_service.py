@@ -10,6 +10,8 @@ import logging
 from enum import StrEnum
 from typing import Any
 
+from analisis_acciones.indicators.registry import IndicatorConfig
+from analisis_acciones.models.errors import AppError
 from analisis_acciones.storage.settings_repository import SettingsRepository
 
 logger = logging.getLogger(__name__)
@@ -26,6 +28,7 @@ KEY_LAYOUT = "ui.layout"
 KEY_CHECK_UPDATES = "updates.check_on_startup"
 KEY_LAST_SYMBOL = "market.last_symbol"
 KEY_CHART_TYPE = "chart.type"
+KEY_INDICATORS = "chart.indicators"
 CHART_TYPES = ("candles", "line")
 KEY_LAST_INTERVAL = "market.last_interval"
 
@@ -84,6 +87,23 @@ class SettingsService:
         if chart_type not in CHART_TYPES:
             raise ValueError(f"unknown chart type {chart_type!r}")
         self._repo.set(KEY_CHART_TYPE, chart_type)
+
+    # Indicators ----------------------------------------------------------------
+    def indicators(self) -> list[IndicatorConfig]:
+        """Saved chart indicators; invalid stored entries are skipped (and logged)."""
+        raw = self._repo.get(KEY_INDICATORS)
+        if not isinstance(raw, list):
+            return []
+        configs: list[IndicatorConfig] = []
+        for item in raw:
+            try:
+                configs.append(IndicatorConfig.from_dict(item))
+            except (AppError, TypeError, ValueError, AttributeError):
+                logger.warning("Ignoring invalid stored indicator %r", item)
+        return configs
+
+    def set_indicators(self, configs: list[IndicatorConfig]) -> None:
+        self._repo.set(KEY_INDICATORS, [c.to_dict() for c in configs])
 
     # Layout ----------------------------------------------------------------
     def layout(self) -> dict[str, Any]:

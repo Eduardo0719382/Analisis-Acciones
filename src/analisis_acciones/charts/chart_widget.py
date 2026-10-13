@@ -19,10 +19,12 @@ from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QLabel, QStackedLayout, QVBoxLayout, QWidget
 
-from analisis_acciones.charts.payload import build_payload
+from analisis_acciones.charts.payload import build_indicator_payload, build_payload
+from analisis_acciones.indicators.registry import IndicatorConfig
 from analisis_acciones.models.market import BarSeries
 from analisis_acciones.ui import strings
 from analisis_acciones.ui.theme import ThemeTokens
+from analisis_acciones.ui.workers import Worker, start_worker
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +88,10 @@ class ChartWidget(QWidget):
     """Shows either a message (no data / error) or the interactive chart."""
 
     ready = Signal()
+    #: Labels of indicators that could not be computed for the current series.
+    indicators_failed = Signal(list)
+    #: The latest data/indicator payload was handed to the page.
+    rendered = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -95,6 +101,10 @@ class ChartWidget(QWidget):
         self._theme: ThemeTokens | None = None
         self._chart_type = "candles"
         self.current_series: BarSeries | None = None
+        self._indicators: list[IndicatorConfig] = []
+        self._title = ""
+        self._render_seq = 0
+        self._workers: set[Worker] = set()
 
         self.message = QLabel(strings.EMPTY_CHART)
         self.message.setObjectName("panelEmpty")
@@ -194,10 +204,60 @@ class ChartWidget(QWidget):
             self.show_message(strings.CHART_NO_DATA)
             return
         self.current_series = series
-        payload = build_payload(series, title, self._theme.up, self._theme.down)
+        self._title = title
         self._run(self._call("setChartType", self._chart_type))
-        self._run(self._call("setData", payload))
+        self._render(keep_range=False)
         self._stack.setCurrentIndex(1)
+
+    def set_indicators(self, configs: list[IndicatorConfig]) -> None:
+        """Replace the indicators drawn on the chart (recomputed for the current series)."""
+        self._indicators = list(configs)
+        if self.current_series is not None and self._theme is not None:
+            self._render(keep_range=True)
+
+    def _render(self, *, keep_range: bool) -> None:
+        """Build the page payload in a worker thread; only the latest request is applied.
+
+        Computing indicators and serialising ~10k bars takes long enough
+        (100-300 ms) to stutter the UI if done on the main thread.
+        """
+        assert self.current_series is not None and self._theme is not None
+        series, theme, indicators, title = (
+            self.current_series, self._theme, list(self._indicators), self._title,
+        )  # fmt: skip
+        self._render_seq += 1
+        seq = self._render_seq
+
+        def job() -> tuple[str, list[str]]:
+            payload = build_payload(series, title, theme.up, theme.down)
+            payload["indicators"], failed = build_indicator_payload(
+                indicators, series.bars, theme.up, theme.down, theme.text_muted
+            )
+            payload["keepRange"] = keep_range
+            return self._call("setData", payload), failed
+
+        def done(result: tuple[str, list[str]]) -> None:
+            if seq != self._render_seq:
+                return  # superseded by a newer request
+            script, failed = result
+            self._run(script)
+            self.rendered.emit()
+            if failed:
+                self.indicators_failed.emit(failed)
+
+        def fail(exc: BaseException) -> None:
+            logger.error("Could not prepare chart data: %s", exc, exc_info=exc)
+            if seq == self._render_seq:
+                self.show_message(strings.CHART_LOAD_ERROR, error=True)
+
+        worker = start_worker(job, done, fail)
+        self._workers.add(worker)
+        worker.signals.succeeded.connect(lambda _r: self._workers.discard(worker))
+        worker.signals.failed.connect(lambda _e: self._workers.discard(worker))
+
+    @property
+    def indicators(self) -> list[IndicatorConfig]:
+        return list(self._indicators)
 
     def show_message(self, text: str, *, error: bool = False) -> None:
         self.message.setText(text)

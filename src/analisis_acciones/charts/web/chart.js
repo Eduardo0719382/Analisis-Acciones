@@ -7,11 +7,14 @@
   const container = document.getElementById("chart");
   const legendTitle = document.getElementById("legend-title");
   const legendValues = document.getElementById("legend-values");
+  const legendIndicators = document.getElementById("legend-indicators");
 
   const state = {
     chart: null,
     priceSeries: null,
     volumeSeries: null,
+    indicatorSeries: [],
+    indicators: [],
     payload: null,
     chartType: "candles",
     theme: null,
@@ -71,8 +74,45 @@
     if (!state.chart) return;
     if (state.priceSeries) state.chart.removeSeries(state.priceSeries);
     if (state.volumeSeries) state.chart.removeSeries(state.volumeSeries);
+    for (const s of state.indicatorSeries) state.chart.removeSeries(s);
     state.priceSeries = null;
     state.volumeSeries = null;
+    state.indicatorSeries = [];
+  }
+
+  function addIndicators(firstFreePane) {
+    const chart = state.chart;
+    let nextPane = firstFreePane;
+    for (const ind of state.indicators) {
+      const pane = ind.placement === "overlay" ? 0 : nextPane++;
+      const nf = numberFormat(ind.decimals);
+      const priceFormat = {
+        type: "custom", minMove: Math.pow(10, -ind.decimals), formatter: (v) => nf.format(v),
+      };
+      let first = null;
+      for (const out of ind.outputs) {
+        const common = { priceFormat, priceLineVisible: false, lastValueVisible: true,
+                         title: "" };
+        const series = out.style === "histogram"
+          ? chart.addSeries(LWC.HistogramSeries, { ...common, color: out.color }, pane)
+          : chart.addSeries(LWC.LineSeries, {
+              ...common, color: out.color, lineWidth: 1, crosshairMarkerVisible: false,
+            }, pane);
+        series.setData(out.points);
+        state.indicatorSeries.push(series);
+        if (!first) first = series;
+      }
+      if (first) {
+        for (const level of ind.levels) {
+          first.createPriceLine({
+            price: level, color: ind.levelColor, lineWidth: 1, lineStyle: LWC.LineStyle.Dashed,
+            axisLabelVisible: true, title: "",
+          });
+        }
+      }
+    }
+    const panes = chart.panes();
+    panes.forEach((p, i) => p.setStretchFactor(i === 0 ? 3 : 1));
   }
 
   function buildSeries() {
@@ -105,12 +145,8 @@
         priceLineVisible: false, lastValueVisible: false,
       }, 1);
       state.volumeSeries.setData(p.volume);
-      const panes = chart.panes();
-      if (panes.length > 1) {
-        panes[0].setStretchFactor(3);
-        panes[1].setStretchFactor(1);
-      }
     }
+    addIndicators(p.volume ? 2 : 1);
   }
 
   function showInitialRange() {
@@ -167,6 +203,23 @@
       legendValues.appendChild(span(L.volume, state.volumeFormat.format(vol)));
     }
     legendValues.style.color = t.text_muted;
+
+    legendIndicators.replaceChildren();
+    for (const ind of state.indicators) {
+      const row = document.createElement("div");
+      const sw = document.createElement("span");
+      sw.className = "swatch";
+      sw.style.background = ind.outputs[ind.outputs.length - 1].color;
+      row.appendChild(sw);
+      const nf = numberFormat(ind.decimals);
+      const vals = ind.outputs.map((o) => {
+        const v = o.byIndex[i];
+        return v === null || v === undefined ? "—" : nf.format(v);
+      });
+      row.appendChild(document.createTextNode(`${ind.label}  ${vals.join(" / ")}`));
+      row.style.color = t.text_muted;
+      legendIndicators.appendChild(row);
+    }
   }
 
   function onCrosshairMove(param) {
@@ -193,12 +246,26 @@
       }
     },
     setData(payload) {
+      const keep = payload.keepRange && state.chart && state.payload
+        && state.payload.symbol === payload.symbol
+        ? state.chart.timeScale().getVisibleLogicalRange() : null;
       state.payload = payload;
+      state.indicators = payload.indicators || [];
       state.priceFormat = numberFormat(payload.decimals);
       ensureChart();
       buildSeries();
-      showInitialRange();
+      if (keep) state.chart.timeScale().setVisibleLogicalRange(keep);
+      else showInitialRange();
       renderLegend(payload.candles.length - 1);
+    },
+    setIndicators(indicators) {
+      state.indicators = indicators || [];
+      if (state.payload) {
+        const range = state.chart.timeScale().getVisibleLogicalRange();
+        buildSeries();
+        if (range) state.chart.timeScale().setVisibleLogicalRange(range);
+        renderLegend(state.payload.candles.length - 1);
+      }
     },
     setChartType(type) {
       state.chartType = type === "line" ? "line" : "candles";
@@ -221,8 +288,11 @@
         chartType: state.chartType,
         priceSeriesType: state.priceSeries ? state.priceSeries.seriesType() : null,
         hasVolume: !!state.volumeSeries,
+        indicators: state.indicators.map((i) => i.label),
+        indicatorSeries: state.indicatorSeries.length,
         panes: state.chart ? state.chart.panes().length : 0,
         legend: legendTitle.textContent + " | " + legendValues.textContent,
+        indicatorLegend: legendIndicators.textContent,
         visibleFrom: range ? range.from : null,
         visibleTo: range ? range.to : null,
         background: document.body.style.background,

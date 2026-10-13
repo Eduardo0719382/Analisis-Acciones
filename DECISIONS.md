@@ -256,3 +256,23 @@ Format: DECISION / CONTEXT / ALTERNATIVES / CHOICE / RATIONALE / CONSEQUENCES.
   - Headless Chromium needs `--no-sandbox --disable-gpu` in containers (set in `tests/conftest.py`
     only).
   - The Linux CI needs the NSS and X libraries.
+
+## D-015 — Indicator conventions, UI and threading (Phase 4)
+
+- **Conventions** (published implementations differ, so they are fixed and documented in
+  `indicators/functions.py`):
+  - EMA is seeded with the SMA of its first N values;
+  - RSI and ATR use Wilder smoothing, seeded with a simple average;
+  - Bollinger Bands use the population standard deviation;
+  - the MACD signal line is an EMA of the MACD line, seeded the same way as the EMA.
+
+  Warm-up values are NaN and are drawn as gaps.
+- **Verification:** every indicator is compared against independent plain-Python reference
+  implementations to within 1e-8, plus hand-computed examples and a no-look-ahead test (values at
+  bar t do not change when later bars are added).
+- **Registry-driven UI:** the indicator dialog builds its parameter forms from `ParamSpec`, and
+  validation lives in the core (`validate_params`), not the UI. The configuration
+  (id, parameters, visibility) is saved in settings; invalid stored entries are skipped.
+- **Threading:** computing all six indicators and serialising about 12k bars took about 190 ms on
+  the UI thread. Building the chart payload now runs in a worker thread, and only the latest
+  request is applied. Changing indicators keeps the visible range.

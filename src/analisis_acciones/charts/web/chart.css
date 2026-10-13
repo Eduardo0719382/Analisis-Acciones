@@ -6,3 +6,6 @@ html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
 #legend-title { font-weight: 700; font-size: 13px; }
 #legend-values span { margin-right: 10px; white-space: nowrap; }
 #legend-values .k { opacity: 0.65; margin-right: 3px; }
+#legend-indicators div { white-space: nowrap; }
+#legend-indicators .swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+  margin-right: 5px; vertical-align: middle; }

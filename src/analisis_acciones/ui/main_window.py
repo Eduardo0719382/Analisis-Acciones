@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 
 from analisis_acciones import __version__
 from analisis_acciones.charts.chart_widget import ChartWidget
+from analisis_acciones.indicators.registry import IndicatorConfig
 from analisis_acciones.models.market import Interval
 from analisis_acciones.services.market_data_service import LoadResult, MarketDataService
 from analisis_acciones.services.settings_service import SettingsService, Theme
@@ -33,6 +34,7 @@ from analisis_acciones.services.update_service import UpdateCheck, UpdateService
 from analisis_acciones.ui import strings
 from analisis_acciones.ui.details_panel import DetailsPanel
 from analisis_acciones.ui.disclaimer import DisclaimerDialog
+from analisis_acciones.ui.indicator_dialog import IndicatorDialog
 from analisis_acciones.ui.market_controller import MarketController
 from analisis_acciones.ui.panels import Panel
 from analisis_acciones.ui.search_box import SearchBox
@@ -108,8 +110,7 @@ class MainWindow(QMainWindow):
 
         self.indicators_button = QPushButton(strings.INDICATORS_BUTTON)
         self.indicators_button.setObjectName("indicatorsButton")
-        self.indicators_button.setEnabled(False)
-        self.indicators_button.setToolTip(strings.COMING_SOON)
+        self.indicators_button.clicked.connect(self.edit_indicators)
         bar.addWidget(self.indicators_button)
 
         spacer = QWidget()
@@ -125,6 +126,12 @@ class MainWindow(QMainWindow):
         # time axes and crosshair stay synchronised (DECISIONS.md D-014).
         self.chart = ChartWidget()
         self.chart.set_theme(tokens_for(self._settings.theme()))
+        self.chart.set_indicators(self._settings.indicators())
+        self.chart.indicators_failed.connect(
+            lambda names: self.statusBar().showMessage(
+                strings.INDICATORS_FAILED.format(names=", ".join(names))
+            )
+        )
         self.details_panel = DetailsPanel()
 
         self.main_splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -237,6 +244,15 @@ class MainWindow(QMainWindow):
         chart_type = str(self.chart_type_combo.currentData())
         self.chart.set_chart_type(chart_type)
         self._settings.set_chart_type(chart_type)
+
+    def edit_indicators(self) -> None:
+        dialog = IndicatorDialog(self.chart.indicators, self)
+        if dialog.exec() == IndicatorDialog.DialogCode.Accepted:
+            self.apply_indicators(dialog.configs())
+
+    def apply_indicators(self, configs: list[IndicatorConfig]) -> None:
+        self.chart.set_indicators(configs)
+        self._settings.set_indicators(configs)
 
     def current_interval(self) -> Interval:
         value = self.timeframe_combo.currentData()

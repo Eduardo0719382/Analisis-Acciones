@@ -65,3 +65,25 @@ def test_chart_locale() -> None:
     assert chart_locale("C") == FALLBACK_LOCALE
     assert chart_locale("") == FALLBACK_LOCALE
     assert chart_locale("es-MX');alert(1);//") == FALLBACK_LOCALE
+
+
+def test_indicator_payload_warmup_and_hidden() -> None:
+    from analisis_acciones.charts.payload import build_indicator_payload
+    from analisis_acciones.indicators.registry import IndicatorConfig
+
+    bars = synthetic_daily(sessions=60)
+    configs = [
+        IndicatorConfig.create("sma", {"period": 10}),
+        IndicatorConfig("ema", {"period": 5}, visible=False),
+        IndicatorConfig.create("macd"),
+    ]
+    payload, failed = build_indicator_payload(configs, bars, "#00ff00", "#ff0000", "#888888")
+    assert failed == []
+    assert [p["label"] for p in payload] == ["SMA (10)", "MACD (12, 26, 9)"]
+    sma = payload[0]["outputs"][0]
+    assert "value" not in sma["points"][8] and sma["byIndex"][8] is None  # warm-up gap
+    assert sma["points"][9]["value"] == bars["close"].iloc[:10].mean()
+    hist = next(o for o in payload[1]["outputs"] if o["key"] == "histogram")
+    coloured = [p for p in hist["points"] if "value" in p]
+    assert all(p["color"].startswith("#00ff00" if p["value"] >= 0 else "#ff0000") for p in coloured)
+    json.dumps(payload, allow_nan=False)

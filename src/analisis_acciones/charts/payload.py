@@ -6,12 +6,17 @@ no volume point (a gap), never a zero.
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
+from analisis_acciones.indicators.registry import IndicatorConfig, compute
 from analisis_acciones.models.market import BarSeries
+
+logger = logging.getLogger(__name__)
 
 INITIAL_VISIBLE_BARS = 180
 
@@ -64,3 +69,70 @@ def build_payload(series: BarSeries, title: str, up_color: str, down_color: str)
         "volume": volume if has_volume else None,
         "volumeByIndex": volume_by_index if has_volume else None,
     }
+
+
+def build_indicator_payload(
+    configs: list[IndicatorConfig],
+    bars: pd.DataFrame,
+    up_color: str,
+    down_color: str,
+    level_color: str,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Chart payload for the visible indicators, plus labels of any that failed.
+
+    A failing indicator is skipped (and reported) instead of breaking the chart.
+    """
+    times = pd.DatetimeIndex(bars.index).strftime("%Y-%m-%d").tolist()
+    decimals = price_decimals(bars)
+    payload: list[dict[str, Any]] = []
+    failed: list[str] = []
+    for config in configs:
+        if not config.visible:
+            continue
+        spec = config.spec
+        try:
+            values = compute(config, bars)
+        except (ValueError, ArithmeticError):
+            logger.exception("Indicator %s failed", config.label)
+            failed.append(config.label)
+            continue
+        outputs = []
+        for output in spec.outputs:
+            column = values[output.key].to_numpy(dtype="float64")
+            finite = np.isfinite(column)
+            by_index: list[float | None] = [
+                v if ok else None for v, ok in zip(column.tolist(), finite.tolist(), strict=True)
+            ]
+            if output.style == "histogram":
+                up, down = up_color + "99", down_color + "99"
+                points = [
+                    {"time": t, "value": v, "color": up if v >= 0 else down}
+                    if v is not None
+                    else {"time": t}  # warm-up: no point, not zero
+                    for t, v in zip(times, by_index, strict=True)
+                ]
+            else:
+                points = [
+                    {"time": t, "value": v} if v is not None else {"time": t}
+                    for t, v in zip(times, by_index, strict=True)
+                ]
+            outputs.append(
+                {
+                    "key": output.key,
+                    "label": output.label,
+                    "style": output.style,
+                    "color": output.color,
+                    "points": points,
+                    "byIndex": by_index,
+                }
+            )
+        payload.append({
+            "uid": config.uid,
+            "label": config.label,
+            "placement": spec.placement,
+            "decimals": 2 if spec.id == "rsi" else decimals,
+            "levels": list(spec.levels),
+            "levelColor": level_color,
+            "outputs": outputs,
+        })  # fmt: skip
+    return payload, failed

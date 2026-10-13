@@ -32,7 +32,7 @@ def test_features_from_later_phases_are_disabled(window: MainWindow) -> None:
     assert not window.search_box.isEnabled()
     assert not window.timeframe_combo.isEnabled()
     assert window.timeframe_combo.count() == 0  # no provider: no intervals shown
-    assert not window.indicators_button.isEnabled()
+    assert window.indicators_button.isEnabled()  # Phase 4
 
 
 def test_theme_toggle_is_persisted(window: MainWindow, settings: SettingsService) -> None:
