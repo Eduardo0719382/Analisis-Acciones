@@ -3,12 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+      content="default-src 'none'; script-src 'self' qrc:; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
 <link rel="stylesheet" href="chart.css">
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
 <script src="lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
 <div id="chart"></div>
+<div id="draw-hint"></div>
 <div id="legend" aria-live="polite">
   <div id="legend-title"></div>
   <div id="legend-values"></div>

@@ -259,3 +259,25 @@ REPORT_INDICATORS = "Indicadores en el gráfico"
 REPORT_ANALYSIS_DATE = "Datos hasta {date} ({bars} barras)."
 BT_EXPORT = "Exportar resultados…"
 BT_EXPORT_DONE = "Resultados guardados en: {files}"
+
+MENU_DRAW = "Dibujo"
+DRAW_HLINE = "Línea horizontal (soporte/resistencia)"
+DRAW_TREND = "Línea de tendencia"
+DRAW_FIB = "Retroceso de Fibonacci"
+DRAW_NOTE = "Nota"
+DRAW_UNDO = "Deshacer último dibujo"
+DRAW_CLEAR = "Borrar todos los dibujos del activo"
+DRAW_NOTE_PROMPT = "Texto de la nota:"
+DRAW_NEED_SYMBOL = "Abra primero un activo para dibujar sobre él."
+DRAW_HINTS = {
+    "hline": ("Haga clic en el precio donde trazar la línea (Esc cancela).", ""),
+    "trend": (
+        "Haga clic en el primer punto de la línea (Esc cancela).",
+        "Haga clic en el segundo punto.",
+    ),
+    "fib": (
+        "Haga clic en el inicio del movimiento (100 %) (Esc cancela).",
+        "Haga clic en el final del movimiento (0 %).",
+    ),
+    "note": ("Haga clic en la barra donde colocar la nota (Esc cancela).", ""),
+}

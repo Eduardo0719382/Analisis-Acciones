@@ -9,3 +9,6 @@ html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden;
 #legend-indicators div { white-space: nowrap; }
 #legend-indicators .swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px;
   margin-right: 5px; vertical-align: middle; }
+#draw-hint { position: absolute; bottom: 34px; left: 50%; transform: translateX(-50%);
+  z-index: 4; pointer-events: none; font-size: 12px; padding: 4px 10px; border-radius: 4px;
+  display: none; }

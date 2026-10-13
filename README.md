@@ -86,6 +86,11 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   backtesting, *Exportar resultados…* guarda operaciones, resumen y curva de capital en CSV.
   Los textos que empiezan por `=`, `+`, `-` o `@` se escriben precedidos de `'` para que una
   hoja de cálculo nunca los ejecute como fórmula.
+- **Dibujo** (botón de la barra superior): línea horizontal (soporte/resistencia), línea de
+  tendencia (2 clics), retroceso de Fibonacci (2 clics: inicio y fin del movimiento; niveles
+  0–23,6–38,2–50–61,8–78,6–100 %) y notas. Esc cancela. Se guardan por activo; «Deshacer
+  último dibujo» y «Borrar todos». Nota: tras un split, los precios históricos se reajustan y
+  los dibujos antiguos pueden quedar desplazados.
 - **Detalles (panel derecho):** precio, cambio, apertura/máximo/mínimo, volumen, rango de 52
   semanas, moneda, mercado, sector. Sin conexión se muestran los datos de la última barra
   guardada, indicándolo.

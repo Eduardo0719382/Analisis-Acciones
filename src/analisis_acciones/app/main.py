@@ -17,6 +17,7 @@ from analisis_acciones.app.logging_setup import configure_logging
 from analisis_acciones.app.paths import APP_NAME, AppPaths
 from analisis_acciones.models.errors import AppError, user_message_for
 from analisis_acciones.providers.yahoo import YahooFinanceProvider
+from analisis_acciones.services.drawing_service import DrawingService
 from analisis_acciones.services.market_data_service import MarketDataService
 from analisis_acciones.services.settings_service import SettingsService
 from analisis_acciones.services.update_service import UpdateService
@@ -88,6 +89,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             market_service=market,
             watchlist_service=WatchlistService(conn),
             alert_service=alerts,
+            drawing_service=DrawingService(conn),
         )
         window.show()
         window.restore_last_symbol()

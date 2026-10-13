@@ -374,3 +374,22 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
 - **PDF:** HTML rendered with `QTextDocument` and `QPdfWriter` (A4). Every piece of external text
   is HTML-escaped. It contains the chart image, details, analysis evidence and the disclaimer.
 - **Backtest export:** three CSV files (trades, summary with run context, equity curve).
+
+## D-022 — Drawing tools (Phase 9)
+
+- **Scope:** horizontal lines, trend lines, Fibonacci retracements and notes. Channels and
+  rectangles are deferred: Lightweight Charts has no built-in drawing primitives, and these
+  four cover the support/resistance use case with library features (price lines, a 2-point line
+  series, series markers).
+- **Data flow:**
+  - A click in the page is converted to (date, price) and sent through `QWebChannel` as a JSON
+    string.
+  - Python treats it as untrusted: there is a size limit, then `DrawingService` validates the kind,
+    the number of points, ISO dates, finite positive prices and the text length before storing it
+    (migration 0005).
+  - The page only redraws from the validated list Python sends back.
+  - Fibonacci levels are computed in Python and unit-tested.
+- **Display:** points snap to the bars on screen, so drawings also appear on weekly and monthly
+  charts.
+- **Known limitation:** drawings are stored in the series' price units. After a split, Yahoo
+  re-adjusts history (D-004), so old drawings can be offset. This is documented in the README.

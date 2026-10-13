@@ -15,7 +15,8 @@ from pathlib import Path
 from typing import Any
 
 import shiboken6
-from PySide6.QtCore import QLocale, Qt, QUrl, Signal
+from PySide6.QtCore import QLocale, QObject, Qt, QUrl, Signal, Slot
+from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QLabel, QStackedLayout, QVBoxLayout, QWidget
@@ -23,6 +24,7 @@ from PySide6.QtWidgets import QLabel, QStackedLayout, QVBoxLayout, QWidget
 from analisis_acciones.charts.payload import build_indicator_payload, build_payload
 from analisis_acciones.indicators.registry import IndicatorConfig
 from analisis_acciones.models.market import BarSeries
+from analisis_acciones.services.drawing_service import Drawing
 from analisis_acciones.ui import strings
 from analisis_acciones.ui.theme import ThemeTokens
 from analisis_acciones.ui.workers import Worker, start_worker
@@ -85,6 +87,33 @@ class _ChartPage(QWebEnginePage):
         return False
 
 
+MAX_BRIDGE_MESSAGE = 10_000
+
+
+class ChartBridge(QObject):
+    """Receives messages from the page. Their content is untrusted data."""
+
+    drawing_created = Signal(str, list)  # kind, raw points
+    drawing_cancelled = Signal()
+
+    @Slot(str)
+    def drawingCreated(self, message: str) -> None:
+        if len(message) > MAX_BRIDGE_MESSAGE:
+            logger.warning("Ignoring oversized message from chart page")
+            return
+        try:
+            data = json.loads(message)
+            kind, points = str(data["kind"]), list(data["points"])
+        except (ValueError, KeyError, TypeError):
+            logger.warning("Ignoring malformed drawing message from chart page")
+            return
+        self.drawing_created.emit(kind, points)
+
+    @Slot()
+    def drawingCancelled(self) -> None:
+        self.drawing_cancelled.emit()
+
+
 class ChartWidget(QWidget):
     """Shows either a message (no data / error) or the interactive chart."""
 
@@ -118,6 +147,10 @@ class ChartWidget(QWidget):
         page_url = QUrl.fromLocalFile(str(chart_page_path()))
         self.view = QWebEngineView()
         self.view.setPage(_ChartPage(page_url, self.view))
+        self.bridge = ChartBridge(self)
+        self._channel = QWebChannel(self)
+        self._channel.registerObject("bridge", self.bridge)
+        self.view.page().setWebChannel(self._channel)
         self.view.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
         settings = self.view.settings()
         settings.setAttribute(
@@ -259,6 +292,16 @@ class ChartWidget(QWidget):
     @property
     def indicators(self) -> list[IndicatorConfig]:
         return list(self._indicators)
+
+    # Drawings ----------------------------------------------------------------
+    def set_drawings(self, drawings: list[Drawing]) -> None:
+        self._run(self._call("setDrawings", [d.to_payload() for d in drawings]))
+
+    def set_draw_mode(self, mode: str | None) -> None:
+        hints = {"first": strings.DRAW_HINTS.get(mode or "", ("", ""))[0],
+                 "second": strings.DRAW_HINTS.get(mode or "", ("", ""))[1]}  # fmt: skip
+        self._run(f"window.chartApp && window.chartApp.setDrawMode({json.dumps(mode)}, "
+                  f"{json.dumps(hints)});")  # fmt: skip
 
     def show_message(self, text: str, *, error: bool = False) -> None:
         self.message.setText(text)

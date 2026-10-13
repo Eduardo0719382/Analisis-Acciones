@@ -14,6 +14,13 @@
     priceSeries: null,
     volumeSeries: null,
     indicatorSeries: [],
+    drawings: [],
+    drawingSeries: [],
+    drawingLines: [],
+    drawingMarkers: null,
+    drawMode: null,
+    drawPoints: [],
+    drawHints: {},
     indicators: [],
     payload: null,
     chartType: "candles",
@@ -66,6 +73,7 @@
     if (!state.chart) {
       state.chart = LWC.createChart(container, chartOptions());
       state.chart.subscribeCrosshairMove(onCrosshairMove);
+      state.chart.subscribeClick(onClick);
     }
     return state.chart;
   }
@@ -75,6 +83,10 @@
     if (state.priceSeries) state.chart.removeSeries(state.priceSeries);
     if (state.volumeSeries) state.chart.removeSeries(state.volumeSeries);
     for (const s of state.indicatorSeries) state.chart.removeSeries(s);
+    for (const s of state.drawingSeries) state.chart.removeSeries(s);
+    state.drawingSeries = [];
+    state.drawingLines = [];
+    state.drawingMarkers = null;
     state.priceSeries = null;
     state.volumeSeries = null;
     state.indicatorSeries = [];
@@ -147,6 +159,126 @@
       state.volumeSeries.setData(p.volume);
     }
     addIndicators(p.volume ? 2 : 1);
+    renderDrawings();
+  }
+
+  // Drawings -------------------------------------------------------------------
+  function timeKey(t) {
+    if (typeof t === "string") return t;
+    if (t && typeof t === "object" && "year" in t) {
+      const mm = String(t.month).padStart(2, "0");
+      const dd = String(t.day).padStart(2, "0");
+      return `${t.year}-${mm}-${dd}`;
+    }
+    return null;
+  }
+
+  // Map a date onto the bars on screen (weekly/monthly bars start on other dates).
+  function snapTime(day) {
+    const c = state.payload ? state.payload.candles : [];
+    if (!c.length) return null;
+    let best = c[0].time;
+    for (const bar of c) {
+      if (bar.time <= day) best = bar.time; else break;
+    }
+    return best;
+  }
+
+  function clearDrawingArtifacts() {
+    if (!state.chart) return;
+    for (const s of state.drawingSeries) state.chart.removeSeries(s);
+    if (state.priceSeries) for (const l of state.drawingLines) state.priceSeries.removePriceLine(l);
+    if (state.drawingMarkers) state.drawingMarkers.setMarkers([]);
+    state.drawingSeries = [];
+    state.drawingLines = [];
+  }
+
+  function renderDrawings() {
+    if (!state.chart || !state.priceSeries || !state.theme) return;
+    clearDrawingArtifacts();
+    const t = state.theme;
+    const markers = [];
+    for (const d of state.drawings) {
+      if (d.kind === "hline") {
+        state.drawingLines.push(state.priceSeries.createPriceLine({
+          price: d.points[0].price, color: t.accent, lineWidth: 1,
+          lineStyle: LWC.LineStyle.Solid, axisLabelVisible: true, title: "",
+        }));
+      } else if (d.kind === "fib") {
+        for (const level of d.levels) {
+          state.drawingLines.push(state.priceSeries.createPriceLine({
+            price: level.price, color: "#d4a017", lineWidth: 1,
+            lineStyle: LWC.LineStyle.Dotted, axisLabelVisible: true,
+            title: `${(level.ratio * 100).toFixed(1)} %`,
+          }));
+        }
+      } else if (d.kind === "trend") {
+        const pts = d.points
+          .map((p) => ({ time: snapTime(p.time), value: p.price }))
+          .sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
+        if (pts[0].time === pts[1].time) continue;
+        const s = state.chart.addSeries(LWC.LineSeries, {
+          color: t.accent, lineWidth: 2, priceLineVisible: false, lastValueVisible: false,
+          crosshairMarkerVisible: false,
+        }, 0);
+        s.setData(pts);
+        state.drawingSeries.push(s);
+      } else if (d.kind === "note") {
+        markers.push({
+          time: snapTime(d.points[0].time), position: "aboveBar", color: "#d4a017",
+          shape: "arrowDown", text: d.text,
+        });
+      }
+    }
+    markers.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
+    if (!state.drawingMarkers) state.drawingMarkers = LWC.createSeriesMarkers(state.priceSeries, []);
+    state.drawingMarkers.setMarkers(markers);
+  }
+
+  const POINTS_NEEDED = { hline: 1, trend: 2, fib: 2, note: 1 };
+
+  function showHint(text) {
+    const hint = document.getElementById("draw-hint");
+    hint.textContent = text || "";
+    hint.style.display = text ? "block" : "none";
+    if (state.theme) {
+      hint.style.background = state.theme.surface_alt;
+      hint.style.color = state.theme.text;
+    }
+  }
+
+  function onClick(param) {
+    if (!state.drawMode || !param || !param.point || param.time === undefined) return;
+    if (!state.priceSeries) return;
+    const price = state.priceSeries.coordinateToPrice(param.point.y);
+    const day = timeKey(param.time);
+    if (price === null || !day) return;
+    state.drawPoints.push({ time: day, price: price });
+    const needed = POINTS_NEEDED[state.drawMode];
+    if (state.drawPoints.length >= needed) {
+      const message = JSON.stringify({ kind: state.drawMode, points: state.drawPoints });
+      state.drawMode = null;
+      state.drawPoints = [];
+      showHint("");
+      if (window.bridge) window.bridge.drawingCreated(message);
+    } else {
+      showHint(state.drawHints.second || "");
+    }
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && state.drawMode) {
+      state.drawMode = null;
+      state.drawPoints = [];
+      showHint("");
+      if (window.bridge) window.bridge.drawingCancelled();
+    }
+  });
+
+  if (window.QWebChannel && window.qt && window.qt.webChannelTransport) {
+    new QWebChannel(window.qt.webChannelTransport, (channel) => {
+      window.bridge = channel.objects.bridge;
+    });
   }
 
   function showInitialRange() {
@@ -271,6 +403,29 @@
         renderLegend(state.payload.candles.length - 1);
       }
     },
+    setDrawings(drawings) {
+      state.drawings = drawings || [];
+      renderDrawings();
+    },
+    setDrawMode(mode, hints) {
+      state.drawMode = POINTS_NEEDED[mode] ? mode : null;
+      state.drawPoints = [];
+      state.drawHints = hints || {};
+      showHint(state.drawMode ? state.drawHints.first : "");
+    },
+    // Test hook: simulate a click at a date/price (bypasses pixel coordinates).
+    simulateDrawClick(day, price) {
+      if (!state.drawMode) return false;
+      state.drawPoints.push({ time: day, price: price });
+      if (state.drawPoints.length >= POINTS_NEEDED[state.drawMode]) {
+        const message = JSON.stringify({ kind: state.drawMode, points: state.drawPoints });
+        state.drawMode = null;
+        state.drawPoints = [];
+        showHint("");
+        if (window.bridge) window.bridge.drawingCreated(message);
+      }
+      return true;
+    },
     setChartType(type) {
       state.chartType = type === "line" ? "line" : "candles";
       if (state.payload) {
@@ -293,6 +448,11 @@
         priceSeriesType: state.priceSeries ? state.priceSeries.seriesType() : null,
         hasVolume: !!state.volumeSeries,
         indicators: state.indicators.map((i) => i.label),
+        drawings: state.drawings.length,
+        drawingLines: state.drawingLines.length,
+        drawingSeries: state.drawingSeries.length,
+        drawMode: state.drawMode,
+        bridge: !!window.bridge,
         indicatorSeries: state.indicatorSeries.length,
         panes: state.chart ? state.chart.panes().length : 0,
         legend: legendTitle.textContent + " | " + legendValues.textContent,

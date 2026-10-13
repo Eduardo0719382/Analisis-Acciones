@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QSizePolicy,
@@ -24,6 +26,7 @@ from PySide6.QtWidgets import (
     QSystemTrayIcon,
     QTabWidget,
     QToolBar,
+    QToolButton,
     QWidget,
 )
 
@@ -32,7 +35,9 @@ from analisis_acciones.alerts.service import AlertEvent, AlertService
 from analisis_acciones.charts.chart_widget import ChartWidget
 from analisis_acciones.data.export import bars_to_csv
 from analisis_acciones.indicators.registry import IndicatorConfig
+from analisis_acciones.models.errors import UserError
 from analisis_acciones.models.market import Interval
+from analisis_acciones.services.drawing_service import DrawingService
 from analisis_acciones.services.market_data_service import LoadResult, MarketDataService
 from analisis_acciones.services.settings_service import SettingsService, Theme
 from analisis_acciones.services.update_service import UpdateCheck, UpdateService
@@ -70,6 +75,7 @@ class MainWindow(QMainWindow):
         market_service: MarketDataService | None = None,
         watchlist_service: WatchlistService | None = None,
         alert_service: AlertService | None = None,
+        drawing_service: DrawingService | None = None,
     ) -> None:
         super().__init__(parent)
         self._settings = settings
@@ -77,6 +83,7 @@ class MainWindow(QMainWindow):
         self.market = MarketController(market_service, self) if market_service else None
         self._watchlists = watchlist_service
         self._alert_service = alert_service
+        self._drawings = drawing_service
         self._tray: QSystemTrayIcon | None = None
         self.current_symbol: str | None = None
         self.current_result: LoadResult | None = None
@@ -124,6 +131,28 @@ class MainWindow(QMainWindow):
             self.chart_type_combo.addItem(label, key)
         bar.addWidget(self.chart_type_combo)
 
+        self.draw_button = QToolButton()
+        self.draw_button.setObjectName("drawButton")
+        self.draw_button.setText(strings.MENU_DRAW)
+        self.draw_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        draw_menu = QMenu(self.draw_button)
+        self.draw_actions: dict[str, QAction] = {}
+        for mode, label in (
+            ("hline", strings.DRAW_HLINE),
+            ("trend", strings.DRAW_TREND),
+            ("fib", strings.DRAW_FIB),
+            ("note", strings.DRAW_NOTE),
+        ):
+            action = QAction(label, self)
+            action.triggered.connect(partial(self.start_drawing, mode))
+            draw_menu.addAction(action)
+            self.draw_actions[mode] = action
+        draw_menu.addSeparator()
+        draw_menu.addAction(strings.DRAW_UNDO, self.undo_drawing)
+        draw_menu.addAction(strings.DRAW_CLEAR, self.clear_drawings)
+        self.draw_button.setMenu(draw_menu)
+        bar.addWidget(self.draw_button)
+
         self.indicators_button = QPushButton(strings.INDICATORS_BUTTON)
         self.indicators_button.setObjectName("indicatorsButton")
         self.indicators_button.clicked.connect(self.edit_indicators)
@@ -152,6 +181,10 @@ class MainWindow(QMainWindow):
         self.chart = ChartWidget()
         self.chart.set_theme(tokens_for(self._settings.theme()))
         self.chart.set_indicators(self._settings.indicators())
+        self.chart.bridge.drawing_created.connect(self._on_drawing_created)
+        self.chart.bridge.drawing_cancelled.connect(
+            lambda: self.statusBar().showMessage(strings.STATUS_READY)
+        )
         self.chart.indicators_failed.connect(
             lambda names: self.statusBar().showMessage(
                 strings.INDICATORS_FAILED.format(names=", ".join(names))
@@ -330,6 +363,52 @@ class MainWindow(QMainWindow):
         if self.alerts_panel is not None:
             self.alerts_panel.start_schedule()
 
+    # Drawings ----------------------------------------------------------------
+    def _drawing_symbol(self) -> str | None:
+        if self._drawings is None or self.current_result is None:
+            return None
+        return self.current_result.series.symbol
+
+    def _refresh_drawings(self) -> None:
+        symbol = self._drawing_symbol()
+        if symbol is not None and self._drawings is not None:
+            self.chart.set_drawings(self._drawings.drawings(symbol))
+
+    def start_drawing(self, mode: str) -> None:
+        if self._drawing_symbol() is None:
+            self.statusBar().showMessage(strings.DRAW_NEED_SYMBOL)
+            return
+        self.chart.set_draw_mode(mode)
+        self.statusBar().showMessage(strings.DRAW_HINTS[mode][0])
+
+    def _on_drawing_created(self, kind: str, points: list[Any], text: str | None = None) -> None:
+        symbol = self._drawing_symbol()
+        if symbol is None or self._drawings is None:
+            return
+        if kind == "note" and text is None:
+            text, ok = QInputDialog.getText(self, strings.DRAW_NOTE, strings.DRAW_NOTE_PROMPT)
+            if not ok:
+                return
+        try:
+            self._drawings.add(symbol, kind, points, text or "")
+        except UserError as exc:
+            self.statusBar().showMessage(exc.user_message)
+            return
+        self.statusBar().showMessage(strings.STATUS_READY)
+        self._refresh_drawings()
+
+    def undo_drawing(self) -> None:
+        symbol = self._drawing_symbol()
+        if symbol is not None and self._drawings is not None:
+            self._drawings.delete_last(symbol)
+            self._refresh_drawings()
+
+    def clear_drawings(self) -> None:
+        symbol = self._drawing_symbol()
+        if symbol is not None and self._drawings is not None:
+            self._drawings.clear(symbol)
+            self._refresh_drawings()
+
     # Export --------------------------------------------------------------------
     def _export_target(self, suffix: str, file_filter: str, path: Path | None) -> Path | None:
         series = self.chart.current_series
@@ -482,6 +561,7 @@ class MainWindow(QMainWindow):
 
         interval_label = strings.INTERVAL_LABELS.get(series.interval.value, series.interval.value)
         self.chart.show_series(series, f"{series.symbol} · {interval_label}")
+        self._refresh_drawings()
         self.analysis_panel.analyze(
             series, f"{series.symbol} · {interval_label}", result.session_in_progress
         )
