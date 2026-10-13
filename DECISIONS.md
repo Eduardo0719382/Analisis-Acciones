@@ -393,3 +393,13 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   charts.
 - **Known limitation:** drawings are stored in the series' price units. After a split, Yahoo
   re-adjusts history (D-004), so old drawings can be offset. This is documented in the README.
+
+## D-023 — Asset comparison (Phase 9)
+
+- `services/comparison.py` (no Qt) intersects the session dates of all assets, cuts the requested
+  period and normalises closes to 0 % at the first common session.
+- Metrics: total return, annualised volatility (sample std of daily log returns × √252), maximum
+  drawdown of the close, average volume over the period, and RSI 14 at the last common date.
+  Formulas are documented in the module and checked by hand in the tests.
+- Symbols that cannot be loaded are listed and the rest are still compared.
+- The dialog reuses the native `EquityChart`, with a percentage axis formatter.

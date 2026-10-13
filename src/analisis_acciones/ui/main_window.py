@@ -46,6 +46,7 @@ from analisis_acciones.ui import strings
 from analisis_acciones.ui.alerts_panel import AlertsPanel
 from analisis_acciones.ui.analysis_panel import AnalysisPanel
 from analisis_acciones.ui.backtest_dialog import BacktestDialog
+from analisis_acciones.ui.comparison_dialog import ComparisonDialog
 from analisis_acciones.ui.details_panel import DetailsPanel
 from analisis_acciones.ui.disclaimer import DisclaimerDialog
 from analisis_acciones.ui.indicator_dialog import IndicatorDialog
@@ -263,6 +264,9 @@ class MainWindow(QMainWindow):
         self.backtest_action.setShortcut(QKeySequence("Ctrl+B"))
         self.backtest_action.triggered.connect(self.open_backtest)
         tools_menu.addAction(self.backtest_action)
+        self.compare_action = QAction(strings.ACTION_COMPARE, self)
+        self.compare_action.triggered.connect(self.open_comparison)
+        tools_menu.addAction(self.compare_action)
 
         view_menu = menu_bar.addMenu(strings.MENU_VIEW)
         self.dark_theme_action = QAction(strings.ACTION_DARK_THEME, self)
@@ -297,6 +301,7 @@ class MainWindow(QMainWindow):
         enabled = self.market is not None
         self.search_box.setEnabled(enabled)
         self.import_csv_action.setEnabled(enabled)
+        self.compare_action.setEnabled(enabled)
         if self.market is None:
             self.search_box.setToolTip(strings.COMING_SOON)
             return
@@ -472,6 +477,21 @@ class MainWindow(QMainWindow):
             self._report_saved(False, target, str(exc))
             return
         self._report_saved(target.exists(), target, "PDF")
+
+    def open_comparison(self) -> None:
+        if self.market is None:
+            return
+        symbols: list[str] = []
+        if self.current_result is not None and not self.current_result.series.symbol.startswith(
+            "CSV:"
+        ):
+            symbols.append(self.current_result.series.symbol)
+        if isinstance(self.watchlist_panel, WatchlistPanel):
+            symbols += [s for s in self.watchlist_panel.symbols() if s not in symbols]
+        dialog = ComparisonDialog(self.market.service, tokens_for(self._settings.theme()),
+                                  symbols, self)  # fmt: skip
+        dialog.show()
+        self._comparison_dialog = dialog
 
     def open_backtest(self) -> None:
         series = self.chart.current_series

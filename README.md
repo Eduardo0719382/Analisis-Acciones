@@ -91,6 +91,10 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   0–23,6–38,2–50–61,8–78,6–100 %) y notas. Esc cancela. Se guardan por activo; «Deshacer
   último dibujo» y «Borrar todos». Nota: tras un split, los precios históricos se reajustan y
   los dibujos antiguos pueden quedar desplazados.
+- **Comparar activos:** *Herramientas → Comparar activos…* (hasta 6 tickers; se rellena con el
+  activo actual y la lista de seguimiento). Gráfico de rendimiento normalizado a 0 % desde la
+  primera sesión común (6M, 1A, 3A, 5A o máximo) y tabla con rentabilidad, volatilidad anual,
+  caída máxima, volumen medio y RSI 14.
 - **Detalles (panel derecho):** precio, cambio, apertura/máximo/mínimo, volumen, rango de 52
   semanas, moneda, mercado, sector. Sin conexión se muestran los datos de la última barra
   guardada, indicándolo.

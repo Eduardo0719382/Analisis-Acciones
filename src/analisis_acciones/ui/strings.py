@@ -281,3 +281,19 @@ DRAW_HINTS = {
     ),
     "note": ("Haga clic en la barra donde colocar la nota (Esc cancela).", ""),
 }
+
+ACTION_COMPARE = "&Comparar activos…"
+CMP_TITLE = "Comparar activos"
+CMP_SYMBOLS = "Activos:"
+CMP_PLACEHOLDER = "AAPL, MSFT, NVDA (máximo 6)"
+CMP_PERIOD = "Periodo:"
+CMP_RUN = "Comparar"
+CMP_EMPTY = "Indique al menos un ticker."
+CMP_LOADING = "Cargando datos…"
+CMP_COLUMNS = ["Activo", "Rentabilidad", "Volatilidad anual", "Caída máxima", "Volumen medio",
+               "RSI 14"]  # fmt: skip
+CMP_RANGE = "Periodo común: {start} → {end} ({sessions} sesiones)."
+CMP_NOTE = (
+    "Rendimiento normalizado a 0 % en la primera sesión común, con cierres diarios. Volatilidad: "
+    "desviación típica anualizada de los rendimientos logarítmicos diarios (×√252)."
+)

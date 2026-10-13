@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import pandas as pd
 from PySide6.QtCore import QLocale, QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPaintEvent, QPen
@@ -11,9 +13,15 @@ from analisis_acciones.ui.theme import ThemeTokens
 
 
 class EquityChart(QWidget):
-    def __init__(self, tokens: ThemeTokens, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        tokens: ThemeTokens,
+        parent: QWidget | None = None,
+        value_format: Callable[[float], str] | None = None,
+    ) -> None:
         super().__init__(parent)
         self._tokens = tokens
+        self._format = value_format or (lambda v: QLocale().toString(v, "f", 0))
         self._series: list[tuple[str, pd.Series, str]] = []
         self.setMinimumHeight(180)
 
@@ -50,7 +58,7 @@ class EquityChart(QWidget):
             painter.setPen(QColor(t.text_muted))
             painter.drawText(QRectF(0, y - 8, left - 6, 16),
                              Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
-                             QLocale().toString(value, "f", 0))  # fmt: skip
+                             self._format(value))  # fmt: skip
             painter.setPen(QPen(QColor(t.grid), 1))
 
         first = self._series[0][1]
