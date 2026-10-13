@@ -28,3 +28,23 @@
   `restoreGeometry()`, which clamps windows to the available screen.
 - **Solution:** the layout round-trip test uses a window that fits in 800×600. Real-size
   restoration must be confirmed manually on Windows (checklist item at the end of Phase 1).
+
+## P-004 — Yahoo Finance unreachable from the development container (Phase 2)
+
+- **Symptom:** every request returns `CONNECT tunnel failed, response 403`.
+- **Cause:** the container's egress policy blocks Yahoo hosts (`fc.yahoo.com`, `query*.finance.yahoo.com`).
+- **Solution:**
+  - Tests that run by default use a fake client serving **synthetic** data (`tests/synthetic.py`),
+    clearly marked as not real prices.
+  - Real calls live in `tests/live/` (marker `live`, excluded by default) and run in the
+    `live-yahoo` GitHub Actions job on Windows, which has open Internet.
+
+## P-005 — Offline reported as "ticker not found" (Phase 2)
+
+- **Symptom:** with no connection, loading `TSLA` raised `YFTzMissingError: possibly delisted;
+  no timezone found`, which the adapter mapped to "Ticker not found".
+- **Cause:** yfinance swallows the network error while looking up the ticker's time zone and
+  reports a missing ticker instead.
+- **Solution:** before reporting "not found", the adapter makes a cheap search request. If that
+  fails with a network or provider error, that error is reported instead. A regression test covers
+  it, and the blocked container confirmed every live case now yields a `NetworkError`.

@@ -1,0 +1,52 @@
+"""Provider-independent market-data interface.
+
+Adapters translate a source's API into the domain models and map every failure
+to the error taxonomy (UserError, NetworkError, DataError, ProviderError).
+They never invent values: anything the source does not supply stays ``None``/NaN.
+"""
+
+from __future__ import annotations
+
+import re
+from abc import ABC, abstractmethod
+from datetime import date
+
+from analisis_acciones.models.errors import UserError
+from analisis_acciones.models.market import BarSeries, CompanyInfo, Interval, Quote, SearchResult
+
+_SYMBOL = re.compile(r"^[A-Z0-9^][A-Z0-9.\-=]{0,14}$")
+
+
+def normalize_symbol(raw: str) -> str:
+    """Upper-case and validate a ticker; raises UserError when malformed."""
+    symbol = raw.strip().upper()
+    if not _SYMBOL.match(symbol):
+        raise UserError(
+            f"invalid symbol {raw!r}",
+            user_message=f"«{raw.strip()}» no es un ticker válido.",
+        )
+    return symbol
+
+
+class MarketDataProvider(ABC):
+    #: Human-readable name shown in the status bar.
+    name: str = "?"
+
+    @abstractmethod
+    def search_symbol(self, query: str, limit: int = 10) -> list[SearchResult]: ...
+
+    @abstractmethod
+    def get_quote(self, symbol: str) -> Quote: ...
+
+    @abstractmethod
+    def get_historical_data(
+        self, symbol: str, interval: Interval, start: date | None = None, end: date | None = None
+    ) -> BarSeries:
+        """Bars from ``start`` (inclusive) to ``end`` (inclusive); ``None`` = unbounded."""
+
+    @abstractmethod
+    def get_company_info(self, symbol: str) -> CompanyInfo: ...
+
+    @abstractmethod
+    def get_available_intervals(self) -> list[Interval]:
+        """Intervals this provider can return directly from get_historical_data()."""

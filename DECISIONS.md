@@ -189,3 +189,41 @@ Format: DECISION / CONTEXT / ALTERNATIVES / CHOICE / RATIONALE / CONSEQUENCES.
   - Because `pythonw` has no `sys.stderr`, logging adds the console handler only when a console
     exists.
   - `.gitattributes` keeps `.bat` files with CRLF line endings.
+
+### D-004 update — what Yahoo actually provides (Phase 2)
+
+- Yahoo's daily `Open/High/Low/Close` are **already split-adjusted**. `Adj Close` is also adjusted
+  for dividends. Truly raw (unadjusted) prices are not available from this source, so the
+  original "store raw" plan cannot be met with Yahoo.
+- **New choice:** store exactly what the source returns (split-adjusted OHLC, `adj_close`, split
+  and dividend events). Each series records its source.
+- **Consequence:** a new split or dividend re-adjusts past values at the source. The cache detects
+  it in two ways:
+  - new rows contain a split or dividend;
+  - the overlapping closes differ by more than 0.01%.
+
+  In either case the cache refetches the full history instead of merging (see D-013).
+
+## D-013 — Market-data cache and refresh policy
+
+- **Context:** Avoid repeated downloads, work offline, and never show silently outdated or mixed
+  data.
+- **Choice:**
+  - SQLite tables: `daily_bars` (one row per symbol and session), `series_meta` (source, fetch
+    time, date range) and `recent_symbols`.
+  - Only daily bars are stored. Weekly and monthly bars are derived on load, labelled with the
+    first trading day of the period.
+  - **Freshness:** cached data counts as current when it was fetched after the latest weekday
+    16:30 New York close. Holidays are not modelled: at worst there is one extra request per day.
+  - **Refresh:** download the last 30 days and compare the overlap. If it matches, merge;
+    otherwise (split or dividend) download the full history again.
+  - **Network or provider failure with a cache:** serve the cache marked *stale*, with the reason.
+    Without a cache, report the error.
+  - **Daily bar during market hours:** flagged as `session_in_progress`. It is overwritten on the
+    next refresh after the close.
+  - CSV imports are stored under a `CSV:` prefix and never refreshed from the network.
+  - The service owns its own SQLite connection, guarded by a lock, because it is used from worker
+    threads.
+- **Alternatives rejected:**
+  - always downloading the full history: slow, and more likely to hit rate limits;
+  - append-only merging: would mix differently adjusted prices after a split.

@@ -12,6 +12,10 @@ license = { text = "Proprietary" }
 dependencies = [
     "PySide6>=6.8,<6.13",
     "platformdirs>=4.0",
+    "pandas>=2.2",
+    "numpy>=1.26",
+    "yfinance>=0.2.54",
+    "tzdata>=2024.1",  # time-zone database for zoneinfo on Windows
 ]
 
 [project.optional-dependencies]
@@ -20,6 +24,7 @@ dev = [
     "pytest-qt>=4.4",
     "ruff>=0.6",
     "mypy>=1.11",
+    "pandas-stubs>=2.2",
 ]
 
 [project.scripts]
@@ -31,7 +36,10 @@ packages = ["src/analisis_acciones"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 qt_api = "pyside6"
-addopts = "-ra"
+addopts = "-ra -m 'not live'"
+markers = [
+    "live: calls real external services; run with: pytest -m live",
+]
 
 [tool.ruff]
 line-length = 100
@@ -47,6 +55,10 @@ mypy_path = "src"
 packages = ["analisis_acciones"]
 strict = true
 warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["yfinance", "yfinance.*"]
+ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = ["analisis_acciones.ui.*", "analisis_acciones.app.*"]

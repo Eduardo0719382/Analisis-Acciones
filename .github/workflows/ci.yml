@@ -32,3 +32,19 @@ jobs:
         run: mypy
       - name: Tests
         run: pytest
+
+  live-yahoo:
+    # Real Yahoo Finance calls. Informative only: Yahoo may rate-limit CI runners.
+    runs-on: windows-latest
+    continue-on-error: true
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      - name: Live Yahoo tests
+        run: pytest -m live -v -s
