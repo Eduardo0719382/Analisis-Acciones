@@ -188,3 +188,11 @@ def test_detached_head(repos: Repos) -> None:
     git(repos.install, "checkout", "-q", "--detach")
     with pytest.raises(UserError, match="detached"):
         service(repos).check()
+
+
+def test_installed_build_explains_how_to_update(tmp_path: Path) -> None:
+    svc = UpdateService(tmp_path, run_command, "python-test", frozen=True)
+    with pytest.raises(UserError) as info:
+        svc.check()
+    assert "versión instalada" in info.value.user_message
+    assert "releases" in info.value.user_message

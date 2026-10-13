@@ -7,7 +7,7 @@ import sqlite3
 import sys
 from collections.abc import Sequence
 
-from PySide6.QtCore import QCoreApplication, QEvent, QProcess, QThreadPool
+from PySide6.QtCore import QCoreApplication, QEvent, QProcess, QThreadPool, QTimer
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
 from analisis_acciones import __version__
@@ -32,7 +32,35 @@ from analisis_acciones.ui.theme import apply_theme
 logger = logging.getLogger(__name__)
 
 
+SMOKE_TEST_FLAG = "--smoke-test"
+SMOKE_TEST_TIMEOUT_MS = 60_000
+SMOKE_EXIT_CHART_FAILED = 3
+
+
+def _start_smoke_test(app: QApplication, window: MainWindow) -> None:
+    """Quit with 0 once the chart page has loaded, or with an error code on timeout.
+
+    Used to verify packaged builds (including the web engine) start correctly.
+    """
+    timer = QTimer(app)
+    elapsed = {"ms": 0}
+
+    def poll() -> None:
+        elapsed["ms"] += 250
+        if window.chart.is_loaded:
+            logger.info("Smoke test passed after %d ms", elapsed["ms"])
+            app.exit(0)
+        elif elapsed["ms"] >= SMOKE_TEST_TIMEOUT_MS:
+            logger.error("Smoke test failed: chart page did not load")
+            app.exit(SMOKE_EXIT_CHART_FAILED)
+
+    timer.timeout.connect(poll)
+    timer.start(250)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
+    args = list(argv) if argv is not None else sys.argv[1:]
+    smoke_test = SMOKE_TEST_FLAG in args
     paths = AppPaths.default()
     try:
         paths.ensure()
@@ -47,7 +75,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     app = (
         existing
         if isinstance(existing, QApplication)
-        else QApplication(list(argv) if argv is not None else sys.argv)
+        else QApplication([sys.argv[0], *[a for a in args if a != SMOKE_TEST_FLAG]])
     )
     app.setApplicationName(APP_NAME)
     app.setApplicationDisplayName(strings.APP_TITLE)
@@ -75,7 +103,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         settings = SettingsService(SettingsRepository(conn))
         apply_theme(app, settings.theme())
 
-        if not settings.disclaimer_accepted():
+        if not smoke_test and not settings.disclaimer_accepted():
             if DisclaimerDialog().exec() != QDialog.DialogCode.Accepted:
                 logger.info("Disclaimer not accepted; exiting")
                 return 0
@@ -92,9 +120,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             drawing_service=DrawingService(conn),
         )
         window.show()
-        window.restore_last_symbol()
-        window.schedule_startup_update_check()
-        window.start_alert_schedule()
+        if smoke_test:
+            _start_smoke_test(app, window)
+        else:
+            window.restore_last_symbol()
+            window.schedule_startup_update_check()
+            window.start_alert_schedule()
         code = app.exec()
         restart = window.restart_requested
     finally:

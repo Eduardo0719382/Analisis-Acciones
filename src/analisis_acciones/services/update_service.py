@@ -28,6 +28,7 @@ _GIT_MISSING = (
     "Instálelo desde https://git-scm.com y reinicie el programa."
 )
 
+RELEASES_URL = "https://github.com/Eduardo0719382/Analisis-Acciones/releases"
 MAX_LISTED_CHANGES = 20
 GIT_TIMEOUT_S = 60
 PIP_TIMEOUT_S = 900
@@ -75,11 +76,14 @@ class UpdateService:
         package_dir: Path | None = None,
         runner: CommandRunner = run_command,
         python_executable: str = sys.executable,
+        frozen: bool | None = None,
     ) -> None:
         self._package_dir = package_dir or Path(__file__).resolve().parents[1]
         self._run = runner
         self._python = python_executable
         self._root: Path | None = None
+        #: True inside a PyInstaller build (no git checkout to update).
+        self._frozen = bool(getattr(sys, "frozen", False)) if frozen is None else frozen
 
     # Helpers ---------------------------------------------------------------
     def _git(self, *args: str, cwd: Path | None = None) -> str:
@@ -94,6 +98,14 @@ class UpdateService:
         return proc.stdout.strip()
 
     def repository_root(self) -> Path:
+        if self._frozen:
+            raise UserError(
+                "installed (frozen) build cannot self-update via git",
+                user_message=(
+                    "Esta es la versión instalada. Para actualizar, descargue e instale la última "
+                    f"versión desde {RELEASES_URL} (sus datos se conservan)."
+                ),
+            )
         if self._root is None:
             try:
                 out = self._git("rev-parse", "--show-toplevel", cwd=self._package_dir)

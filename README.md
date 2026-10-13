@@ -13,6 +13,18 @@ alertas y backtesting.
 - Gráficos: [TradingView Lightweight Charts™](https://www.tradingview.com/lightweight-charts/)
   (Apache 2.0, incluido en `src/analisis_acciones/charts/web/` con su licencia y aviso).
 
+## Instalador de Windows (sin Python)
+
+Cada cambio en GitHub genera un instalador `AnalisisAcciones-<versión>-setup.exe`
+(flujo *Windows installer* en la pestaña **Actions**; descárguelo desde «Artifacts»). Las
+versiones etiquetadas (`v*`) lo publican además en **Releases**. Instala por usuario (no
+requiere administrador), crea accesos en el menú Inicio y, opcionalmente, en el escritorio.
+Los datos (`%LOCALAPPDATA%\AnalisisAcciones`) se conservan al actualizar o desinstalar.
+La versión instalada se actualiza instalando el nuevo instalador encima.
+
+Windows puede mostrar el aviso de SmartScreen porque el instalador no está firmado
+digitalmente: «Más información» → «Ejecutar de todas formas».
+
 ## Requisitos
 
 - Python 3.12 o superior

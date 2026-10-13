@@ -1,0 +1,11 @@
+Análisis de Acciones — aviso
+
+Esta aplicación es una herramienta de análisis técnico con fines informativos y educativos.
+No constituye asesoramiento financiero ni recomendación de compra o venta. Las señales
+técnicas describen condiciones de los datos; no son predicciones. Los datos de mercado
+proceden de proveedores externos (Yahoo Finance, no oficial) y pueden contener retrasos,
+errores u omisiones. Usted es el único responsable de sus decisiones de inversión.
+
+Incluye TradingView Lightweight Charts(TM) (Apache License 2.0), Qt for Python / PySide6
+(LGPLv3), pandas, NumPy y yfinance (licencias BSD/Apache). Las licencias de terceros se
+encuentran junto a los archivos de cada biblioteca en la carpeta de instalación.

@@ -403,3 +403,27 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   Formulas are documented in the module and checked by hand in the tests.
 - Symbols that cannot be loaded are listed and the rest are still compared.
 - The dialog reuses the native `EquityChart`, with a percentage axis formatter.
+
+## D-024 — Windows installer (Phase 9)
+
+- **Build:** PyInstaller in one-folder mode with a windowed exe (`packaging/analisis_acciones.spec`).
+  - The bundle includes the chart web assets and the SQL migrations.
+  - Qt modules the app never loads (3D, Quick3D, Charts, Multimedia, Pdf, QML, extra
+    translations, …) are filtered out. The libraries QtWebEngine depends on were confirmed with
+    `ldd` and are kept.
+  - One-folder rather than one-file because QtWebEngine needs its helper process and resources
+    on disk, and start-up is faster.
+- **Installer:** Inno Setup (`packaging/installer.iss`), installed per user under
+  `%LOCALAPPDATA%\Programs` with no administrator rights. It creates Start-menu entries and an
+  optional desktop icon, uses a Spanish wizard and shows the disclaimer as the licence page.
+  User data in `%LOCALAPPDATA%\AnalisisAcciones` is kept when upgrading or uninstalling.
+- **CI (`.github/workflows/installer.yml`, Windows runner):**
+  1. Build the app.
+  2. Run `AnalisisAcciones.exe --smoke-test`: the packaged app starts, waits for the chart page
+     to load and exits 0, or 3 if it never loads.
+  3. Build the installer.
+  4. Upload it as an artifact, and attach it to a GitHub Release on `v*` tags.
+- **Updates:** the git-based updater (D-012) does not apply to installed builds. In a frozen build
+  it explains that the new installer should be installed on top and links to Releases.
+- **Not done:** code signing (SmartScreen will warn; documented in the README) and a release-based
+  auto-updater.

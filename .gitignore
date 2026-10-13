@@ -11,3 +11,5 @@ dist/
 .coverage
 *.sqlite3
 *.log
+/dist/
+/build/
