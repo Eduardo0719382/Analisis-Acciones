@@ -37,6 +37,17 @@ class OutputSpec:
     label: str
     style: Style = "line"
     color: str = "#f5a623"
+    #: Name of the parameter giving a display shift in bars (+ ahead, − behind),
+    #: e.g. Ichimoku's Senkou spans (+displacement) and Chikou (−displacement).
+    shift_param: str | None = None
+    shift_sign: int = 1
+    #: Colour each point up/down by the sign of this other output column.
+    color_sign: str | None = None
+
+    def shift(self, params: dict[str, Any]) -> int:
+        if self.shift_param is None:
+            return 0
+        return self.shift_sign * int(params[self.shift_param])
 
 
 @dataclass(frozen=True)
@@ -51,6 +62,8 @@ class IndicatorSpec:
     compute: Callable[[pd.DataFrame, dict[str, Any]], pd.DataFrame]
     #: Horizontal reference levels drawn in the indicator pane (e.g. RSI 70/30).
     levels: tuple[float, ...] = ()
+    #: Fixed number of decimals for display (None = same as the price).
+    decimals: int | None = None
 
     def defaults(self) -> dict[str, int | float]:
         return {p.key: p.default for p in self.params}
@@ -147,6 +160,118 @@ SPECS: tuple[IndicatorSpec, ...] = (
         compute=lambda b, p: _frame(value=f.atr(b["high"], b["low"], b["close"], int(p["period"]))),
     ),
 )
+
+SPECS = (
+    *SPECS,
+    IndicatorSpec(
+        id="ichimoku",
+        name="Ichimoku Kinko Hyo",
+        short="Ichimoku",
+        description=(
+            "Tenkan y Kijun: punto medio del máximo y mínimo de N barras. Senkou A = media de "
+            "ambas y Senkou B = punto medio de 52 barras, dibujadas 26 barras adelante (la nube). "
+            "Chikou = cierre dibujado 26 barras atrás."
+        ),
+        params=(
+            ParamSpec("tenkan", "Tenkan", 9, 1, 200),
+            ParamSpec("kijun", "Kijun", 26, 1, 200),
+            ParamSpec("senkou_b", "Senkou B", 52, 2, 400),
+            ParamSpec("displacement", "Desplazamiento", 26, 1, 200),
+        ),
+        outputs=(
+            OutputSpec("tenkan", "Tenkan", color="#4c8dff"),
+            OutputSpec("kijun", "Kijun", color="#ef5350"),
+            OutputSpec("senkou_a", "Senkou A", color="#26a69a", shift_param="displacement"),
+            OutputSpec("senkou_b", "Senkou B", color="#ab47bc", shift_param="displacement"),
+            OutputSpec("chikou", "Chikou", color="#8a93a3", shift_param="displacement",
+                       shift_sign=-1),
+        ),
+        placement="overlay",
+        compute=lambda b, p: f.ichimoku(
+            b["high"], b["low"], b["close"], int(p["tenkan"]), int(p["kijun"]),
+            int(p["senkou_b"]),
+        ),
+    ),
+    IndicatorSpec(
+        id="supertrend",
+        name="Supertrend",
+        short="Supertrend",
+        description="Banda de ATR (Wilder) × multiplicador que cambia de lado con la tendencia.",
+        params=(
+            ParamSpec("period", "Periodo ATR", 10, 1, 200),
+            ParamSpec("multiplier", "Multiplicador", 3.0, 0.5, 10.0, kind="float", decimals=1),
+        ),
+        outputs=(OutputSpec("value", "Supertrend", color="#26a69a", color_sign="direction"),),
+        placement="overlay",
+        compute=lambda b, p: f.supertrend(
+            b["high"], b["low"], b["close"], int(p["period"]), float(p["multiplier"])
+        ),
+    ),
+    IndicatorSpec(
+        id="stochastic",
+        name="Estocástico lento",
+        short="Estoc.",
+        description="%K = SMA(posición del cierre en el rango de N barras); %D = SMA de %K.",
+        params=(
+            ParamSpec("k", "%K", 14, 2, 200),
+            ParamSpec("smooth", "Suavizado", 3, 1, 50),
+            ParamSpec("d", "%D", 3, 1, 50),
+        ),
+        outputs=(OutputSpec("k", "%K", color="#4c8dff"), OutputSpec("d", "%D", color="#f5a623")),
+        placement="pane",
+        compute=lambda b, p: f.stochastic(
+            b["high"], b["low"], b["close"], int(p["k"]), int(p["smooth"]), int(p["d"])
+        ),
+        levels=(80.0, 20.0),
+        decimals=2,
+    ),
+    IndicatorSpec(
+        id="stoch_rsi",
+        name="RSI estocástico",
+        short="StochRSI",
+        description="Estocástico aplicado al RSI (0-100).",
+        params=(
+            ParamSpec("rsi", "Periodo RSI", 14, 2, 200),
+            ParamSpec("stoch", "Periodo estocástico", 14, 2, 200),
+            ParamSpec("smooth", "Suavizado", 3, 1, 50),
+            ParamSpec("d", "%D", 3, 1, 50),
+        ),
+        outputs=(OutputSpec("k", "%K", color="#4c8dff"), OutputSpec("d", "%D", color="#f5a623")),
+        placement="pane",
+        compute=lambda b, p: f.stoch_rsi(
+            b["close"], int(p["rsi"]), int(p["stoch"]), int(p["smooth"]), int(p["d"])
+        ),
+        levels=(80.0, 20.0),
+        decimals=2,
+    ),
+    IndicatorSpec(
+        id="adx",
+        name="ADX / DMI",
+        short="ADX",
+        description="Fuerza de la tendencia (ADX) y dirección (+DI / -DI), de Wilder.",
+        params=(ParamSpec("period", "Periodo", 14, 2, 200),),
+        outputs=(
+            OutputSpec("adx", "ADX", color="#f5a623"),
+            OutputSpec("plus_di", "+DI", color="#26a69a"),
+            OutputSpec("minus_di", "-DI", color="#ef5350"),
+        ),
+        placement="pane",
+        compute=lambda b, p: f.adx(b["high"], b["low"], b["close"], int(p["period"])),
+        levels=(25.0,),
+        decimals=2,
+    ),
+    IndicatorSpec(
+        id="obv",
+        name="On-Balance Volume (OBV)",
+        short="OBV",
+        description="Volumen acumulado con el signo del cambio diario del cierre.",
+        params=(),
+        outputs=(OutputSpec("value", "OBV", color="#26c6da"),),
+        placement="pane",
+        compute=lambda b, p: _frame(value=f.obv(b["close"], b["volume"])),
+        decimals=0,
+    ),
+)  # fmt: skip
 
 REGISTRY: dict[str, IndicatorSpec] = {spec.id: spec for spec in SPECS}
 

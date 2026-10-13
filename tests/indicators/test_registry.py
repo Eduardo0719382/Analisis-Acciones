@@ -26,8 +26,10 @@ def test_every_indicator_computes_aligned_output(indicator_id: str) -> None:
     config = IndicatorConfig.create(indicator_id)
     out = compute(config, bars)
     assert out.index.equals(bars.index)
-    assert set(out.columns) == {o.key for o in config.spec.outputs}
-    assert out.iloc[-1].notna().all()  # defined at the end of a long series
+    # Every drawn output is present (helper columns such as a colour sign may be extra).
+    assert {o.key for o in config.spec.outputs} <= set(out.columns)
+    last = out.iloc[-1]
+    assert last.notna().all()  # defined at the end of a long series
 
 
 def test_validate_params() -> None:

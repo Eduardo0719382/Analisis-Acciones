@@ -71,6 +71,57 @@ def build_payload(series: BarSeries, title: str, up_color: str, down_color: str)
     }
 
 
+def future_times(bars: pd.DataFrame, count: int) -> list[str]:
+    """Approximate dates of the next ``count`` bars (used to draw shifted lines ahead).
+
+    Daily series step over weekends (holidays are not modelled); weekly and
+    monthly series step by the typical gap between their last bars.
+    """
+    if count <= 0 or bars.empty:
+        return []
+    index = pd.DatetimeIndex(bars.index)
+    last = index[-1]
+    gaps = index.to_series().diff().dropna().dt.days.tail(20)
+    typical = float(gaps.median()) if not gaps.empty else 1.0
+    if typical <= 4:
+        dates = pd.bdate_range(last + pd.Timedelta(days=1), periods=count)
+    elif typical <= 10:
+        dates = pd.date_range(last + pd.Timedelta(days=7), periods=count, freq="7D")
+    else:
+        dates = pd.date_range(last, periods=count + 1, freq="MS")[1:]
+    return [d.strftime("%Y-%m-%d") for d in dates]
+
+
+def _points(times: list[str], values: list[float | None], style: str, up_color: str,
+            down_color: str) -> list[dict[str, Any]]:  # fmt: skip
+    if style == "histogram":
+        up, down = up_color + "99", down_color + "99"
+        return [
+            {"time": t, "value": v, "color": up if v >= 0 else down} if v is not None
+            else {"time": t}  # warm-up: no point, not zero
+            for t, v in zip(times, values, strict=True)
+        ]  # fmt: skip
+    return [
+        {"time": t, "value": v} if v is not None else {"time": t}
+        for t, v in zip(times, values, strict=True)
+    ]
+
+
+def _shifted_points(raw: list[float | None], times: list[str], future: list[str],
+                    shift: int) -> list[dict[str, Any]]:  # fmt: skip
+    """Value computed at bar i drawn at bar i + shift (beyond the last bar: future dates)."""
+    all_times = times + future
+    points: list[dict[str, Any]] = []
+    for i, value in enumerate(raw):
+        j = i + shift
+        if j < 0 or j >= len(all_times):
+            continue
+        points.append(
+            {"time": all_times[j]} if value is None else {"time": all_times[j], "value": value}
+        )
+    return points
+
+
 def build_indicator_payload(
     configs: list[IndicatorConfig],
     bars: pd.DataFrame,
@@ -100,22 +151,24 @@ def build_indicator_payload(
         for output in spec.outputs:
             column = values[output.key].to_numpy(dtype="float64")
             finite = np.isfinite(column)
-            by_index: list[float | None] = [
+            raw: list[float | None] = [
                 v if ok else None for v, ok in zip(column.tolist(), finite.tolist(), strict=True)
             ]
-            if output.style == "histogram":
-                up, down = up_color + "99", down_color + "99"
-                points = [
-                    {"time": t, "value": v, "color": up if v >= 0 else down}
-                    if v is not None
-                    else {"time": t}  # warm-up: no point, not zero
-                    for t, v in zip(times, by_index, strict=True)
+            shift = output.shift(config.params)
+            if shift:
+                points = _shifted_points(raw, times, future_times(bars, abs(shift)), shift)
+                # Legend shows, at each bar, the value drawn at that bar's time.
+                by_index = [
+                    raw[i - shift] if 0 <= i - shift < len(raw) else None for i in range(len(raw))
                 ]
             else:
-                points = [
-                    {"time": t, "value": v} if v is not None else {"time": t}
-                    for t, v in zip(times, by_index, strict=True)
-                ]
+                by_index = raw
+                points = _points(times, by_index, output.style, up_color, down_color)
+                if output.color_sign is not None:
+                    signs = values[output.color_sign].to_numpy(dtype="float64")
+                    for point, sign in zip(points, signs, strict=True):
+                        if "value" in point:
+                            point["color"] = up_color if sign > 0 else down_color
             outputs.append(
                 {
                     "key": output.key,
@@ -130,7 +183,8 @@ def build_indicator_payload(
             "uid": config.uid,
             "label": config.label,
             "placement": spec.placement,
-            "decimals": 2 if spec.id == "rsi" else decimals,
+            "decimals": spec.decimals if spec.decimals is not None
+            else (2 if spec.id == "rsi" else decimals),
             "levels": list(spec.levels),
             "levelColor": level_color,
             "outputs": outputs,

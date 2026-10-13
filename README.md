@@ -67,8 +67,10 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
 - **Gráfico:** velas o línea (selector junto al intervalo). Rueda del ratón = zoom; arrastrar =
   desplazarse; la leyenda superior muestra apertura, máximo, mínimo, cierre, cambio y volumen
   de la barra bajo el cursor. El volumen aparece en un panel propio bajo el precio.
-- **Indicadores:** botón *Indicadores*. Añada SMA, EMA, Bandas de Bollinger (sobre el
-  precio), RSI, MACD o ATR (en paneles propios); edite sus parámetros, ocúltelos o quítelos.
+- **Indicadores:** botón *Indicadores*. Sobre el precio: SMA, EMA, Bandas de Bollinger,
+  Ichimoku (con la nube proyectada 26 barras hacia delante y la Chikou 26 hacia atrás) y
+  Supertrend (verde/rojo según la dirección). En paneles propios: RSI, MACD, ATR, Estocástico,
+  RSI estocástico, ADX (+DI/-DI) y OBV; edite sus parámetros, ocúltelos o quítelos.
   La configuración se guarda. Las fórmulas y convenciones están documentadas en
   `src/analisis_acciones/indicators/functions.py` y verificadas contra implementaciones de
   referencia independientes.

@@ -177,3 +177,12 @@
   - The page re-applies the initial range on the next animation frame.
   - The test now checks what is actually intended: the right edge sits at the last bar and the
     full history is not shown.
+
+## P-017 — Supertrend drew false diagonal lines (Phase 10)
+
+- **Symptom:** diagonal segments joined separate up-trend (or down-trend) stretches of the
+  Supertrend.
+- **Cause:** the line was split into two series with empty (whitespace) points in between, and the
+  chart joined consecutive valued points across those gaps.
+- **Solution:** a single series with a colour per point (green up, red down). There are no gaps;
+  the vertical jumps at trend changes are the indicator's real behaviour.

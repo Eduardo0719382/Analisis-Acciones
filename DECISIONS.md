@@ -427,3 +427,18 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   it explains that the new installer should be installed on top and links to Releases.
 - **Not done:** code signing (SmartScreen will warn; documented in the README) and a release-based
   auto-updater.
+
+## D-025 — Additional indicators (Phase 10)
+
+- **Added:** Ichimoku, slow Stochastic, Stochastic RSI, ADX/DMI (Wilder), OBV and Supertrend.
+  Each is verified against an independent plain-Python reference.
+- **Display shifts** are metadata on the output (`OutputSpec.shift_param`). The functions compute
+  every value at its own bar; the chart payload draws Senkou A/B `displacement` bars ahead (on
+  generated future dates: business days for daily data, weekly or monthly steps otherwise;
+  holidays not modelled) and Chikou `displacement` bars behind. This keeps the calculations free
+  of any look-ahead.
+- **Conventions:**
+  - stochastics return 50 when the high-low range is flat;
+  - OBV becomes unknown (NaN) from the first missing volume onwards, never 0-filled;
+  - Supertrend is one line coloured per point by direction. Splitting it into two series with
+    gaps drew false diagonal connections (PROBLEMS.md P-017).

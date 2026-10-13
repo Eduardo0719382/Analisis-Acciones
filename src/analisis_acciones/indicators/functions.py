@@ -108,3 +108,135 @@ def atr(high: pd.Series, low: pd.Series, close: pd.Series, n: int = 14) -> pd.Se
     _check_period(n)
     tr = true_range(high, low, close).to_numpy(dtype="float64")
     return pd.Series(_wilder(tr, n), index=close.index, name="atr")
+
+
+# ---------------------------------------------------------------------------
+# Additional indicators (Phase 10)
+# ---------------------------------------------------------------------------
+def _midpoint(high: pd.Series, low: pd.Series, n: int) -> pd.Series:
+    return (high.rolling(n, min_periods=n).max() + low.rolling(n, min_periods=n).min()) / 2.0
+
+
+def ichimoku(
+    high: pd.Series, low: pd.Series, close: pd.Series,
+    tenkan: int = 9, kijun: int = 26, senkou_b: int = 52,
+) -> pd.DataFrame:  # fmt: skip
+    """Ichimoku lines computed **at each bar** (no displacement applied here).
+
+    Conventionally Senkou A/B are drawn ``displacement`` bars ahead and Chikou
+    (the close) ``displacement`` bars behind; the chart applies that shift.
+    """
+    for value, name in ((tenkan, "tenkan"), (kijun, "kijun"), (senkou_b, "senkou_b")):
+        _check_period(value, name)
+    tenkan_sen = _midpoint(high, low, tenkan)
+    kijun_sen = _midpoint(high, low, kijun)
+    return pd.DataFrame(
+        {
+            "tenkan": tenkan_sen,
+            "kijun": kijun_sen,
+            "senkou_a": (tenkan_sen + kijun_sen) / 2.0,
+            "senkou_b": _midpoint(high, low, senkou_b),
+            "chikou": close,
+        },
+        index=close.index,
+    )
+
+
+def _range_position(values: pd.Series, n: int) -> pd.Series:
+    """100·(x − min) / (max − min) over ``n`` bars; 50 when the range is zero."""
+    lowest = values.rolling(n, min_periods=n).min()
+    highest = values.rolling(n, min_periods=n).max()
+    span = highest - lowest
+    out = 100.0 * (values - lowest) / span.where(span != 0)
+    return out.where(~((span == 0) & highest.notna()), 50.0)
+
+
+def stochastic(
+    high: pd.Series, low: pd.Series, close: pd.Series, k: int = 14, smooth: int = 3, d: int = 3
+) -> pd.DataFrame:
+    """Slow stochastic: %K = SMA(raw %K, smooth), %D = SMA(%K, d). Flat range -> 50."""
+    for value, name in ((k, "k"), (smooth, "smooth"), (d, "d")):
+        _check_period(value, name)
+    lowest = low.rolling(k, min_periods=k).min()
+    highest = high.rolling(k, min_periods=k).max()
+    span = highest - lowest
+    raw = (100.0 * (close - lowest) / span.where(span != 0)).where(
+        ~((span == 0) & highest.notna()), 50.0
+    )
+    k_line = sma(raw, smooth)
+    return pd.DataFrame({"k": k_line, "d": sma(k_line, d)}, index=close.index)
+
+
+def stoch_rsi(close: pd.Series, rsi_period: int = 14, stoch_period: int = 14,
+              smooth: int = 3, d: int = 3) -> pd.DataFrame:  # fmt: skip
+    """Stochastic of the RSI, 0–100. Flat RSI range -> 50."""
+    for value, name in ((stoch_period, "stoch"), (smooth, "smooth"), (d, "d")):
+        _check_period(value, name)
+    position = _range_position(rsi(close, rsi_period), stoch_period)
+    k_line = sma(position, smooth)
+    return pd.DataFrame({"k": k_line, "d": sma(k_line, d)}, index=close.index)
+
+
+def adx(high: pd.Series, low: pd.Series, close: pd.Series, n: int = 14) -> pd.DataFrame:
+    """Wilder's ADX with +DI/−DI. Directional movement starts at the second bar."""
+    _check_period(n)
+    up = high.diff()
+    down = -low.diff()
+    plus_dm = np.where((up > down) & (up > 0), up, 0.0).astype(float)
+    minus_dm = np.where((down > up) & (down > 0), down, 0.0).astype(float)
+    plus_dm[0] = minus_dm[0] = np.nan  # no previous bar
+    tr = true_range(high, low, close).to_numpy(dtype="float64", copy=True)
+    tr[0] = np.nan
+    sm_tr = _wilder(tr, n)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        plus_di = 100.0 * _wilder(plus_dm.astype(float), n) / sm_tr
+        minus_di = 100.0 * _wilder(minus_dm.astype(float), n) / sm_tr
+        total = plus_di + minus_di
+        dx = np.where(total > 0, 100.0 * np.abs(plus_di - minus_di) / total, 0.0)
+    dx = np.where(np.isnan(plus_di) | np.isnan(minus_di), np.nan, dx)
+    return pd.DataFrame(
+        {"adx": _wilder(dx, n), "plus_di": plus_di, "minus_di": minus_di}, index=close.index
+    )
+
+
+def obv(close: pd.Series, volume: pd.Series) -> pd.Series:
+    """On-balance volume starting at 0. Unknown volume makes the running total unknown."""
+    direction = np.sign(close.diff().to_numpy(dtype=float))
+    flow = direction * volume.to_numpy(dtype=float)
+    flow[0] = 0.0 if pd.notna(volume.iloc[0]) else np.nan
+    return pd.Series(np.cumsum(flow), index=close.index, name="obv")
+
+
+def supertrend(high: pd.Series, low: pd.Series, close: pd.Series, n: int = 10,
+               multiplier: float = 3.0) -> pd.DataFrame:  # fmt: skip
+    """Supertrend on Wilder's ATR: the line and its direction (+1 up, −1 down)."""
+    _check_period(n)
+    if not multiplier > 0:
+        raise ValueError("multiplier must be positive")
+    atr_values = atr(high, low, close, n).to_numpy()
+    mid = ((high + low) / 2.0).to_numpy()
+    c = close.to_numpy(dtype=float)
+    size = len(c)
+    upper = np.full(size, np.nan)
+    lower = np.full(size, np.nan)
+    trend = np.zeros(size)
+    line = np.full(size, np.nan)
+    for t in range(size):
+        if np.isnan(atr_values[t]):
+            continue
+        basic_upper = mid[t] + multiplier * atr_values[t]
+        basic_lower = mid[t] - multiplier * atr_values[t]
+        if t == 0 or np.isnan(upper[t - 1]):
+            upper[t], lower[t], trend[t] = basic_upper, basic_lower, 1
+        else:
+            upper[t] = basic_upper if (basic_upper < upper[t - 1] or c[t - 1] > upper[t - 1]) \
+                else upper[t - 1]  # fmt: skip
+            lower[t] = basic_lower if (basic_lower > lower[t - 1] or c[t - 1] < lower[t - 1]) \
+                else lower[t - 1]  # fmt: skip
+            if trend[t - 1] == 1:
+                trend[t] = -1 if c[t] < lower[t] else 1
+            else:
+                trend[t] = 1 if c[t] > upper[t] else -1
+        line[t] = lower[t] if trend[t] == 1 else upper[t]
+    direction = np.where(np.isnan(line), np.nan, trend)
+    return pd.DataFrame({"value": line, "direction": direction}, index=close.index)
