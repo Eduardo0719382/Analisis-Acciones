@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,8 @@ from analisis_acciones.storage.settings_repository import SettingsRepository
 @pytest.fixture
 def home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> AppPaths:
     monkeypatch.setenv(HOME_ENV_VAR, str(tmp_path))
+    # main() installs a global excepthook that shows dialogs; restore it after each test.
+    monkeypatch.setattr(sys, "excepthook", sys.excepthook)
     monkeypatch.setattr(QApplication, "exec", lambda self: 0)
     return AppPaths(tmp_path)
 

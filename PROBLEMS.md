@@ -48,3 +48,16 @@
 - **Solution:** before reporting "not found", the adapter makes a cheap search request. If that
   fails with a network or provider error, that error is reported instead. A regression test covers
   it, and the blocked container confirmed every live case now yields a `NetworkError`.
+
+## P-006 — Test run hung after `main()` returned (Phase 2)
+
+- **Symptom:** `tests/ui/test_startup.py` hung forever.
+- **Cause:** two problems combined:
+  1. After `main()` closed the database connections, the main window still existed. A later focus
+     event made the search box read recent symbols from a closed connection.
+  2. The global exception hook installed by `main()` stayed active for later tests, so it opened a
+     modal error dialog that nobody could dismiss.
+- **Solution:**
+  - `main()` now destroys the window before closing the connections.
+  - Reading recent symbols is guarded, because it is a convenience that must never break typing.
+  - The startup tests restore `sys.excepthook` after each test.

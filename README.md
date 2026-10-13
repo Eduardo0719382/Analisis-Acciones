@@ -43,6 +43,22 @@ Los datos (base de datos SQLite y registros) se guardan en el directorio de dato
 usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la variable
 `ANALISIS_ACCIONES_HOME` (véase `.env.example`).
 
+## Uso (Fase 2)
+
+- **Buscar:** escriba un ticker (p. ej. `AAPL`) o el nombre de una empresa en el cuadro de
+  búsqueda. Use ↑/↓ y Enter, o haga clic en un resultado. Con el cuadro vacío se muestran
+  los símbolos recientes.
+- **Intervalo:** Diario, Semanal o Mensual (los dos últimos se calculan a partir de los datos
+  diarios).
+- **Importar CSV:** *Archivo → Importar CSV…*. Columnas `date, open, high, low, close`
+  (opcionales `volume`, `adj close`); también en español (`fecha; apertura; máximo; mínimo;
+  cierre; volumen`) con coma decimal. Fechas `AAAA-MM-DD` o `DD/MM/AAAA`.
+- **Sin conexión:** si ya se descargó un ticker antes, se muestran los datos guardados
+  indicando que pueden no estar actualizados.
+
+Fuente de datos: Yahoo Finance (no oficial, gratuita). Los datos pueden tener retrasos o
+errores y no constituyen asesoramiento financiero.
+
 ## Actualizar
 
 Dentro del programa: **Ayuda → Buscar actualizaciones…**. Muestra los cambios nuevos,
@@ -64,7 +80,8 @@ pip install -e ".[dev]"
 ## Pruebas y calidad
 
 ```bash
-pytest
+pytest                 # pruebas sin red (datos sintéticos)
+pytest -m live         # pruebas reales contra Yahoo Finance (requiere Internet)
 ruff check .
 ruff format --check .
 mypy

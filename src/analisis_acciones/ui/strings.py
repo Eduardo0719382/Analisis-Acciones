@@ -3,6 +3,9 @@
 APP_TITLE = "Análisis de Acciones"
 
 SEARCH_PLACEHOLDER = "Buscar ticker o empresa…"
+SEARCH_NO_RESULTS = "Sin resultados"
+SEARCH_SEARCHING = "Buscando…"
+SEARCH_RECENT = "Recientes"
 NO_SYMBOL = "—"
 INDICATORS_BUTTON = "Indicadores"
 TIMEFRAME_TOOLTIP = "Intervalo temporal"
@@ -68,3 +71,25 @@ UPDATE_CLOSE = "Cerrar"
 ACTION_CHECK_UPDATES_ON_STARTUP = "Buscar actualizaciones al &iniciar"
 UPDATE_NOTICE = "Actualización disponible"
 UPDATE_NOTICE_TOOLTIP = "Hay una nueva versión ({count} cambio(s)). Pulse para ver los detalles."
+
+INTERVAL_LABELS = {
+    "1m": "1 min", "5m": "5 min", "15m": "15 min", "30m": "30 min",
+    "1h": "1 hora", "4h": "4 horas", "1D": "Diario", "1W": "Semanal", "1M": "Mensual",
+}  # fmt: skip
+
+ACTION_IMPORT_CSV = "&Importar CSV…"
+IMPORT_CSV_TITLE = "Importar datos desde CSV"
+IMPORT_CSV_FILTER = "Archivos CSV (*.csv *.txt);;Todos los archivos (*)"
+IMPORT_CSV_NAME_PROMPT = "Nombre para esta serie (letras, números, '-', '_' o '.'):"
+
+LOADING = "Cargando {symbol}…"
+LOAD_ERROR = "No se pudo cargar {symbol}"
+DATA_SUMMARY = (
+    "{symbol} · {interval}\n\n"
+    "{count} barras · {first} → {last}\n"
+    "Último cierre: {close}\n\n"
+    "El gráfico se añadirá en la Fase 3."
+)
+SESSION_IN_PROGRESS = "La última barra corresponde a la sesión en curso (aún no cerrada)."
+STALE_DATA = "Sin conexión: se muestran datos guardados."
+FROM_CACHE = "caché"

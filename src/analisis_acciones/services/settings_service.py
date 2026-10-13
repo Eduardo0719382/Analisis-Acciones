@@ -24,6 +24,8 @@ KEY_THEME = "ui.theme"
 KEY_DISCLAIMER = "app.disclaimer_accepted"
 KEY_LAYOUT = "ui.layout"
 KEY_CHECK_UPDATES = "updates.check_on_startup"
+KEY_LAST_SYMBOL = "market.last_symbol"
+KEY_LAST_INTERVAL = "market.last_interval"
 
 
 class SettingsService:
@@ -57,6 +59,19 @@ class SettingsService:
 
     def set_check_updates_on_startup(self, enabled: bool) -> None:
         self._repo.set(KEY_CHECK_UPDATES, bool(enabled))
+
+    # Last opened symbol ------------------------------------------------------
+    def last_symbol(self) -> str | None:
+        raw = self._repo.get(KEY_LAST_SYMBOL)
+        return raw if isinstance(raw, str) and 0 < len(raw) <= 40 else None
+
+    def last_interval(self) -> str | None:
+        raw = self._repo.get(KEY_LAST_INTERVAL)
+        return raw if isinstance(raw, str) and len(raw) <= 5 else None
+
+    def set_last_opened(self, symbol: str, interval: str) -> None:
+        self._repo.set(KEY_LAST_SYMBOL, symbol)
+        self._repo.set(KEY_LAST_INTERVAL, interval)
 
     # Layout ----------------------------------------------------------------
     def layout(self) -> dict[str, Any]:

@@ -25,3 +25,10 @@ class Panel(QFrame):
         self.empty_label.setWordWrap(True)
         self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.empty_label, stretch=1)
+
+    def set_message(self, text: str, *, error: bool = False) -> None:
+        self.empty_label.setText(text)
+        self.empty_label.setProperty("error", error)
+        # Re-apply the stylesheet so the [error="true"] rule takes effect.
+        self.empty_label.style().unpolish(self.empty_label)
+        self.empty_label.style().polish(self.empty_label)

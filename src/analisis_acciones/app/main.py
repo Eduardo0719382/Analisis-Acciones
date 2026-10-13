@@ -7,7 +7,7 @@ import sqlite3
 import sys
 from collections.abc import Sequence
 
-from PySide6.QtCore import QProcess
+from PySide6.QtCore import QProcess, QThreadPool
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
 from analisis_acciones import __version__
@@ -15,6 +15,8 @@ from analisis_acciones.app.error_handler import install_excepthook
 from analisis_acciones.app.logging_setup import configure_logging
 from analisis_acciones.app.paths import APP_NAME, AppPaths
 from analisis_acciones.models.errors import AppError, user_message_for
+from analisis_acciones.providers.yahoo import YahooFinanceProvider
+from analisis_acciones.services.market_data_service import MarketDataService
 from analisis_acciones.services.settings_service import SettingsService
 from analisis_acciones.services.update_service import UpdateService
 from analisis_acciones.storage.database import open_database
@@ -51,6 +53,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         conn = open_database(paths.database)
+        # Separate connection for market data: it is used from worker threads.
+        market_conn = open_database(paths.database)
     except (AppError, sqlite3.Error, OSError) as exc:
         logger.exception("Could not open database %s", paths.database)
         QMessageBox.critical(
@@ -60,6 +64,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         return 1
 
+    window: MainWindow | None = None
     try:
         settings = SettingsService(SettingsRepository(conn))
         apply_theme(app, settings.theme())
@@ -70,12 +75,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return 0
             settings.accept_disclaimer()
 
-        window = MainWindow(settings, update_service=UpdateService())
+        market = MarketDataService(YahooFinanceProvider(), market_conn)
+        window = MainWindow(settings, update_service=UpdateService(), market_service=market)
         window.show()
+        window.restore_last_symbol()
         window.schedule_startup_update_check()
         code = app.exec()
         restart = window.restart_requested
     finally:
+        if window is not None:
+            # Destroy the window before its services' connections are closed.
+            window.hide()
+            window.deleteLater()
+            app.processEvents()
+        QThreadPool.globalInstance().waitForDone(5000)
+        market_conn.close()
         conn.close()
         logger.info("Shutdown complete")
 

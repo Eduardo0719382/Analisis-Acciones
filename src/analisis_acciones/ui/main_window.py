@@ -4,15 +4,17 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QByteArray, Qt, QTimer
+from PySide6.QtCore import QByteArray, QLocale, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
+    QFileDialog,
+    QInputDialog,
     QLabel,
-    QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
@@ -23,11 +25,15 @@ from PySide6.QtWidgets import (
 )
 
 from analisis_acciones import __version__
+from analisis_acciones.models.market import Interval
+from analisis_acciones.services.market_data_service import LoadResult, MarketDataService
 from analisis_acciones.services.settings_service import SettingsService, Theme
 from analisis_acciones.services.update_service import UpdateCheck, UpdateService
 from analisis_acciones.ui import strings
 from analisis_acciones.ui.disclaimer import DisclaimerDialog
+from analisis_acciones.ui.market_controller import MarketController
 from analisis_acciones.ui.panels import Panel
+from analisis_acciones.ui.search_box import SearchBox
 from analisis_acciones.ui.theme import apply_theme
 from analisis_acciones.ui.update_dialog import UpdateDialog
 from analisis_acciones.ui.workers import Worker, start_worker
@@ -47,10 +53,14 @@ class MainWindow(QMainWindow):
         parent: QWidget | None = None,
         *,
         update_service: UpdateService | None = None,
+        market_service: MarketDataService | None = None,
     ) -> None:
         super().__init__(parent)
         self._settings = settings
         self._update_service = update_service
+        self.market = MarketController(market_service, self) if market_service else None
+        self.current_symbol: str | None = None
+        self.current_result: LoadResult | None = None
         self.restart_requested = False
         self._update_worker: Worker | None = None
         self.setWindowTitle(strings.APP_TITLE)
@@ -61,6 +71,7 @@ class MainWindow(QMainWindow):
         self._build_status_bar()
         self._build_menus()
         self._restore_layout()
+        self._wire_market()
 
     # Construction ----------------------------------------------------------
     def _build_toolbar(self) -> None:
@@ -69,21 +80,16 @@ class MainWindow(QMainWindow):
         bar.setMovable(False)
         bar.setFloatable(False)
 
-        self.search_box = QLineEdit()
-        self.search_box.setObjectName("searchBox")
-        self.search_box.setPlaceholderText(strings.SEARCH_PLACEHOLDER)
-        self.search_box.setClearButtonEnabled(True)
+        self.search_box = SearchBox()
         self.search_box.setMinimumWidth(220)
         self.search_box.setMaximumWidth(340)
-        self.search_box.setEnabled(False)
-        self.search_box.setToolTip(strings.COMING_SOON)
         bar.addWidget(self.search_box)
 
         self.symbol_label = QLabel(strings.NO_SYMBOL)
         self.symbol_label.setObjectName("symbolLabel")
         bar.addWidget(self.symbol_label)
 
-        # Populated from the active provider's supported intervals (phase 2/3).
+        # Populated from the data service's available intervals only.
         self.timeframe_combo = QComboBox()
         self.timeframe_combo.setObjectName("timeframeCombo")
         self.timeframe_combo.setToolTip(strings.TIMEFRAME_TOOLTIP)
@@ -152,6 +158,10 @@ class MainWindow(QMainWindow):
         menu_bar = self.menuBar()
 
         file_menu = menu_bar.addMenu(strings.MENU_FILE)
+        self.import_csv_action = QAction(strings.ACTION_IMPORT_CSV, self)
+        self.import_csv_action.triggered.connect(self._import_csv)
+        file_menu.addAction(self.import_csv_action)
+        file_menu.addSeparator()
         quit_action = QAction(strings.ACTION_QUIT, self)
         quit_action.setShortcut(QKeySequence.StandardKey.Quit)
         quit_action.triggered.connect(self.close)
@@ -184,6 +194,159 @@ class MainWindow(QMainWindow):
         about_action = QAction(strings.ACTION_ABOUT, self)
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
+
+    # Market data -----------------------------------------------------------
+    def _wire_market(self) -> None:
+        enabled = self.market is not None
+        self.search_box.setEnabled(enabled)
+        self.import_csv_action.setEnabled(enabled)
+        if self.market is None:
+            self.search_box.setToolTip(strings.COMING_SOON)
+            return
+        service = self.market.service
+        self.provider_label.setText(strings.STATUS_PROVIDER.format(name=service.provider_name))
+        for interval in service.available_intervals():
+            label = strings.INTERVAL_LABELS.get(interval.value, interval.value)
+            self.timeframe_combo.addItem(label, interval.value)
+        self.timeframe_combo.setEnabled(self.timeframe_combo.count() > 0)
+        self.timeframe_combo.currentIndexChanged.connect(self._on_interval_changed)
+
+        self.search_box.query_changed.connect(self._on_query_changed)
+        self.search_box.recent_requested.connect(self._show_recent)
+        self.search_box.symbol_chosen.connect(self.open_symbol)
+        self.market.search_finished.connect(self._on_search_finished)
+        self.market.search_failed.connect(lambda _q, msg: self.search_box.show_message(msg))
+        self.market.load_started.connect(self._on_load_started)
+        self.market.load_finished.connect(self._on_load_finished)
+        self.market.load_failed.connect(self._on_load_failed)
+
+    def current_interval(self) -> Interval:
+        value = self.timeframe_combo.currentData()
+        return Interval(value) if value else Interval.D1
+
+    def open_symbol(self, symbol: str, name: str = "") -> None:
+        if self.market is None:
+            return
+        self.current_symbol = symbol
+        self.market.remember(symbol, name or None)
+        self.market.load(symbol, self.current_interval())
+
+    def restore_last_symbol(self) -> None:
+        """Reopen the symbol and interval from the previous session."""
+        interval = self._settings.last_interval()
+        index = self.timeframe_combo.findData(interval) if interval else -1
+        if index >= 0:
+            self.timeframe_combo.blockSignals(True)
+            self.timeframe_combo.setCurrentIndex(index)
+            self.timeframe_combo.blockSignals(False)
+        symbol = self._settings.last_symbol()
+        if symbol:
+            self.open_symbol(symbol)
+
+    def _on_query_changed(self, query: str) -> None:
+        if self.market is None or not query:
+            return
+        self.search_box.show_message(strings.SEARCH_SEARCHING)
+        self.market.search(query)
+
+    def _show_recent(self) -> None:
+        if self.market is None:
+            return
+        try:
+            recent = self.market.service.recent()
+        except Exception:
+            # Recent symbols are a convenience; never let them break typing.
+            logger.exception("Could not read recent symbols")
+            return
+        if recent:
+            self.search_box.show_results(recent, strings.SEARCH_RECENT)
+        else:
+            self.search_box.hide_popup()
+
+    def _on_search_finished(self, query: str, results: list[Any]) -> None:
+        if self.search_box.text().strip() == query:
+            self.search_box.show_results(results)
+
+    def _on_interval_changed(self, _index: int) -> None:
+        if self.current_symbol and self.market is not None:
+            self.market.load(self.current_symbol, self.current_interval())
+
+    def _on_load_started(self, symbol: str, _interval: object) -> None:
+        self.statusBar().showMessage(strings.LOADING.format(symbol=symbol))
+        self.setCursor(Qt.CursorShape.BusyCursor)
+
+    def _on_load_finished(self, result: LoadResult) -> None:
+        self.unsetCursor()
+        self.current_result = result
+        series = result.series
+        self.current_symbol = series.symbol
+        self._set_label(self.symbol_label, series.symbol)
+        self._set_label(self.provider_label, strings.STATUS_PROVIDER.format(name=series.source))
+        self._settings.set_last_opened(series.symbol, series.interval.value)
+
+        locale = QLocale()
+        last_close = series.bars["close"].iloc[-1]
+        self.chart_panel.set_message(
+            strings.DATA_SUMMARY.format(
+                symbol=series.symbol,
+                interval=strings.INTERVAL_LABELS.get(series.interval.value, series.interval.value),
+                count=locale.toString(len(series)),
+                first=self._format_date(series.first_date),
+                last=self._format_date(series.last_date),
+                close=locale.toString(float(last_close), "f", 2),
+            )
+        )
+
+        when = strings.STATUS_NEVER
+        if result.fetched_at is not None:
+            local = result.fetched_at.astimezone()
+            when = local.strftime("%d/%m/%Y %H:%M")
+            if result.from_cache:
+                when += f" ({strings.FROM_CACHE})"
+        self._set_label(self.last_update_label, strings.STATUS_LAST_UPDATE.format(when=when))
+
+        notes = list(result.notices)
+        if result.stale:
+            notes.insert(0, strings.STALE_DATA)
+        if result.session_in_progress:
+            notes.append(strings.SESSION_IN_PROGRESS)
+        self.statusBar().showMessage(" ".join(notes) if notes else strings.STATUS_READY)
+
+    def _on_load_failed(self, symbol: str, message: str) -> None:
+        self.unsetCursor()
+        title = strings.LOAD_ERROR.format(symbol=symbol)
+        self.statusBar().showMessage(f"{title}: {message}")
+        if self.current_result is None:
+            self.chart_panel.set_message(f"{title}.\n\n{message}", error=True)
+        else:
+            # Keep showing the data already on screen; it is still consistent with
+            # the symbol label. The status bar explains why the new request failed.
+            self.current_symbol = self.current_result.series.symbol
+
+    @staticmethod
+    def _set_label(label: QLabel, text: str) -> None:
+        """Set text and let toolbar/status-bar layouts grow the label to fit it."""
+        label.setText(text)
+        label.setMinimumWidth(label.sizeHint().width())
+
+    @staticmethod
+    def _format_date(value: object) -> str:
+        return value.strftime("%d/%m/%Y") if hasattr(value, "strftime") else "—"
+
+    def _import_csv(self) -> None:
+        if self.market is None:
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, strings.IMPORT_CSV_TITLE, "", strings.IMPORT_CSV_FILTER
+        )
+        if not path:
+            return
+        default = "".join(ch for ch in Path(path).stem.upper() if ch.isalnum() or ch in "-_.")
+        name, ok = QInputDialog.getText(
+            self, strings.IMPORT_CSV_TITLE, strings.IMPORT_CSV_NAME_PROMPT, text=default[:30]
+        )
+        if ok and name.strip():
+            self.market.import_csv(Path(path), name)
 
     # Theme -----------------------------------------------------------------
     def _on_dark_theme_toggled(self, checked: bool) -> None:
