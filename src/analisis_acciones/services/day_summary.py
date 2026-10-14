@@ -17,6 +17,8 @@ from urllib.parse import quote
 from analisis_acciones.alerts.service import AlertEvent
 from analisis_acciones.models.errors import AppError
 from analisis_acciones.models.market import Interval
+from analisis_acciones.services import company_calendar
+from analisis_acciones.services.company_calendar import CalendarEntry
 from analisis_acciones.services.market_data_service import MarketDataService
 from analisis_acciones.services.scan_report import STYLE, num
 
@@ -56,6 +58,36 @@ def load_items(market: MarketDataService, symbols: list[str]) -> list[SummaryIte
             result.stale,
         ))  # fmt: skip
     return items
+
+
+def load_calendar(market: MarketDataService, symbols: list[str],
+                  today: date) -> list[CalendarEntry]:  # fmt: skip
+    """Upcoming earnings/dividend dates from stored fundamentals only (no network)."""
+    try:
+        stored = market.cached_fundamentals([s.strip().upper() for s in symbols])
+    except Exception as exc:  # the summary must still show
+        logger.warning("Could not read stored fundamentals: %s", exc)
+        return []
+    return company_calendar.upcoming(stored, today)
+
+
+def _calendar_rows(entries: list[CalendarEntry], today: date) -> str:
+    if not entries:
+        return (
+            '<li class="flat">Sin fechas en los próximos '
+            f"{company_calendar.UPCOMING_DAYS} días entre los datos guardados. Las fechas se "
+            "guardan al abrir la pestaña «Fundamentales» de cada activo o al escanear con "
+            "fundamentales.</li>"
+        )
+    rows = []
+    for e in entries:
+        estimated = " (estimada)" if e.estimated else ""
+        rows.append(
+            f'<li><a href="{open_link(e.symbol)}"><b>{escape(e.symbol)}</b></a> · {e.label}'
+            f"{estimated}: {company_calendar.date_text(e)} · "
+            f"{company_calendar.when(e, today)}</li>"
+        )
+    return "".join(rows)
 
 
 def open_link(symbol: str) -> str:
@@ -148,7 +180,8 @@ i.down { color: var(--down); } i.flat { color: var(--flat); }
 
 
 def summary_html(items: list[SummaryItem], events: list[AlertEvent], now: datetime,
-                 is_open: bool, list_name: str = "") -> str:  # fmt: skip
+                 is_open: bool, list_name: str = "",
+                 calendar: list[CalendarEntry] | None = None) -> str:  # fmt: skip
     ok = [i for i in items if i.change_pct is not None]
     up = sorted((i for i in ok if (i.change_pct or 0) > 0), key=lambda i: -(i.change_pct or 0))
     down = sorted((i for i in ok if (i.change_pct or 0) < 0), key=lambda i: i.change_pct or 0)
@@ -192,5 +225,8 @@ sesión el último precio puede no ser definitivo.</p>
 <div class="wgrid">{cards}</div>
 <h2 class="section-title">Avisos recientes</h2>
 <ul class="events">{event_rows}</ul>
-<footer>Datos: Yahoo Finance (pueden tener retrasos). No es asesoramiento financiero.</footer>
+<h2 class="section-title">Próximos resultados y dividendos</h2>
+<ul class="events">{_calendar_rows(calendar or [], local.date())}</ul>
+<footer>Datos: Yahoo Finance (pueden tener retrasos; la empresa puede cambiar las fechas). No es
+asesoramiento financiero.</footer>
 </body></html>"""

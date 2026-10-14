@@ -20,6 +20,7 @@ from typing import Any, Protocol
 
 import pandas as pd
 
+from analisis_acciones.data.freshness import NEW_YORK
 from analisis_acciones.data.validation import validate_bars
 from analisis_acciones.models.errors import AppError, NetworkError, ProviderError, UserError
 from analisis_acciones.models.market import (
@@ -155,6 +156,18 @@ def _first_num(info: dict[str, Any], *keys: str) -> float | None:
         if number is not None:
             return number
     return None
+
+
+def _epoch_date(value: object, utc: bool = False) -> date | None:
+    """Unix seconds from external data as a calendar date (plausible years only).
+
+    Earnings timestamps carry the real time of the release, read in New York time;
+    Yahoo's dividend dates are midnight UTC of the day, so they are read in UTC.
+    """
+    seconds = _num(value)
+    if seconds is None or not 631_152_000 <= seconds <= 4_102_444_800:  # 1990 … 2100
+        return None
+    return datetime.fromtimestamp(seconds, UTC if utc else NEW_YORK).date()
 
 
 def _text(value: object) -> str | None:
@@ -374,6 +387,7 @@ class YahooFinanceProvider(MarketDataProvider):
             earnings_growth=fraction("earningsGrowth"),
             beta=_num(info.get("beta")),
             annual=_annual_figures(statement),
+            **_calendar(info),
         )
 
     def get_company_info(self, symbol: str) -> CompanyInfo:
@@ -431,3 +445,20 @@ def _plain(value: object) -> object:
     """numpy scalars -> Python numbers (``_num`` only accepts int/float)."""
     item = getattr(value, "item", None)
     return item() if callable(item) else value
+
+
+def _calendar(info: dict[str, Any]) -> dict[str, Any]:
+    """Earnings and dividend dates from the quote payload (all optional)."""
+    start = _epoch_date(info.get("earningsTimestampStart"))
+    end = _epoch_date(info.get("earningsTimestampEnd"))
+    single = _epoch_date(info.get("earningsTimestamp"))
+    if start is None:
+        start, end = single, None
+    estimate = info.get("isEarningsDateEstimate")
+    return {
+        "earnings_date": start,
+        "earnings_date_end": end if end is not None and start is not None and end > start else None,
+        "earnings_estimated": estimate if isinstance(estimate, bool) else None,
+        "ex_dividend_date": _epoch_date(info.get("exDividendDate"), utc=True),
+        "dividend_payment_date": _epoch_date(info.get("dividendDate"), utc=True),
+    }

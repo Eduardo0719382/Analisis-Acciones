@@ -387,6 +387,19 @@ class MarketDataService:
         return rows
 
     # Fundamentals ------------------------------------------------------------
+    def cached_fundamentals(self, symbols: list[str]) -> dict[str, Fundamentals]:
+        """Stored fundamentals only (no network), for overviews such as the day summary."""
+        found: dict[str, Fundamentals] = {}
+        with self._db():
+            for symbol in symbols:
+                row = self._conn.execute(
+                    "SELECT payload FROM fundamentals_cache WHERE symbol = ?", (symbol,)
+                ).fetchone()
+                data = _fundamentals_from_json(row["payload"]) if row else None
+                if data is not None:
+                    found[symbol] = data
+        return found
+
     def fundamentals(self, raw_symbol: str) -> FundamentalsResult:
         """Company figures, refreshed daily; the last stored copy is served when offline."""
         if is_csv_symbol(raw_symbol):
@@ -417,7 +430,7 @@ class MarketDataService:
                 "INSERT INTO fundamentals_cache (symbol, fetched_at, payload) VALUES (?, ?, ?) "
                 "ON CONFLICT(symbol) DO UPDATE SET fetched_at = excluded.fetched_at, "
                 "payload = excluded.payload",
-                (symbol, now.isoformat(), json.dumps(asdict(data), allow_nan=False)),
+                (symbol, now.isoformat(), json.dumps(asdict(data), allow_nan=False, default=_iso)),
             )
         return FundamentalsResult(data, now, dividends=dividends)
 
@@ -504,11 +517,23 @@ def annual_dividends(daily: pd.DataFrame) -> tuple[tuple[int, float], ...]:
     )
 
 
+DATE_FIELDS = ("earnings_date", "earnings_date_end", "ex_dividend_date", "dividend_payment_date")
+
+
+def _iso(value: object) -> str:
+    if isinstance(value, date):
+        return value.isoformat()
+    raise TypeError(f"not serializable: {type(value).__name__}")
+
+
 def _fundamentals_from_json(payload: str) -> Fundamentals | None:
     """Rebuild stored fundamentals; anything malformed is treated as not cached."""
     try:
         raw = json.loads(payload)
         annual = tuple(AnnualFigures(**item) for item in raw.pop("annual", []))
+        for key in DATE_FIELDS:
+            if raw.get(key) is not None:
+                raw[key] = date.fromisoformat(raw[key])
         return Fundamentals(**raw, annual=annual)
     except (ValueError, TypeError):
         logger.warning("Ignoring malformed cached fundamentals")

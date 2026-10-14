@@ -1,16 +1,23 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import numpy as np
 import pandas as pd
 import pytest
 
 from analisis_acciones.models.errors import UserError
+from analisis_acciones.models.market import Fundamentals
 from analisis_acciones.providers.yahoo import YahooFinanceProvider
+from analisis_acciones.services import company_calendar
+from analisis_acciones.services.day_summary import summary_html
 from analisis_acciones.services.fundamentals_report import bar_chart, big, fundamentals_html
-from analisis_acciones.services.market_data_service import MarketDataService, annual_dividends
+from analisis_acciones.services.market_data_service import (
+    FundamentalsResult,
+    MarketDataService,
+    annual_dividends,
+)
 from analisis_acciones.storage.database import open_database
 from tests.synthetic import FakeYahooClient, synthetic_daily
 
@@ -106,3 +113,56 @@ def test_report_formatting_and_escaping(market: MarketDataService) -> None:
     assert "&lt;Test &amp; Co&gt;" in html and "<Test" not in html
     assert "31,5" in html and "3,10 billones USD" in html and "Ingresos por año" in html
     assert "<script" not in html
+
+
+def ts(day: str, hour: int = 20, minute: int = 30) -> int:
+    return int(datetime.fromisoformat(f"{day}T{hour:02d}:{minute:02d}:00+00:00").timestamp())
+
+
+CALENDAR = {
+    "earningsTimestampStart": ts("2025-04-30"), "earningsTimestampEnd": ts("2025-05-05"),
+    "earningsTimestamp": ts("2025-01-30"), "isEarningsDateEstimate": True,
+    "exDividendDate": ts("2025-02-10", 0, 0), "dividendDate": ts("2025-03-13", 0, 0),
+}  # fmt: skip
+
+
+def test_calendar_dates_parsed_cached_and_shown(market: MarketDataService,
+                                                client: FakeYahooClient) -> None:  # fmt: skip
+    client.info_payload = {**INFO, **CALENDAR}
+    f = YahooFinanceProvider(client).get_fundamentals("TEST")
+    assert f.earnings_date == date(2025, 4, 30) and f.earnings_date_end == date(2025, 5, 5)
+    assert f.earnings_estimated is True
+    # Dividend dates come as midnight UTC (9 February evening in New York): read in UTC.
+    assert f.ex_dividend_date == date(2025, 2, 10)
+    assert f.dividend_payment_date == date(2025, 3, 13)
+    # 01:00 UTC on 31/01 is still 30 January in New York (release after the close).
+    single = {**INFO, "earningsTimestamp": ts("2025-01-31", 1, 0), "exDividendDate": "mañana",
+              "dividendDate": 10**15}  # fmt: skip
+    client.info_payload = single
+    g = YahooFinanceProvider(client).get_fundamentals("TEST")
+    assert g.earnings_date == date(2025, 1, 30) and g.earnings_date_end is None
+    assert g.ex_dividend_date is None and g.dividend_payment_date is None  # invalid: dropped
+
+    client.info_payload = {**INFO, **CALENDAR}
+    result = market.fundamentals("TEST")
+    stored = market.cached_fundamentals(["TEST", "NOPE"])
+    assert list(stored) == ["TEST"] and stored["TEST"] == result.data  # dates survive JSON
+
+    today = date(2025, 3, 7)
+    soon = company_calendar.upcoming(stored, today)
+    assert [e.kind for e in soon] == [company_calendar.DIVIDEND_PAYMENT]
+    assert company_calendar.when(soon[0], today) == "dentro de 6 días"
+    later = company_calendar.upcoming(stored, today, days=60)
+    assert later[-1].kind == company_calendar.EARNINGS and later[-1].estimated
+    assert company_calendar.date_text(later[-1]) == "30/04/2025 – 05/05/2025"
+
+    html = fundamentals_html(result, today=today)
+    assert "Calendario" in html and "Presentación de resultados" in html
+    assert "estimada" in html and "pasada" in html and "Dentro de 54 días" in html
+    empty = fundamentals_html(FundamentalsResult(Fundamentals("X"), datetime(2025, 3, 7)),
+                              today=today)  # fmt: skip
+    assert "no publica fechas" in empty
+
+    page = summary_html([], [], datetime(2025, 3, 7, 15, tzinfo=UTC), False, "", soon)
+    assert "Próximos resultados y dividendos" in page and "Pago del dividendo" in page
+    assert "Sin fechas" in summary_html([], [], datetime(2025, 3, 7, tzinfo=UTC), False)

@@ -221,6 +221,11 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   cada uno con una explicación breve, y gráficos por año de ingresos, beneficio neto, BPA y
   dividendos cobrados. Se descargan solo al abrir la pestaña, se guardan (se actualizan una vez
   al día) y sin conexión se muestran los últimos guardados, indicándolo.
+  - **Calendario:** próxima presentación de resultados (marcada «estimada» si la empresa aún no
+    la ha confirmado), fecha ex-dividendo y fecha de pago, con cuántos días faltan. El
+    *Resumen del día* lista las de los próximos 14 días de la lista de seguimiento, usando los
+    datos ya guardados (sin descargas extra). Son las fechas que publica Yahoo Finance; la
+    empresa puede cambiarlas.
 - **Importar CSV:** *Archivo → Importar CSV…*. Columnas `date, open, high, low, close`
   (opcionales `volume`, `adj close`); también en español (`fecha; apertura; máximo; mínimo;
   cierre; volumen`) con coma decimal. Fechas `AAAA-MM-DD` o `DD/MM/AAAA`.

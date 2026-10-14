@@ -725,3 +725,17 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   the filter must not include a company because data is missing. Limits only apply to scans
   that included fundamentals; otherwise the dialog explains that a re-scan is needed.
 - The daily automatic scan does not fetch fundamentals (it only reports technical changes).
+
+## D-044 — Earnings and dividend calendar
+
+- **Source:** Yahoo quote payload: `earningsTimestampStart/End` (window) or
+  `earningsTimestamp`, `isEarningsDateEstimate`, `exDividendDate`, `dividendDate`. Values
+  outside 1990–2100 or non-numeric are dropped.
+- **Time zones:** earnings timestamps carry the real release time and are read as New York
+  dates (a release at 01:00 UTC is the previous US evening). Dividend dates come as midnight
+  UTC and are read in UTC; reading them in New York time would move them a day early.
+- Dates are stored with the fundamentals (ISO strings in the JSON cache; old cache entries
+  without them still load).
+- The day summary uses only stored fundamentals (`cached_fundamentals`), so opening it never
+  triggers one request per watchlist symbol. Dates are shown as published, with "estimada"
+  and "pasada" labels; no date is inferred.

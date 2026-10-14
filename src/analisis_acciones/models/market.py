@@ -144,3 +144,9 @@ class Fundamentals:
     earnings_growth: float | None = None  # fraction, year over year
     beta: float | None = None
     annual: tuple[AnnualFigures, ...] = ()  # oldest first
+    # Calendar as published by the source (may be past dates; the source can change them).
+    earnings_date: date | None = None  # next results date, or start of the expected window
+    earnings_date_end: date | None = None  # end of the window when it is a range
+    earnings_estimated: bool | None = None  # True = not yet confirmed by the company
+    ex_dividend_date: date | None = None  # latest announced ex-dividend date
+    dividend_payment_date: date | None = None

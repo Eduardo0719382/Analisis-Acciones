@@ -102,3 +102,10 @@ def test_fundamentals(provider: YahooFinanceProvider) -> None:
     assert f.profit_margin is not None and 0 < f.profit_margin < 1
     assert len(f.annual) >= 3
     assert all(a.revenue is None or a.revenue > 1e10 for a in f.annual)
+    print(f"AAPL calendar: earnings={f.earnings_date}..{f.earnings_date_end} "
+          f"estimate={f.earnings_estimated} ex_div={f.ex_dividend_date} "
+          f"paid={f.dividend_payment_date}")  # fmt: skip
+    # AAPL reports every quarter and pays a quarterly dividend: the dates should be within a
+    # few months of today (past or future).
+    for day in (f.earnings_date, f.ex_dividend_date):
+        assert day is not None and abs((day - date.today()).days) < 200

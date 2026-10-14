@@ -24,9 +24,11 @@ from PySide6.QtWidgets import (
 from analisis_acciones.alerts.service import AlertEvent, AlertService
 from analisis_acciones.data.freshness import market_open
 from analisis_acciones.models.errors import user_message_for
+from analisis_acciones.services.company_calendar import CalendarEntry
 from analisis_acciones.services.day_summary import (
     OPEN_PREFIX,
     SummaryItem,
+    load_calendar,
     load_items,
     summary_html,
 )
@@ -76,6 +78,7 @@ class DaySummaryDialog(QDialog):
         self._clock = clock
         self._workers: set[Worker] = set()
         self.items: list[SummaryItem] | None = None
+        self.calendar: list[CalendarEntry] = []
         self.html = ""
         self.setWindowTitle(strings.SUMMARY_TITLE)
         self.resize(1000, 760)
@@ -122,26 +125,33 @@ class DaySummaryDialog(QDialog):
         self.status.setText(strings.SUMMARY_LOADING.format(count=len(symbols)))
         market = self._market
 
-        def done(items: list[SummaryItem]) -> None:
+        today = self._clock().astimezone().date()
+
+        def job() -> tuple[list[SummaryItem], list[CalendarEntry]]:
+            return load_items(market, symbols), load_calendar(market, symbols, today)
+
+        def done(loaded: tuple[list[SummaryItem], list[CalendarEntry]]) -> None:
             if not shiboken6.isValid(self):
                 return
             self.refresh_button.setEnabled(True)
             self.status.setText("")
-            self.show_items(items)
+            self.show_items(*loaded)
 
         def fail(exc: BaseException) -> None:
             if shiboken6.isValid(self):
                 self.refresh_button.setEnabled(True)
                 self.status.setText(user_message_for(exc))
 
-        worker = start_worker(lambda: load_items(market, symbols), done, fail)
+        worker = start_worker(job, done, fail)
         self._workers.add(worker)
         worker.signals.succeeded.connect(lambda _r: self._workers.discard(worker))
         worker.signals.failed.connect(lambda _e: self._workers.discard(worker))
 
-    def show_items(self, items: list[SummaryItem]) -> None:
+    def show_items(self, items: list[SummaryItem],
+                   calendar: list[CalendarEntry] | None = None) -> None:  # fmt: skip
         self.items = items
+        self.calendar = calendar or []
         now = self._clock()
         self.html = summary_html(items, self.recent_events(), now, market_open(now),
-                                 self._list_name())  # fmt: skip
+                                 self._list_name(), self.calendar)  # fmt: skip
         self.view.setHtml(self.html, QUrl("about:blank"))

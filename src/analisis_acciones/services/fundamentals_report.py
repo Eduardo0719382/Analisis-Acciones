@@ -8,9 +8,11 @@ data text is escaped.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import date
 from html import escape
 
 from analisis_acciones.models.market import Fundamentals
+from analisis_acciones.services import company_calendar
 from analisis_acciones.services.market_data_service import FundamentalsResult
 from analisis_acciones.services.scan_report import STYLE, num
 
@@ -28,6 +30,10 @@ h1 { font-size: 20px; }
 .bars .val { font-size: 10.5px; fill: var(--ink-2); }
 .charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
 .chart { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+.cal { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.cal .metric.next { border-color: var(--up); }
+.badge { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 8px;
+  background: var(--flat-bg); color: var(--ink-2); margin-left: 4px; }
 """  # noqa: E501
 
 
@@ -145,8 +151,32 @@ def metrics(f: Fundamentals) -> str:
     return '<div class="metrics">' + "".join(_metric(*i) for i in items) + "</div>"
 
 
-def fundamentals_html(result: FundamentalsResult, name: str = "") -> str:
+def calendar_section(f: Fundamentals, today: date) -> str:
+    items = company_calendar.entries(f)
+    if not items:
+        return (
+            '<p class="muted small">El proveedor no publica fechas de resultados ni de '
+            "dividendos para este activo.</p>"
+        )
+    cards = []
+    for e in items:
+        past = (e.day_end or e.day) < today
+        badges = '<span class="badge">estimada</span>' if e.estimated else ""
+        badges += '<span class="badge">pasada</span>' if past else ""
+        meaning = company_calendar.MEANINGS[e.kind]
+        cards.append(
+            f'<div class="metric{"" if past else " next"}" title="{escape(meaning)}">'
+            f'<div class="v">{company_calendar.date_text(e)}</div>'
+            f'<div class="k">{e.label}{badges}</div>'
+            f'<div class="d">{company_calendar.when(e, today).capitalize()}. {escape(meaning)}'
+            "</div></div>"
+        )
+    return f'<div class="cal">{"".join(cards)}</div>'
+
+
+def fundamentals_html(result: FundamentalsResult, name: str = "", today: date | None = None) -> str:
     f = result.data
+    today = today or date.today()
     annual = f.annual[-8:]
     years = [a.year for a in annual]
     charts = []
@@ -191,9 +221,12 @@ def fundamentals_html(result: FundamentalsResult, name: str = "") -> str:
 que el dato no está disponible.</p>
 {stale}
 {metrics(f)}
+<h2 class="section-title">Calendario</h2>
+{calendar_section(f, today)}
 <h2 class="section-title">Evolución anual{period}</h2>
 <div class="charts">{chart_html}</div>
 <footer>«M» = millones. Las cifras anuales son las del ejercicio fiscal de la empresa. Los
-dividendos por año se calculan con el historial de cotizaciones guardado. No es asesoramiento
-financiero.</footer>
+dividendos por año se calculan con el historial de cotizaciones guardado. Las fechas del
+calendario son las que publica Yahoo Finance; la empresa puede cambiarlas y una fecha «estimada»
+aún no está confirmada. No es asesoramiento financiero.</footer>
 </body></html>"""
