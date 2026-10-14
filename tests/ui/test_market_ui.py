@@ -355,3 +355,24 @@ def test_exports_write_files(qtbot: QtBot, window: MainWindow, tmp_path: Path) -
     assert (tmp_path / "grafico.png").read_bytes()[:4] == b"\x89PNG"
     assert (tmp_path / "informe.pdf").read_bytes()[:4] == b"%PDF"
     assert "Guardado" in window.statusBar().currentMessage()
+
+
+def test_benchmark_overlay(qtbot: QtBot, window: MainWindow, settings: SettingsService,
+                           client: FakeYahooClient) -> None:  # fmt: skip
+    client.known = {"TEST", "SPY"}
+    assert window.market is not None
+    with qtbot.waitSignal(window.market.load_finished, timeout=5000):
+        window.open_symbol("TEST")
+    assert window.benchmark_action.text() == "Comparar con índice (SPY)"
+    window.benchmark_action.setChecked(True)
+    qtbot.waitUntil(lambda: "benchmark" in chart_state(qtbot, window)["overlayGroups"],
+                    timeout=20000)  # fmt: skip
+    assert "TEST" in window.benchmark_summary and "SPY" in window.benchmark_summary
+    assert settings.benchmark_on() is True
+
+    window.set_benchmark("qqq")  # unknown to the fake provider: overlay removed, message shown
+    assert settings.benchmark() == "QQQ"
+    qtbot.waitUntil(lambda: "QQQ" in window.statusBar().currentMessage(), timeout=10000)
+    assert "benchmark" not in chart_state(qtbot, window)["overlayGroups"]
+    window.benchmark_action.setChecked(False)
+    assert settings.benchmark_on() is False

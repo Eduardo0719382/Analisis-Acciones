@@ -85,6 +85,10 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   RSI estocástico, ADX (+DI/-DI) y OBV; edite sus parámetros, ocúltelos o quítelos. También
   **VWAP** (en intradía se reinicia cada sesión; en diario usa las últimas N barras) y
   **Fibonacci automático** (retrocesos del último tramo relevante, detectado con ZigZag).
+- **Comparar con un índice:** *Ver → Comparar con índice (SPY)* dibuja en el mismo gráfico la
+  evolución del índice o ETF de referencia durante las últimas 250 barras, partiendo del precio
+  del activo, y la barra de estado indica la rentabilidad de ambos y la diferencia. *Ver →
+  Índice de referencia…* permite usar otro (QQQ, DIA, IWM, ^GSPC…).
 - **Perfil de volumen:** *Ver → Perfil de volumen* dibuja a la derecha del gráfico cuánto volumen
   se negoció en cada franja de precio durante las últimas 250 barras, con el POC (precio con más
   volumen) y la zona de valor (70 % del volumen).

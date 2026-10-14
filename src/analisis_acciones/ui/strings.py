@@ -522,3 +522,16 @@ TEMPLATE_SAVE = "Guardar como…"
 TEMPLATE_DELETE = "Eliminar"
 TEMPLATE_BUILTIN = "{name} (predefinida)"
 TEMPLATE_NAME_PROMPT = "Nombre de la plantilla (se guardan los indicadores de la lista):"
+
+ACTION_BENCHMARK = "Comparar con índice ({symbol})"
+ACTION_BENCHMARK_CHOOSE = "Índice de referencia…"
+BENCHMARK_PROMPT = (
+    "Ticker del índice o ETF de referencia (por ejemplo SPY = S&P 500, QQQ = Nasdaq 100, "
+    "DIA = Dow Jones, IWM = Russell 2000, ^GSPC = índice S&P 500):"
+)
+BENCHMARK_SUMMARY = (
+    "Desde {start}: {asset} {asset_ret} % · {bench} {bench_ret} % · diferencia {diff} puntos "
+    "(la línea de {bench} parte del precio de {asset} en esa fecha)."
+)
+BENCHMARK_NO_OVERLAP = "No hay fechas comunes con {bench} para comparar."
+BENCHMARK_FAILED = "No se pudo cargar {bench}: {error}"

@@ -9,6 +9,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import shiboken6
 from PySide6.QtCore import QByteArray, QLocale, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
@@ -46,8 +47,10 @@ from analisis_acciones.charts.payload import chart_times, future_times
 from analisis_acciones.data.export import bars_to_csv
 from analisis_acciones.indicators.functions import volume_profile
 from analisis_acciones.indicators.registry import IndicatorConfig
-from analisis_acciones.models.errors import AppError, UserError
+from analisis_acciones.models.errors import AppError, UserError, user_message_for
 from analisis_acciones.models.market import Interval
+from analisis_acciones.providers.base import normalize_symbol
+from analisis_acciones.services.comparison import benchmark_line
 from analisis_acciones.services.daily_scan import Novelty
 from analisis_acciones.services.drawing_service import DrawingService
 from analisis_acciones.services.market_data_service import LoadResult, MarketDataService
@@ -83,6 +86,14 @@ logger = logging.getLogger(__name__)
 
 #: Bars used for the volume profile (about a year of daily bars).
 VOLUME_PROFILE_BARS = 250
+BENCHMARK_COLOR = "#ab47bc"
+
+
+def _signed(value: float) -> str:
+    return (
+        QLocale().toString(value, "f", 1) if value <= 0 else "+" + QLocale().toString(value, "f", 1)
+    )
+
 
 DEFAULT_SIZE = (1400, 860)
 DEFAULT_MAIN_SPLIT = [240, 900, 280]
@@ -115,6 +126,9 @@ class MainWindow(QMainWindow):
         self._update_worker: Worker | None = None
         self.daily_scan: DailyScanController | None = None
         self._summary_dialog: DaySummaryDialog | None = None
+        self._benchmark_seq = 0
+        self.benchmark_summary = ""
+        self._benchmark_workers: set[Worker] = set()
         if market_service is not None:
             self.daily_scan = DailyScanController(settings, market_service,
                                                   self._watchlist_symbols, parent=self)  # fmt: skip
@@ -343,6 +357,15 @@ class MainWindow(QMainWindow):
         self.volume_profile_action.setStatusTip(self.volume_profile_action.toolTip())
         self.volume_profile_action.toggled.connect(self._on_volume_profile_toggled)
         view_menu.addAction(self.volume_profile_action)
+        self.benchmark_action = QAction(self)
+        self.benchmark_action.setCheckable(True)
+        self.benchmark_action.setChecked(self._settings.benchmark_on())
+        self.benchmark_action.toggled.connect(self._on_benchmark_toggled)
+        view_menu.addAction(self.benchmark_action)
+        self.benchmark_choose_action = QAction(strings.ACTION_BENCHMARK_CHOOSE, self)
+        self.benchmark_choose_action.triggered.connect(self.choose_benchmark)
+        view_menu.addAction(self.benchmark_choose_action)
+        self._update_benchmark_label()
         self.reset_layout_action = QAction(strings.ACTION_RESET_LAYOUT, self)
         self.reset_layout_action.triggered.connect(self.reset_layout)
         view_menu.addAction(self.reset_layout_action)
@@ -490,9 +513,87 @@ class MainWindow(QMainWindow):
             strings.LEVEL_ALERTS_CREATED.format(count=len(created), symbol=series.symbol), 8000
         )
 
+    # Benchmark comparison -------------------------------------------------------
+    def _update_benchmark_label(self) -> None:
+        self.benchmark_action.setText(
+            strings.ACTION_BENCHMARK.format(symbol=self._settings.benchmark())
+        )
+
+    def _on_benchmark_toggled(self, enabled: bool) -> None:
+        self._settings.set_benchmark_on(enabled)
+        self._draw_benchmark()
+
+    def choose_benchmark(self) -> None:
+        text, ok = QInputDialog.getText(self, strings.ACTION_BENCHMARK_CHOOSE.rstrip("…"),
+                                        strings.BENCHMARK_PROMPT,
+                                        text=self._settings.benchmark())  # fmt: skip
+        if ok:
+            self.set_benchmark(text)
+
+    def set_benchmark(self, raw: str) -> None:
+        try:
+            symbol = normalize_symbol(raw)
+        except UserError as exc:
+            QMessageBox.warning(self, strings.APP_TITLE, exc.user_message)
+            return
+        self._settings.set_benchmark(symbol)
+        self._update_benchmark_label()
+        if not self.benchmark_action.isChecked():
+            self.benchmark_action.setChecked(True)  # draws through the toggle
+        else:
+            self._draw_benchmark()
+
+    def _draw_benchmark(self) -> None:
+        self._benchmark_seq += 1
+        seq = self._benchmark_seq
+        series = self.chart.current_series
+        bench = self._settings.benchmark()
+        if (not self.benchmark_action.isChecked() or series is None or self.market is None
+                or series.bars.empty or series.symbol == bench
+                or series.symbol.startswith("CSV:")):  # fmt: skip
+            self.chart.set_overlay("benchmark", [])
+            return
+        service, interval, bars = self.market.service, series.interval, series.bars
+
+        def done(bench_bars: pd.DataFrame) -> None:
+            if not shiboken6.isValid(self) or seq != self._benchmark_seq:
+                return
+            line = benchmark_line(bars, bench_bars)
+            if line is None:
+                self.chart.set_overlay("benchmark", [])
+                self.statusBar().showMessage(strings.BENCHMARK_NO_OVERLAP.format(bench=bench))
+                return
+            times = chart_times(bars.index)
+            offset = len(bars) - len(line.values)
+            points = [{"time": times[offset + i], "value": float(v)}
+                      for i, v in enumerate(line.values) if v == v]  # fmt: skip
+            self.chart.set_overlay("benchmark", [{
+                "kind": "line", "points": points, "color": BENCHMARK_COLOR, "width": 2,
+                "style": 0, "title": bench, "lastValue": True,
+            }])  # fmt: skip
+            summary = strings.BENCHMARK_SUMMARY.format(
+                start=line.start.strftime("%d/%m/%Y"), asset=series.symbol, bench=bench,
+                asset_ret=_signed(line.asset_return_pct),
+                bench_ret=_signed(line.benchmark_return_pct), diff=_signed(line.relative_pct),
+            )  # fmt: skip
+            self.benchmark_summary = summary
+            self.statusBar().showMessage(summary, 30000)
+
+        def fail(exc: BaseException) -> None:
+            if shiboken6.isValid(self) and seq == self._benchmark_seq:
+                self.chart.set_overlay("benchmark", [])
+                self.statusBar().showMessage(strings.BENCHMARK_FAILED.format(
+                    bench=bench, error=user_message_for(exc)))  # fmt: skip
+
+        worker = start_worker(lambda: service.load(bench, interval).series.bars, done, fail)
+        self._benchmark_workers.add(worker)
+        worker.signals.succeeded.connect(lambda _r: self._benchmark_workers.discard(worker))
+        worker.signals.failed.connect(lambda _e: self._benchmark_workers.discard(worker))
+
     def _on_volume_profile_toggled(self, enabled: bool) -> None:
         self._settings.set_volume_profile(enabled)
         self._draw_volume_profile()
+        self._draw_benchmark()
 
     def _draw_volume_profile(self) -> None:
         series = self.chart.current_series

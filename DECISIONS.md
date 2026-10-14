@@ -652,3 +652,12 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
 - It opens at start-up only when the watchlist has symbols; this can be turned off from the
   window. Data is loaded cache-first in a worker. The market-open badge uses regular US hours
   on weekdays (holidays are not modelled).
+
+## D-039 — Benchmark in the chart
+
+- The benchmark (SPY by default) is drawn as one line in the price pane, rebased to the
+  asset's close at the first common bar of the last 250 bars. Same scale, no second axis
+  (dual axes mislead); the line shows relative performance from that date. The status bar
+  states both returns and the difference in percentage points.
+- It is loaded cache-first in a worker with the chart's interval, and stale replies are
+  dropped. Days missing from either series are gaps, never filled.

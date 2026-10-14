@@ -82,3 +82,42 @@ def compare(closes_by_symbol: dict[str, pd.DataFrame], period_days: int | None) 
         performance=performance,
         metrics=tuple(metrics),
     )
+
+
+@dataclass(frozen=True)
+class BenchmarkLine:
+    """Benchmark closes rebased to the asset's close at the start of the window."""
+
+    values: pd.Series  # aligned to the asset's bars from the window start (NaN where missing)
+    asset_return_pct: float
+    benchmark_return_pct: float
+    start: pd.Timestamp
+
+    @property
+    def relative_pct(self) -> float:
+        """Asset return minus benchmark return over the window (percentage points)."""
+        return self.asset_return_pct - self.benchmark_return_pct
+
+
+def benchmark_line(asset: pd.DataFrame, benchmark: pd.DataFrame,
+                   window: int = 250) -> BenchmarkLine | None:  # fmt: skip
+    """Rebase ``benchmark`` onto ``asset`` over the last ``window`` bars of the asset.
+
+    Only bars present in both series are used; None when they share fewer than 2.
+    """
+    tail = asset["close"].tail(window)
+    common = tail.index.intersection(benchmark.index)
+    if len(common) < 2:
+        return None
+    start = common[0]
+    bench = benchmark["close"].reindex(tail.index).loc[start:]
+    base_asset = float(tail.loc[start])
+    base_bench = float(benchmark.loc[start, "close"])
+    rebased = bench / base_bench * base_asset
+    last = common[-1]
+    return BenchmarkLine(
+        values=rebased,
+        asset_return_pct=(float(tail.loc[last]) / base_asset - 1) * 100,
+        benchmark_return_pct=(float(benchmark.loc[last, "close"]) / base_bench - 1) * 100,
+        start=pd.Timestamp(start),
+    )

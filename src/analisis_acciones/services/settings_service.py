@@ -37,6 +37,9 @@ KEY_DAILY_SCAN = "scanner.daily_enabled"
 KEY_VOLUME_PROFILE = "chart.volume_profile"
 KEY_SUMMARY_ON_START = "ui.summary_on_start"
 KEY_INDICATOR_TEMPLATES = "chart.indicator_templates"
+KEY_BENCHMARK = "chart.benchmark"
+KEY_BENCHMARK_ON = "chart.benchmark_on"
+DEFAULT_BENCHMARK = "SPY"
 KEY_SCAN_SNAPSHOT = "scanner.daily_snapshot"
 
 
@@ -161,6 +164,19 @@ class SettingsService:
         self._repo.set(KEY_WATCHLIST, int(list_id))
 
     # Layout ----------------------------------------------------------------
+    def benchmark(self) -> str:
+        raw = self._repo.get(KEY_BENCHMARK)
+        return raw if isinstance(raw, str) and raw else DEFAULT_BENCHMARK
+
+    def set_benchmark(self, symbol: str) -> None:
+        self._repo.set(KEY_BENCHMARK, symbol)
+
+    def benchmark_on(self) -> bool:
+        return self._repo.get(KEY_BENCHMARK_ON) is True
+
+    def set_benchmark_on(self, enabled: bool) -> None:
+        self._repo.set(KEY_BENCHMARK_ON, bool(enabled))
+
     def summary_on_start(self) -> bool:
         return self._repo.get(KEY_SUMMARY_ON_START) is not False
 
