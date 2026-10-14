@@ -518,3 +518,15 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   the alert.
 - Alerts are not created for finished patterns (target reached or invalidated), because
   nothing is left to watch.
+
+## D-030 — Watchlist scanner
+
+- `services/scanner.py` (Qt-free) runs the chart's own deterministic tools on each symbol:
+  analysis rules, chart patterns, Elliott counts in progress, S/R distances and RSI. It uses
+  completed daily bars only (the same rule as alerts) and loads cache-first. Each symbol fails
+  on its own, with a message, without stopping the scan. There are at most 50 symbols per run.
+- **No ranking score.** The table shows the counts of bullish and bearish signals and what
+  they are. Combining them into one "buy score" would present a judgement the rules do not
+  support. The user can sort and filter instead.
+- A pattern counts toward the bullish/bearish columns only if its breakout happened in the
+  last 10 bars. Patterns still in formation are listed, but are not counted as signals.

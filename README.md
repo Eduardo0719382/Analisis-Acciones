@@ -132,6 +132,12 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   0–23,6–38,2–50–61,8–78,6–100 %) y notas. Esc cancela. Se guardan por activo; «Deshacer
   último dibujo» y «Borrar todos». Nota: tras un split, los precios históricos se reajustan y
   los dibujos antiguos pueden quedar desplazados.
+- **Escáner:** *Herramientas → Escáner de la lista…* (Ctrl+E) aplica a la lista de seguimiento
+  (o a los tickers que escriba, hasta 50) las mismas reglas del programa. Por cada activo muestra
+  cierre, cambio, RSI 14, número de señales alcistas y bajistas (con el detalle al pasar el
+  ratón), patrones en formación o con ruptura reciente, posible cuenta de Elliott y distancia al
+  soporte y a la resistencia más cercanos. Se puede filtrar y ordenar por columnas; un doble clic
+  abre el activo en el gráfico. Usa solo sesiones diarias cerradas.
 - **Comparar activos:** *Herramientas → Comparar activos…* (hasta 6 tickers; se rellena con el
   activo actual y la lista de seguimiento). Gráfico de rendimiento normalizado a 0 % desde la
   primera sesión común (6M, 1A, 3A, 5A o máximo) y tabla con rentabilidad, volatilidad anual,

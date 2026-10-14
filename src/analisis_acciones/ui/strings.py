@@ -417,3 +417,39 @@ CREATE_LEVEL_ALERTS_TIP = (
 )
 LEVEL_ALERTS_CREATED = "Se crearon {count} alertas de precio para {symbol} (pestaña Alertas)."
 LEVEL_ALERTS_UNAVAILABLE = "Las alertas no están disponibles en esta sesión."
+
+ACTION_SCANNER = "&Escáner de la lista…"
+SCAN_TITLE = "Escáner"
+SCAN_SYMBOLS = "Tickers:"
+SCAN_PLACEHOLDER = "Tickers separados por comas (máximo 50)"
+SCAN_RUN = "Escanear"
+SCAN_EMPTY = "Escriba al menos un ticker."
+SCAN_RUNNING = "Escaneando {count} activos… (puede tardar si hay que descargar datos)"
+SCAN_DONE = (
+    "{count} activos analizados con barras diarias cerradas. Doble clic en una fila para abrirla."
+)
+SCAN_FILTER = "Mostrar:"
+SCAN_FILTERS = {
+    "all": "Todos",
+    "patterns": "Con patrones en formación o rupturas recientes",
+    "bullish": "Con más señales alcistas que bajistas",
+    "bearish": "Con más señales bajistas que alcistas",
+    "elliott": "Con posible cuenta de Elliott en curso",
+}
+SCAN_COLUMNS = (
+    "Ticker",
+    "Cierre",
+    "Cambio %",
+    "RSI 14",
+    "Alcistas",
+    "Bajistas",
+    "Patrones",
+    "Elliott",
+    "Soporte %",
+    "Resistencia %",
+)
+SCAN_NOTE = (
+    "Cada fila resume las mismas reglas de las pestañas Análisis, Patrones y Elliott. "
+    "«Soporte»/«Resistencia» = distancia en % al nivel más cercano. Es una descripción de los "
+    "datos, no una recomendación de inversión."
+)

@@ -64,6 +64,7 @@ from analisis_acciones.ui.panels import Panel
 from analisis_acciones.ui.patterns_panel import PatternsPanel, PatternsView
 from analisis_acciones.ui.projection_panel import ProjectionOutcome, ProjectionPanel
 from analisis_acciones.ui.report import build_report_html, write_pdf
+from analisis_acciones.ui.scanner_dialog import ScannerDialog
 from analisis_acciones.ui.search_box import SearchBox
 from analisis_acciones.ui.theme import apply_theme, tokens_for
 from analisis_acciones.ui.update_dialog import UpdateDialog
@@ -289,6 +290,10 @@ class MainWindow(QMainWindow):
         self.compare_action = QAction(strings.ACTION_COMPARE, self)
         self.compare_action.triggered.connect(self.open_comparison)
         tools_menu.addAction(self.compare_action)
+        self.scanner_action = QAction(strings.ACTION_SCANNER, self)
+        self.scanner_action.setShortcut(QKeySequence("Ctrl+E"))
+        self.scanner_action.triggered.connect(self.open_scanner)
+        tools_menu.addAction(self.scanner_action)
 
         view_menu = menu_bar.addMenu(strings.MENU_VIEW)
         self.dark_theme_action = QAction(strings.ACTION_DARK_THEME, self)
@@ -562,9 +567,8 @@ class MainWindow(QMainWindow):
             return
         self._report_saved(target.exists(), target, "PDF")
 
-    def open_comparison(self) -> None:
-        if self.market is None:
-            return
+    def _candidate_symbols(self) -> list[str]:
+        """The symbol on the chart followed by the active watchlist."""
         symbols: list[str] = []
         if self.current_result is not None and not self.current_result.series.symbol.startswith(
             "CSV:"
@@ -572,6 +576,23 @@ class MainWindow(QMainWindow):
             symbols.append(self.current_result.series.symbol)
         if isinstance(self.watchlist_panel, WatchlistPanel):
             symbols += [s for s in self.watchlist_panel.symbols() if s not in symbols]
+        return symbols
+
+    def open_scanner(self) -> None:
+        if self.market is None:
+            return
+        symbols = self._candidate_symbols()
+        dialog = ScannerDialog(self.market.service, symbols, self)
+        dialog.symbol_activated.connect(self.open_symbol)
+        dialog.show()
+        self._scanner_dialog = dialog
+        if symbols:
+            dialog.run()
+
+    def open_comparison(self) -> None:
+        if self.market is None:
+            return
+        symbols = self._candidate_symbols()
         dialog = ComparisonDialog(self.market.service, tokens_for(self._settings.theme()),
                                   symbols, self)  # fmt: skip
         dialog.show()
