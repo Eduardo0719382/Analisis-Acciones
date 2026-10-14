@@ -43,7 +43,7 @@ from analisis_acciones.charts.overlays import (
 from analisis_acciones.charts.payload import future_times
 from analisis_acciones.data.export import bars_to_csv
 from analisis_acciones.indicators.registry import IndicatorConfig
-from analisis_acciones.models.errors import UserError
+from analisis_acciones.models.errors import AppError, UserError
 from analisis_acciones.models.market import Interval
 from analisis_acciones.services.drawing_service import DrawingService
 from analisis_acciones.services.market_data_service import LoadResult, MarketDataService
@@ -214,9 +214,11 @@ class MainWindow(QMainWindow):
         self.right_tabs.addTab(self.projection_panel, strings.TAB_PROJECTION)
         self.elliott_panel = ElliottPanel()
         self.elliott_panel.overlay_ready.connect(self._draw_elliott)
+        self.elliott_panel.alerts_requested.connect(self.create_level_alerts)
         self.right_tabs.addTab(self.elliott_panel, strings.TAB_ELLIOTT)
         self.patterns_panel = PatternsPanel()
         self.patterns_panel.overlay_ready.connect(self._draw_patterns)
+        self.patterns_panel.alerts_requested.connect(self.create_level_alerts)
         self.right_tabs.addTab(self.patterns_panel, strings.TAB_PATTERNS)
         self.alerts_panel: AlertsPanel | None = None
         if self._alert_service is not None:
@@ -419,6 +421,25 @@ class MainWindow(QMainWindow):
                   "current": tokens.accent, "invalid": tokens.down}  # fmt: skip
         items = elliott_overlay(view.counts, dates, view.selected, colors)
         self.chart.set_overlay("elliott", items)
+
+    def create_level_alerts(self, levels: list[tuple[str, float]]) -> None:
+        """Price alerts for levels picked in the Elliott or Patrones tab."""
+        if self._alert_service is None or self.alerts_panel is None:
+            self.statusBar().showMessage(strings.LEVEL_ALERTS_UNAVAILABLE, 8000)
+            return
+        if self.current_result is None:
+            return
+        series = self.current_result.series
+        close = float(series.bars["close"].iloc[-1])
+        try:
+            created = self._alert_service.create_level_alerts(series.symbol, close, levels)
+        except AppError as exc:
+            QMessageBox.warning(self, strings.APP_TITLE, exc.user_message)
+            return
+        self.alerts_panel.reload()
+        self.statusBar().showMessage(
+            strings.LEVEL_ALERTS_CREATED.format(count=len(created), symbol=series.symbol), 8000
+        )
 
     def _draw_patterns(self, view: object) -> None:
         if not isinstance(view, PatternsView):

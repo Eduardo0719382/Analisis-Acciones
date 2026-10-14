@@ -223,6 +223,8 @@ class AlertRule:
     last_triggered_at: datetime | None = None
     created_at: datetime | None = None
     id: int | None = None
+    #: Where the alert came from (Elliott count, chart pattern...). Display only.
+    note: str = ""
 
     @property
     def spec(self) -> AlertSpec:
@@ -230,7 +232,8 @@ class AlertRule:
 
     @property
     def description(self) -> str:
-        return f"{self.symbol}: {self.spec.describe(self.params)}"
+        text = f"{self.symbol}: {self.spec.describe(self.params)}"
+        return f"{text} ({self.note})" if self.note else text
 
 
 @dataclass(frozen=True)

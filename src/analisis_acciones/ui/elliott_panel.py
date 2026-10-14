@@ -58,6 +58,8 @@ def count_name(count: WaveCount) -> str:
 class ElliottPanel(QWidget):
     #: New ElliottView to draw, or None to clear the chart overlay.
     overlay_ready = Signal(object)
+    #: [(note, price), ...] levels of the selected count to watch with price alerts.
+    alerts_requested = Signal(list)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -105,6 +107,10 @@ class ElliottPanel(QWidget):
         splitter.addWidget(self.tree)
         splitter.addWidget(details_scroll)
         splitter.setStretchFactor(1, 2)
+        self.alert_button = QPushButton(strings.CREATE_LEVEL_ALERTS)
+        self.alert_button.setToolTip(strings.CREATE_LEVEL_ALERTS_TIP)
+        self.alert_button.setEnabled(False)
+        self.alert_button.clicked.connect(self._request_alerts)
         disclaimer = QLabel(strings.ELL_DISCLAIMER)
         disclaimer.setObjectName("detailsSource")
         disclaimer.setWordWrap(True)
@@ -115,6 +121,7 @@ class ElliottPanel(QWidget):
         layout.addWidget(self.run_button)
         layout.addWidget(self.summary)
         layout.addWidget(splitter, stretch=1)
+        layout.addWidget(self.alert_button)
         layout.addWidget(disclaimer)
 
     # Data ----------------------------------------------------------------------
@@ -126,6 +133,7 @@ class ElliottPanel(QWidget):
             self.result = None
             self.tree.clear()
             self.details.clear()
+            self.alert_button.setEnabled(False)
             self.summary.setText(strings.ELL_STALE)
             self.overlay_ready.emit(None)
 
@@ -210,7 +218,23 @@ class ElliottPanel(QWidget):
     def _on_selection(self, *_args: object) -> None:
         count = self.selected
         self.details.setText(self._details(count) if count is not None else "")
+        self.alert_button.setEnabled(bool(self.alert_levels()))
         self._emit_current()
+
+    def alert_levels(self) -> list[tuple[str, float]]:
+        count = self.selected
+        if count is None:
+            return []
+        name = f"Elliott {count_name(count)}"
+        levels = [(f"{name}: {t.label}", t.price) for t in count.targets]
+        if count.invalidation is not None:
+            levels.append((f"{name}: invalidación", count.invalidation))
+        return levels
+
+    def _request_alerts(self) -> None:
+        levels = self.alert_levels()
+        if levels:
+            self.alerts_requested.emit(levels)
 
     def _details(self, count: WaveCount) -> str:
         loc = QLocale()

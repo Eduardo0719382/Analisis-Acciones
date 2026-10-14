@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 from analisis_acciones.models.errors import user_message_for
 from analisis_acciones.models.market import BarSeries
 from analisis_acciones.patterns.chart_patterns import (
+    CONFIRMED,
     FORMING,
     ChartPattern,
     PatternResult,
@@ -54,6 +55,8 @@ class PatternsView:
 class PatternsPanel(QWidget):
     #: New PatternsView to draw, or None to clear the chart overlays.
     overlay_ready = Signal(object)
+    #: [(note, price), ...] levels of the selection to watch with price alerts.
+    alerts_requested = Signal(list)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -104,6 +107,10 @@ class PatternsPanel(QWidget):
         splitter.addWidget(self.tree)
         splitter.addWidget(scroll)
         splitter.setStretchFactor(1, 2)
+        self.alert_button = QPushButton(strings.CREATE_LEVEL_ALERTS)
+        self.alert_button.setToolTip(strings.CREATE_LEVEL_ALERTS_TIP)
+        self.alert_button.setEnabled(False)
+        self.alert_button.clicked.connect(self._request_alerts)
         disclaimer = QLabel(strings.PAT_DISCLAIMER)
         disclaimer.setObjectName("detailsSource")
         disclaimer.setWordWrap(True)
@@ -114,6 +121,7 @@ class PatternsPanel(QWidget):
         layout.addWidget(self.run_button)
         layout.addWidget(self.summary)
         layout.addWidget(splitter, stretch=1)
+        layout.addWidget(self.alert_button)
         layout.addWidget(disclaimer)
 
     # Data ----------------------------------------------------------------------
@@ -125,6 +133,7 @@ class PatternsPanel(QWidget):
             self.result = None
             self.tree.clear()
             self.details.clear()
+            self.alert_button.setEnabled(False)
             self.summary.setText(strings.PAT_STALE)
             self.overlay_ready.emit(None)
 
@@ -243,7 +252,25 @@ class PatternsPanel(QWidget):
             ))  # fmt: skip
         else:
             self.details.clear()
+        self.alert_button.setEnabled(bool(self.alert_levels()))
         self._emit_current()
+
+    def alert_levels(self) -> list[tuple[str, float]]:
+        chosen = self.selected
+        if isinstance(chosen, Level) and self.result is not None:
+            role = self._role(chosen, self.result.close)
+            return [(f"{role} ×{chosen.touches}", chosen.price)]
+        if not isinstance(chosen, ChartPattern) or chosen.status not in (FORMING, CONFIRMED):
+            return []  # finished patterns have nothing left to watch
+        levels = [(f"{chosen.name}: {t.label.lower()}", t.price) for t in chosen.targets]
+        if chosen.invalidation is not None:
+            levels.append((f"{chosen.name}: invalidación", chosen.invalidation))
+        return levels
+
+    def _request_alerts(self) -> None:
+        levels = self.alert_levels()
+        if levels:
+            self.alerts_requested.emit(levels)
 
     def _pattern_details(self, pattern: ChartPattern) -> str:
         lines = [f"{pattern.name} — {strings.PAT_STATUS[pattern.status]}"]

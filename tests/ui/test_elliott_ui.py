@@ -94,3 +94,28 @@ def test_new_data_clears_counts(qtbot: QtBot, window: MainWindow) -> None:
     assert panel.result is None and panel.tree.topLevelItemCount() == 0
     qtbot.waitUntil(lambda: "elliott" not in state(qtbot, window)["overlayGroups"],
                     timeout=10000)  # fmt: skip
+
+
+def test_alerts_from_selected_count(qtbot: QtBot, settings: SettingsService,
+                                    market: MarketDataService) -> None:  # fmt: skip
+    from analisis_acciones.alerts.service import AlertService
+
+    alerts = AlertService(open_database(":memory:"), market)
+    win = MainWindow(settings, market_service=market, alert_service=alerts)
+    qtbot.addWidget(win)
+    assert win.market is not None
+    with qtbot.waitSignal(win.market.load_finished, timeout=5000):
+        win.open_symbol("TEST")
+    panel = win.elliott_panel
+    assert not panel.alert_button.isEnabled()
+    panel.threshold.setValue(5.0)
+    panel.run()
+    qtbot.waitUntil(lambda: panel.result is not None, timeout=10000)
+    assert panel.alert_button.isEnabled()  # current count selected: targets + invalidation
+    expected = panel.alert_levels()
+    panel.alert_button.click()
+    rules = alerts.alerts()
+    assert len(rules) == len(expected) and all(r.note.startswith("Elliott") for r in rules)
+    assert "alertas de precio para TEST" in win.statusBar().currentMessage()
+    assert win.alerts_panel is not None and win.alerts_panel.table.rowCount() == len(rules)
+    alerts.close()

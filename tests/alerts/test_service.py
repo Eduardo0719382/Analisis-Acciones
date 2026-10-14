@@ -109,3 +109,20 @@ def test_in_progress_session_bar_is_ignored(
     clock.now = datetime(2023, 3, 20, 12, 0, tzinfo=NEW_YORK).astimezone(UTC)
     alerts.create("TEST", AlertKind.PRICE_ABOVE, {"value": 150})
     assert alerts.check_all().events == ()
+
+
+def test_level_alerts_pick_direction_and_keep_note(alerts: AlertService) -> None:
+    created = alerts.create_level_alerts(
+        "test", 110, [("Elliott impulso: objetivo", 125.456), ("Elliott impulso: invalidación", 95)]
+    )
+    assert [r.kind for r in created] == [AlertKind.PRICE_ABOVE, AlertKind.PRICE_BELOW]
+    assert [r.description for r in alerts.alerts()] == [
+        "TEST: Cierre > 125.46 (Elliott impulso: objetivo)",
+        "TEST: Cierre < 95.00 (Elliott impulso: invalidación)",
+    ]
+
+
+def test_note_is_single_line_and_bounded(alerts: AlertService) -> None:
+    rule = alerts.create("TEST", AlertKind.PRICE_ABOVE, {"value": 105}, note="a\nb  " + "x" * 500)
+    assert "\n" not in rule.note and len(rule.note) == 120
+    assert alerts.alerts()[0].note == rule.note

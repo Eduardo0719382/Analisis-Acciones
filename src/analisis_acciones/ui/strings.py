@@ -409,3 +409,11 @@ PAT_DISCLAIMER = (
     "historial de arriba). Los objetivos son la medida clásica del patrón, no una predicción. "
     "No es una recomendación de inversión."
 )
+
+CREATE_LEVEL_ALERTS = "Crear alertas de precio"
+CREATE_LEVEL_ALERTS_TIP = (
+    "Crea alertas de cierre por encima/debajo de los niveles de la selección (objetivos e "
+    "invalidación). Se comprueban con las demás alertas."
+)
+LEVEL_ALERTS_CREATED = "Se crearon {count} alertas de precio para {symbol} (pestaña Alertas)."
+LEVEL_ALERTS_UNAVAILABLE = "Las alertas no están disponibles en esta sesión."

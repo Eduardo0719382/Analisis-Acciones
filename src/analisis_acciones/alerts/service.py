@@ -31,6 +31,8 @@ from analisis_acciones.storage.database import transaction
 
 logger = logging.getLogger(__name__)
 
+MAX_NOTE = 120
+
 
 @dataclass(frozen=True)
 class AlertEvent:
@@ -79,27 +81,35 @@ class AlertService:
                 self._conn.close()
 
     # CRUD --------------------------------------------------------------------
-    def create(self, symbol: str, kind: AlertKind | str, params: dict[str, Any]) -> AlertRule:
+    def create(self, symbol: str, kind: AlertKind | str, params: dict[str, Any],
+               note: str = "") -> AlertRule:  # fmt: skip
         kind = AlertKind(kind)
+        note = " ".join(str(note).split())[:MAX_NOTE]
         if is_csv_symbol(symbol):
             clean = CSV_PREFIX + symbol.strip()[len(CSV_PREFIX) :].upper()
         else:
             clean = normalize_symbol(symbol)
         created = self._clock()
-        rule = AlertRule(clean, kind, validate_alert_params(kind, params), created_at=created)
+        rule = AlertRule(clean, kind, validate_alert_params(kind, params), created_at=created,
+                         note=note)  # fmt: skip
         with self._db() as db:
             cursor = db.execute(
-                "INSERT INTO alerts (symbol, kind, params, enabled, armed, created_at) "
-                "VALUES (?, ?, ?, 1, 1, ?)",
-                (
-                    rule.symbol,
-                    rule.kind.value,
-                    json.dumps(rule.params),
-                    created.isoformat(),
-                ),
-            )
+                "INSERT INTO alerts (symbol, kind, params, enabled, armed, created_at, note) "
+                "VALUES (?, ?, ?, 1, 1, ?, ?)",
+                (rule.symbol, rule.kind.value, json.dumps(rule.params), created.isoformat(),
+                 note),
+            )  # fmt: skip
         rule.id = int(cursor.lastrowid or 0)
         return rule
+
+    def create_level_alerts(self, symbol: str, close: float,
+                            levels: list[tuple[str, float]]) -> list[AlertRule]:  # fmt: skip
+        """One close-above/below alert per (note, price): above the last close -> 'above'."""
+        rules = []
+        for note, price in levels:
+            kind = AlertKind.PRICE_ABOVE if price > close else AlertKind.PRICE_BELOW
+            rules.append(self.create(symbol, kind, {"value": round(float(price), 2)}, note))
+        return rules
 
     def alerts(self) -> list[AlertRule]:
         with self._db() as db:
@@ -119,6 +129,7 @@ class AlertService:
                 last_triggered_at=datetime.fromisoformat(row["last_triggered_at"])
                 if row["last_triggered_at"] else None,
                 created_at=datetime.fromisoformat(row["created_at"]), id=row["id"],
+                note=row["note"] or "",
             ))  # fmt: skip
         return rules
 

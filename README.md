@@ -113,6 +113,9 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   el programa y cada 15 minutos mientras está abierto (o con «Comprobar ahora»). Avisan en la
   barra de estado, con una notificación de Windows y en el historial. Las alertas de nivel
   avisan una vez y se rearman cuando la condición deja de cumplirse.
+  En las pestañas **Elliott** y **Patrones**, «Crear alertas de precio» crea alertas para los
+  objetivos y el nivel de invalidación de la cuenta, patrón o nivel seleccionado; cada alerta
+  indica de dónde viene (p. ej. «Cierre > 125,46 (Elliott impulso alcista 1-2-3: …)»).
 - **Backtesting:** *Herramientas → Backtesting…* (Ctrl+B) sobre el activo e intervalo del
   gráfico. Estrategias: cruce de EMAs y reversión con RSI, con parámetros editables, capital,
   comisión (% y fija) y deslizamiento. Muestra capital final, rentabilidad, operaciones,

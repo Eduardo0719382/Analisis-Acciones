@@ -506,3 +506,15 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   for the asset. On random-walk test data most patterns fail, as they should.
 - **Display:** levels are price lines; patterns in formation are always drawn. A past pattern
   is drawn with its target and invalidation when it is selected.
+
+## D-029 — Alerts from Elliott counts, chart patterns and levels
+
+- No new alert engine: the levels of a selection become ordinary close-above/below alerts.
+  The direction is chosen from the last close: a level above it becomes "Cierre >", and a
+  level below it becomes "Cierre <". This reuses the existing hysteresis and the completed-bar
+  rules.
+- Migration 0006 adds a `note` column: one line of at most 120 characters, written by the
+  application and shown in the description, so the user knows which count or pattern created
+  the alert.
+- Alerts are not created for finished patterns (target reached or invalidated), because
+  nothing is left to watch.
