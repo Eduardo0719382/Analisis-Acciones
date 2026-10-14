@@ -158,6 +158,19 @@ class AlertService:
             for r in rows
         ]  # fmt: skip
 
+    def record_event(self, symbol: str, description: str, message: str,
+                     bar_date: date) -> AlertEvent:  # fmt: skip
+        """Add an event that did not come from an alert rule (e.g. the daily scan)."""
+        event = AlertEvent(None, symbol, description, message, bar_date, self._clock())
+        with self._db() as db:
+            db.execute(
+                "INSERT INTO alert_events (alert_id, symbol, description, message, bar_date, "
+                "triggered_at) VALUES (NULL, ?, ?, ?, ?, ?)",
+                (symbol, description, message, bar_date.isoformat(),
+                 event.triggered_at.isoformat()),
+            )  # fmt: skip
+        return event
+
     def clear_events(self) -> None:
         with self._db() as db:
             db.execute("DELETE FROM alert_events")

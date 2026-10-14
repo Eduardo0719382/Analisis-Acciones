@@ -146,6 +146,13 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
     (colores distinguibles también con daltonismo). El HTML no contiene scripts ni recursos
     externos.
   - **Datos (CSV)** para Excel u otra hoja de cálculo.
+- **Escaneo diario automático:** *Herramientas → Escaneo diario automático de la lista*
+  (activado por defecto). Mientras el programa está abierto, una vez por sesión cerrada (y al
+  iniciarlo si falta la del último día) escanea la lista de seguimiento y **avisa solo de lo
+  nuevo** respecto al escaneo anterior: patrones que aparecen o se rompen y señales nuevas. Los
+  avisos llegan como las alertas (notificación de Windows e historial de la pestaña Alertas).
+  *Ver el último escaneo diario…* abre los resultados para revisarlos o exportar el informe.
+  La primera vez que se ve un activo solo se toma como referencia, sin avisar.
 - **Comparar activos:** *Herramientas → Comparar activos…* (hasta 6 tickers; se rellena con el
   activo actual y la lista de seguimiento). Gráfico de rendimiento normalizado a 0 % desde la
   primera sesión común (6M, 1A, 3A, 5A o máximo) y tabla con rentabilidad, volatilidad anual,

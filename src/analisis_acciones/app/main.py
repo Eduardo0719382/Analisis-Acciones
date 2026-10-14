@@ -126,6 +126,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             window.restore_last_symbol()
             window.schedule_startup_update_check()
             window.start_alert_schedule()
+            window.start_daily_scan()
         code = app.exec()
         restart = window.restart_requested
     finally:

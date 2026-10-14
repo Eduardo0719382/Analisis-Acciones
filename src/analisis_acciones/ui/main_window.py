@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from datetime import date
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -45,8 +46,10 @@ from analisis_acciones.data.export import bars_to_csv
 from analisis_acciones.indicators.registry import IndicatorConfig
 from analisis_acciones.models.errors import AppError, UserError
 from analisis_acciones.models.market import Interval
+from analisis_acciones.services.daily_scan import Novelty
 from analisis_acciones.services.drawing_service import DrawingService
 from analisis_acciones.services.market_data_service import LoadResult, MarketDataService
+from analisis_acciones.services.scanner import ScanResult
 from analisis_acciones.services.settings_service import SettingsService, Theme
 from analisis_acciones.services.update_service import UpdateCheck, UpdateService
 from analisis_acciones.services.watchlist_service import WatchlistService
@@ -55,6 +58,7 @@ from analisis_acciones.ui.alerts_panel import AlertsPanel
 from analisis_acciones.ui.analysis_panel import AnalysisPanel
 from analisis_acciones.ui.backtest_dialog import BacktestDialog
 from analisis_acciones.ui.comparison_dialog import ComparisonDialog
+from analisis_acciones.ui.daily_scan import DailyScanController
 from analisis_acciones.ui.details_panel import DetailsPanel
 from analisis_acciones.ui.disclaimer import DisclaimerDialog
 from analisis_acciones.ui.elliott_panel import ElliottPanel, ElliottView
@@ -102,6 +106,11 @@ class MainWindow(QMainWindow):
         self.current_result: LoadResult | None = None
         self.restart_requested = False
         self._update_worker: Worker | None = None
+        self.daily_scan: DailyScanController | None = None
+        if market_service is not None:
+            self.daily_scan = DailyScanController(settings, market_service,
+                                                  self._watchlist_symbols, parent=self)  # fmt: skip
+            self.daily_scan.finished.connect(self._on_daily_scan_finished)
         self.setWindowTitle(strings.APP_TITLE)
         self.setMinimumSize(800, 500)
 
@@ -294,6 +303,15 @@ class MainWindow(QMainWindow):
         self.scanner_action.setShortcut(QKeySequence("Ctrl+E"))
         self.scanner_action.triggered.connect(self.open_scanner)
         tools_menu.addAction(self.scanner_action)
+        self.daily_scan_action = QAction(strings.ACTION_DAILY_SCAN, self)
+        self.daily_scan_action.setCheckable(True)
+        self.daily_scan_action.setChecked(self._settings.daily_scan_enabled())
+        self.daily_scan_action.toggled.connect(self._on_daily_scan_toggled)
+        tools_menu.addAction(self.daily_scan_action)
+        self.last_daily_scan_action = QAction(strings.ACTION_LAST_DAILY_SCAN, self)
+        self.last_daily_scan_action.setEnabled(False)
+        self.last_daily_scan_action.triggered.connect(self.open_last_daily_scan)
+        tools_menu.addAction(self.last_daily_scan_action)
 
         view_menu = menu_bar.addMenu(strings.MENU_VIEW)
         self.dark_theme_action = QAction(strings.ACTION_DARK_THEME, self)
@@ -588,6 +606,63 @@ class MainWindow(QMainWindow):
         self._scanner_dialog = dialog
         if symbols:
             dialog.run()
+
+    # Daily scan ----------------------------------------------------------------
+    def _watchlist_symbols(self) -> list[str]:
+        if isinstance(self.watchlist_panel, WatchlistPanel):
+            return [s for s in self.watchlist_panel.symbols() if not s.startswith("CSV:")]
+        return []
+
+    def start_daily_scan(self, first_delay_ms: int | None = None) -> None:
+        if self.daily_scan is None:
+            return
+        if first_delay_ms is None:
+            self.daily_scan.start()
+        else:
+            self.daily_scan.start(first_delay_ms)
+
+    def _on_daily_scan_toggled(self, enabled: bool) -> None:
+        self._settings.set_daily_scan_enabled(enabled)
+        if enabled and self.daily_scan is not None:
+            self.daily_scan.maybe_run()
+
+    def _on_daily_scan_finished(self, result: ScanResult, novelties: list[Novelty]) -> None:
+        self.last_daily_scan_action.setEnabled(True)
+        if not result.rows:
+            self.statusBar().showMessage(strings.DAILY_SCAN_FAILED, 15000)
+            return
+        if not novelties:
+            self.statusBar().showMessage(strings.DAILY_SCAN_NONE.format(count=len(result.rows)),
+                                         15000)  # fmt: skip
+            return
+        symbols = len({n.symbol for n in novelties})
+        summary = strings.DAILY_SCAN_DONE.format(count=len(novelties), symbols=symbols)
+        events: list[AlertEvent] = []
+        if self._alert_service is not None:
+            for novelty in novelties:
+                icon = "▲" if novelty.bias > 0 else "▼" if novelty.bias < 0 else "●"
+                try:
+                    events.append(self._alert_service.record_event(
+                        novelty.symbol, strings.DAILY_SCAN_EVENT.format(symbol=novelty.symbol),
+                        f"{icon} {novelty.text}", novelty.bar_date or date.today(),
+                    ))  # fmt: skip
+                except AppError as exc:
+                    logger.warning("Could not record daily scan event: %s", exc)
+            if self.alerts_panel is not None:
+                self.alerts_panel.reload()
+        if events:
+            self._notify_alerts(events)
+        self.statusBar().showMessage(summary, 30000)
+
+    def open_last_daily_scan(self) -> None:
+        if self.market is None or self.daily_scan is None or self.daily_scan.last_result is None:
+            return
+        result = self.daily_scan.last_result
+        dialog = ScannerDialog(self.market.service, [r.symbol for r in result.rows], self)
+        dialog.symbol_activated.connect(self.open_symbol)
+        dialog.show_result(result)
+        dialog.show()
+        self._scanner_dialog = dialog
 
     def open_comparison(self) -> None:
         if self.market is None:

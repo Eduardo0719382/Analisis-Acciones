@@ -32,6 +32,8 @@ KEY_INDICATORS = "chart.indicators"
 KEY_WATCHLIST = "watchlist.current"
 CHART_TYPES = ("candles", "line")
 KEY_LAST_INTERVAL = "market.last_interval"
+KEY_DAILY_SCAN = "scanner.daily_enabled"
+KEY_SCAN_SNAPSHOT = "scanner.daily_snapshot"
 
 
 class SettingsService:
@@ -115,6 +117,20 @@ class SettingsService:
         self._repo.set(KEY_WATCHLIST, int(list_id))
 
     # Layout ----------------------------------------------------------------
+    # Daily scan ----------------------------------------------------------------
+    def daily_scan_enabled(self) -> bool:
+        return self._repo.get(KEY_DAILY_SCAN) is not False
+
+    def set_daily_scan_enabled(self, enabled: bool) -> None:
+        self._repo.set(KEY_DAILY_SCAN, bool(enabled))
+
+    def scan_snapshot(self) -> dict[str, Any] | None:
+        raw = self._repo.get(KEY_SCAN_SNAPSHOT)
+        return raw if isinstance(raw, dict) else None
+
+    def set_scan_snapshot(self, snapshot: dict[str, Any]) -> None:
+        self._repo.set(KEY_SCAN_SNAPSHOT, snapshot)
+
     def layout(self) -> dict[str, Any]:
         """Opaque UI layout state (window geometry, splitter sizes, ...)."""
         raw = self._repo.get(KEY_LAYOUT)

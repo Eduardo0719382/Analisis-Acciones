@@ -548,3 +548,16 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
 - **Print:** cards are stacked in a single column (Chromium splits grid rows badly across
   pages), two per A4 page, and the summary table starts on a new page.
 - Every text that comes from data is HTML-escaped, and CSV cells are formula-safe.
+
+## D-032 — Daily automatic scan
+
+- It runs inside the app, with no OS scheduler or background service. A check every 30
+  minutes, plus one 20 s after start-up, runs the scan when a US session has closed (with the
+  30-minute settle time) after the last stored scan. If no symbol could be analysed
+  (offline), the session is not marked as done, so the scan is retried later.
+- **Only new items are reported.** The stored snapshot keeps, per symbol, the signals and
+  patterns found (a pattern's state is part of the item, so "forming" → "breakout" is new).
+  A symbol seen for the first time only sets a baseline. Symbols that fail keep their previous
+  items, so a temporary error does not cause false "new" items later.
+- Novelties are written to the alert history (`alert_events` with no rule) and use the same
+  notification path as alerts, so the user has one place to look.
