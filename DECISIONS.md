@@ -530,3 +530,21 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   support. The user can sort and filter instead.
 - A pattern counts toward the bullish/bearish columns only if its breakout happened in the
   last 10 bars. Patterns still in formation are listed, but are not counted as signals.
+
+## D-031 — Visual scanner report
+
+- **Format:** one self-contained HTML page (inline CSS and SVG, no scripts and no external
+  resources), so it opens in any browser and cannot run code. The PDF is the same HTML printed
+  by Chromium (`QWebEnginePage.printToPdf`, with JavaScript disabled), so on paper it looks as
+  on screen. QTextDocument, used for the chart report, cannot lay out these graphics.
+- **For non-specialists:** every card opens with a sentence describing the balance of signals,
+  not a recommendation. There are four visual parts: a mini price chart with the nearest
+  support and resistance, a two-sided signal bar, an RSI gauge with named zones, and the
+  price's position between support and resistance. The report also has a "how to read" box,
+  a glossary, a summary table (the table view of the same data) and the disclaimer.
+- **Colour:** bullish is blue ▲ and bearish is red ▼ (the documented diverging pair; it passes
+  the colour-blindness separation checks, which green and red fail). An icon and a word
+  always go with the colour. Text uses text colours only.
+- **Print:** cards are stacked in a single column (Chromium splits grid rows badly across
+  pages), two per A4 page, and the summary table starts on a new page.
+- Every text that comes from data is HTML-escaped, and CSV cells are formula-safe.

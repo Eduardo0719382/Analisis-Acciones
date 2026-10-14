@@ -138,6 +138,14 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   ratón), patrones en formación o con ruptura reciente, posible cuenta de Elliott y distancia al
   soporte y a la resistencia más cercanos. Se puede filtrar y ordenar por columnas; un doble clic
   abre el activo en el gráfico. Usa solo sesiones diarias cerradas.
+  **Exportar** guarda lo que muestra el filtro como:
+  - **Informe visual (HTML o PDF):** resumen con casillas (cuántos activos tienen más señales
+    alcistas o bajistas y cuántos tienen patrones) y una ficha por activo con una frase clara, un
+    mini-gráfico del precio con soporte y resistencia, la barra de señales, el indicador RSI y
+    los patrones. Incluye cómo leer cada ficha y un glosario. Alcista = ▲ azul, bajista = ▼ rojo
+    (colores distinguibles también con daltonismo). El HTML no contiene scripts ni recursos
+    externos.
+  - **Datos (CSV)** para Excel u otra hoja de cálculo.
 - **Comparar activos:** *Herramientas → Comparar activos…* (hasta 6 tickers; se rellena con el
   activo actual y la lista de seguimiento). Gráfico de rendimiento normalizado a 0 % desde la
   primera sesión común (6M, 1A, 3A, 5A o máximo) y tabla con rentabilidad, volatilidad anual,

@@ -453,3 +453,12 @@ SCAN_NOTE = (
     "«Soporte»/«Resistencia» = distancia en % al nivel más cercano. Es una descripción de los "
     "datos, no una recomendación de inversión."
 )
+
+SCAN_EXPORT = "Exportar"
+SCAN_EXPORT_HTML = "Informe visual (HTML, se abre en el navegador)…"
+SCAN_EXPORT_PDF = "Informe visual (PDF, para imprimir o enviar)…"
+SCAN_EXPORT_CSV = "Datos (CSV, para hojas de cálculo)…"
+SCAN_EXPORT_FILTER_NOTE = "Filtro aplicado: {name}."
+SCAN_EXPORT_SAVED = "Guardado en {path}"
+SCAN_EXPORT_FAILED = "No se pudo guardar el archivo: {error}"
+SCAN_EXPORT_WORKING = "Generando PDF…"

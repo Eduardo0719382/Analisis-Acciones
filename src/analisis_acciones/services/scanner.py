@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import date
 
 import numpy as np
 import pandas as pd
@@ -30,6 +31,19 @@ MAX_SYMBOLS = 50
 #: A confirmed pattern counts as "recent" if its breakout is within this many bars.
 RECENT_BARS = 10
 MIN_BARS = 60
+#: Closes kept per row for the report's mini chart.
+HISTORY_BARS = 120
+FORMING_NOTE, BREAKOUT_NOTE = "en formación", "ruptura reciente"
+
+
+@dataclass(frozen=True)
+class PatternNote:
+    name: str
+    state: str  # FORMING_NOTE or BREAKOUT_NOTE
+    bias: int  # +1 bullish, -1 bearish, 0 undecided
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.state})"
 
 
 @dataclass(frozen=True)
@@ -40,10 +54,21 @@ class ScanRow:
     rsi14: float | None
     bullish: tuple[str, ...]  # titles of bullish signals and patterns
     bearish: tuple[str, ...]
-    patterns: tuple[str, ...]  # "Doble suelo (en formación)", ...
+    pattern_notes: tuple[PatternNote, ...]
     elliott: str  # possible count in progress, "" when none
     support_pct: float | None  # distance below the close to the nearest support, %
     resistance_pct: float | None  # distance above the close to the nearest resistance, %
+    support: float | None = None
+    resistance: float | None = None
+    elliott_direction: int = 0
+    as_of: date | None = None
+    #: Last closes (oldest first) and the date of the first one, for the mini chart.
+    history: tuple[float, ...] = ()
+    history_start: date | None = None
+
+    @property
+    def patterns(self) -> tuple[str, ...]:
+        return tuple(str(note) for note in self.pattern_notes)
 
 
 @dataclass(frozen=True)
@@ -70,17 +95,14 @@ def scan_bars(symbol: str, bars: pd.DataFrame) -> ScanRow:
             bearish.append(signal.title)
 
     found = chart_patterns.analyze(bars)
-    patterns: list[str] = []
+    patterns: list[PatternNote] = []
     recent_from = len(bars) - RECENT_BARS
     for pattern in found.patterns:
         if pattern.status == chart_patterns.FORMING:
-            label = f"{pattern.name} (en formación)"
+            patterns.append(PatternNote(pattern.name, FORMING_NOTE, pattern.bias))
         elif pattern.breakout is not None and pattern.breakout >= recent_from:
-            label = f"{pattern.name} (ruptura reciente)"
+            patterns.append(PatternNote(pattern.name, BREAKOUT_NOTE, pattern.bias))
             (bullish if pattern.bias > 0 else bearish).append(pattern.name)
-        else:
-            continue
-        patterns.append(label)
 
     waves = elliott.analyze(bars)
     current = waves.current[0] if waves.current else None
@@ -93,6 +115,9 @@ def scan_bars(symbol: str, bars: pd.DataFrame) -> ScanRow:
 
     supports = [lv.price for lv in found.levels if lv.price < last]
     resistances = [lv.price for lv in found.levels if lv.price >= last]
+    support = max(supports) if supports else None
+    resistance = min(resistances) if resistances else None
+    recent = close.tail(HISTORY_BARS)
     return ScanRow(
         symbol=symbol,
         close=last,
@@ -100,10 +125,16 @@ def scan_bars(symbol: str, bars: pd.DataFrame) -> ScanRow:
         rsi14=rsi_value if np.isfinite(rsi_value) else None,
         bullish=tuple(bullish),
         bearish=tuple(bearish),
-        patterns=tuple(patterns),
+        pattern_notes=tuple(patterns),
         elliott=wave_text,
-        support_pct=(last / max(supports) - 1) * 100 if supports else None,
-        resistance_pct=(min(resistances) / last - 1) * 100 if resistances else None,
+        support_pct=(last / support - 1) * 100 if support else None,
+        resistance_pct=(resistance / last - 1) * 100 if resistance else None,
+        support=support,
+        resistance=resistance,
+        elliott_direction=current.direction if current is not None else 0,
+        as_of=pd.Timestamp(bars.index[-1]).date(),
+        history=tuple(float(v) for v in recent),
+        history_start=pd.Timestamp(recent.index[0]).date(),
     )
 
 

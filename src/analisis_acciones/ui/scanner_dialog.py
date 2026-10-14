@@ -3,17 +3,22 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
+from pathlib import Path
 
 import shiboken6
-from PySide6.QtCore import QLocale, Qt, Signal
+from PySide6.QtCore import QLocale, Qt, QUrl, Signal
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QDialog,
+    QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMenu,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -23,8 +28,10 @@ from PySide6.QtWidgets import (
 
 from analisis_acciones.models.errors import user_message_for
 from analisis_acciones.services.market_data_service import MarketDataService
+from analisis_acciones.services.scan_report import default_file_stem, scan_csv, scan_report_html
 from analisis_acciones.services.scanner import MAX_SYMBOLS, ScanResult, ScanRow, run_scan
 from analisis_acciones.ui import strings
+from analisis_acciones.ui.html_pdf import HtmlPdfWriter
 from analisis_acciones.ui.workers import Worker, start_worker
 
 logger = logging.getLogger(__name__)
@@ -73,6 +80,7 @@ class ScannerDialog(QDialog):
         self._market = market
         self._workers: set[Worker] = set()
         self.scan: ScanResult | None = None
+        self.last_export: Path | None = None
         self.setWindowTitle(strings.SCAN_TITLE)
         self.resize(1100, 600)
 
@@ -93,6 +101,17 @@ class ScannerDialog(QDialog):
         filters.addWidget(QLabel(strings.SCAN_FILTER))
         filters.addWidget(self.filter)
         filters.addStretch(1)
+        self.export_button = QPushButton(strings.SCAN_EXPORT)
+        export_menu = QMenu(self.export_button)
+        export_menu.addAction(strings.SCAN_EXPORT_HTML, lambda: self._ask_and_export("html"))
+        export_menu.addAction(strings.SCAN_EXPORT_PDF, lambda: self._ask_and_export("pdf"))
+        export_menu.addAction(strings.SCAN_EXPORT_CSV, lambda: self._ask_and_export("csv"))
+        self.export_button.setMenu(export_menu)
+        self.export_button.setEnabled(False)
+        filters.addWidget(self.export_button)
+        #: Open exported reports with the system's default program (off in tests).
+        self.open_after_export = True
+        self._pdf_writer: HtmlPdfWriter | None = None
 
         self.table = QTableWidget(0, len(strings.SCAN_COLUMNS))
         self.table.setHorizontalHeaderLabels(strings.SCAN_COLUMNS)
@@ -150,6 +169,7 @@ class ScannerDialog(QDialog):
 
     def show_result(self, result: ScanResult) -> None:
         self.scan = result
+        self.export_button.setEnabled(True)
         self._fill()
         text = strings.SCAN_DONE.format(count=len(result.rows))
         if result.problems:
@@ -187,6 +207,63 @@ class ScannerDialog(QDialog):
             for c, item in enumerate(cells):
                 self.table.setItem(r, c, item)
         self.table.setSortingEnabled(True)
+
+    # Export ------------------------------------------------------------------
+    def visible_result(self) -> ScanResult:
+        """The rows the current filter shows (and the scan's problems)."""
+        assert self.scan is not None
+        mode = str(self.filter.currentData())
+        return ScanResult([r for r in self.scan.rows if matches(r, mode)], self.scan.problems)
+
+    def _ask_and_export(self, kind: str) -> None:
+        filters = {"html": "Página web (*.html)", "pdf": "PDF (*.pdf)", "csv": "CSV (*.csv)"}
+        suggested = str(Path.home() / f"{default_file_stem(datetime.now())}.{kind}")
+        path, _ = QFileDialog.getSaveFileName(self, strings.SCAN_EXPORT, suggested, filters[kind])
+        if path:
+            self.export(kind, Path(path))
+
+    def export(self, kind: str, path: Path) -> None:
+        if self.scan is None:
+            return
+        if path.suffix.lower() != f".{kind}":
+            path = path.with_name(path.name + f".{kind}")
+        result = self.visible_result()
+        mode = str(self.filter.currentData())
+        note = "" if mode == "all" else strings.SCAN_EXPORT_FILTER_NOTE.format(
+            name=strings.SCAN_FILTERS[mode])  # fmt: skip
+        try:
+            if kind == "csv":
+                path.write_text(scan_csv(result), encoding="utf-8-sig")  # BOM: Excel reads UTF-8
+                self._exported(path, open_it=False)
+                return
+            html = scan_report_html(result, datetime.now(), note=note)
+            if kind == "html":
+                path.write_text(html, encoding="utf-8")
+                self._exported(path)
+                return
+        except OSError as exc:
+            self.status.setText(strings.SCAN_EXPORT_FAILED.format(error=exc))
+            return
+        self.status.setText(strings.SCAN_EXPORT_WORKING)
+        self.export_button.setEnabled(False)
+
+        def written(ok: bool) -> None:
+            self._pdf_writer = None
+            if not shiboken6.isValid(self):
+                return
+            self.export_button.setEnabled(True)
+            if ok and path.exists():
+                self._exported(path)
+            else:
+                self.status.setText(strings.SCAN_EXPORT_FAILED.format(error="PDF"))
+
+        self._pdf_writer = HtmlPdfWriter(html, path, written, self)
+
+    def _exported(self, path: Path, open_it: bool = True) -> None:
+        self.status.setText(strings.SCAN_EXPORT_SAVED.format(path=path))
+        self.last_export = path
+        if open_it and self.open_after_export:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
 
     def _activate(self, row: int, _column: int) -> None:
         item = self.table.item(row, 0)
