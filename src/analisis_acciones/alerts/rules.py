@@ -10,7 +10,8 @@ Two kinds of condition:
   event happens, at most once per bar.
 
 Only completed bars are evaluated; the caller removes an in-progress session
-bar so an alert can never fire on a value that later changes.
+(or intraday) bar so an alert can never fire on a value that later changes.
+Alerts run on daily bars by default, or on 1-hour / 15-minute bars.
 """
 
 from __future__ import annotations
@@ -77,6 +78,18 @@ class AlertSpec:
 
 def _num(value: float, decimals: int = 2) -> str:
     return f"{value:.{decimals}f}"
+
+
+#: Intervals an alert can run on, with the name shown in its description.
+ALERT_INTERVALS = {"1D": "", "1h": "1 hora", "15m": "15 min"}
+
+
+def bar_key(stamp: object) -> str:
+    """ISO date for daily bars, ISO date and minute for intraday bars."""
+    ts = pd.Timestamp(stamp)  # type: ignore[arg-type]
+    if ts == ts.normalize():
+        return ts.date().isoformat()
+    return ts.strftime("%Y-%m-%dT%H:%M")
 
 
 def _day(bars: pd.DataFrame) -> date:
@@ -219,12 +232,14 @@ class AlertRule:
     enabled: bool = True
     #: Level alerts: True when the condition was false at the last check (may fire).
     armed: bool = True
-    last_bar: date | None = None
+    #: Key (see ``bar_key``) of the last evaluated bar.
+    last_bar: str | None = None
     last_triggered_at: datetime | None = None
     created_at: datetime | None = None
     id: int | None = None
     #: Where the alert came from (Elliott count, chart pattern...). Display only.
     note: str = ""
+    interval: str = "1D"
 
     @property
     def spec(self) -> AlertSpec:
@@ -232,7 +247,9 @@ class AlertRule:
 
     @property
     def description(self) -> str:
-        text = f"{self.symbol}: {self.spec.describe(self.params)}"
+        name = ALERT_INTERVALS.get(self.interval, self.interval)
+        who = f"{self.symbol} ({name})" if name else self.symbol
+        text = f"{who}: {self.spec.describe(self.params)}"
         return f"{text} ({self.note})" if self.note else text
 
 
@@ -261,7 +278,8 @@ def evaluate(rule: AlertRule, bars: pd.DataFrame) -> Evaluation:
             rule.armed = False
         elif not check.met:
             rule.armed = True
-    elif check.met and rule.last_bar != check.bar_date:
+    key = bar_key(bars.index[-1])
+    if not spec.is_level and check.met and rule.last_bar != key:
         fired = True
-    rule.last_bar = check.bar_date
+    rule.last_bar = key
     return Evaluation(fired, check)

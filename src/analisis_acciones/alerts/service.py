@@ -12,7 +12,10 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any
 
+import pandas as pd
+
 from analisis_acciones.alerts.rules import (
+    ALERT_INTERVALS,
     ALERT_SPECS,
     AlertKind,
     AlertRule,
@@ -82,8 +85,15 @@ class AlertService:
 
     # CRUD --------------------------------------------------------------------
     def create(self, symbol: str, kind: AlertKind | str, params: dict[str, Any],
-               note: str = "") -> AlertRule:  # fmt: skip
+               note: str = "", interval: str = "1D") -> AlertRule:  # fmt: skip
         kind = AlertKind(kind)
+        if interval not in ALERT_INTERVALS:
+            raise UserError(f"bad alert interval {interval!r}",
+                            user_message="Intervalo de alerta no válido.")  # fmt: skip
+        if interval != "1D" and is_csv_symbol(symbol):
+            raise UserError("intraday alert on CSV series",
+                            user_message="Las alertas intradía solo sirven para tickers de "
+                            "Yahoo Finance.")  # fmt: skip
         note = " ".join(str(note).split())[:MAX_NOTE]
         if is_csv_symbol(symbol):
             clean = CSV_PREFIX + symbol.strip()[len(CSV_PREFIX) :].upper()
@@ -91,25 +101,29 @@ class AlertService:
             clean = normalize_symbol(symbol)
         created = self._clock()
         rule = AlertRule(clean, kind, validate_alert_params(kind, params), created_at=created,
-                         note=note)  # fmt: skip
+                         note=note, interval=interval)  # fmt: skip
         with self._db() as db:
             cursor = db.execute(
-                "INSERT INTO alerts (symbol, kind, params, enabled, armed, created_at, note) "
-                "VALUES (?, ?, ?, 1, 1, ?, ?)",
+                "INSERT INTO alerts (symbol, kind, params, enabled, armed, created_at, note, "
+                "interval) VALUES (?, ?, ?, 1, 1, ?, ?, ?)",
                 (rule.symbol, rule.kind.value, json.dumps(rule.params), created.isoformat(),
-                 note),
+                 note, interval),
             )  # fmt: skip
         rule.id = int(cursor.lastrowid or 0)
         return rule
 
-    def create_level_alerts(self, symbol: str, close: float,
-                            levels: list[tuple[str, float]]) -> list[AlertRule]:  # fmt: skip
+    def create_level_alerts(self, symbol: str, close: float, levels: list[tuple[str, float]],
+                            interval: str = "1D") -> list[AlertRule]:  # fmt: skip
         """One close-above/below alert per (note, price): above the last close -> 'above'."""
         rules = []
         for note, price in levels:
             kind = AlertKind.PRICE_ABOVE if price > close else AlertKind.PRICE_BELOW
-            rules.append(self.create(symbol, kind, {"value": round(float(price), 2)}, note))
+            rules.append(self.create(symbol, kind, {"value": round(float(price), 2)}, note,
+                                     interval))  # fmt: skip
         return rules
+
+    def has_intraday_alerts(self) -> bool:
+        return any(r.enabled and r.interval != "1D" for r in self.alerts())
 
     def alerts(self) -> list[AlertRule]:
         with self._db() as db:
@@ -125,11 +139,12 @@ class AlertService:
             rules.append(AlertRule(
                 symbol=row["symbol"], kind=kind, params=params, enabled=bool(row["enabled"]),
                 armed=bool(row["armed"]),
-                last_bar=date.fromisoformat(row["last_bar"]) if row["last_bar"] else None,
+                last_bar=row["last_bar"] or None,
                 last_triggered_at=datetime.fromisoformat(row["last_triggered_at"])
                 if row["last_triggered_at"] else None,
                 created_at=datetime.fromisoformat(row["created_at"]), id=row["id"],
                 note=row["note"] or "",
+                interval=row["interval"] if row["interval"] in ALERT_INTERVALS else "1D",
             ))  # fmt: skip
         return rules
 
@@ -179,16 +194,16 @@ class AlertService:
     def check_all(self) -> CheckSummary:
         """Evaluate every enabled alert on completed daily bars. Never raises for data issues."""
         rules = [r for r in self.alerts() if r.enabled]
-        by_symbol: dict[str, list[AlertRule]] = {}
+        by_symbol: dict[tuple[str, str], list[AlertRule]] = {}
         for rule in rules:
-            by_symbol.setdefault(rule.symbol, []).append(rule)
+            by_symbol.setdefault((rule.symbol, rule.interval), []).append(rule)
 
         events: list[AlertEvent] = []
         problems: list[str] = []
         now = self._clock()
-        for symbol, symbol_rules in by_symbol.items():
+        for (symbol, interval), symbol_rules in by_symbol.items():
             try:
-                result = self._market.load(symbol, Interval.D1)
+                result = self._market.load(symbol, Interval(interval))
             except AppError as exc:
                 problems.append(f"{symbol}: {exc.user_message}")
                 continue
@@ -209,8 +224,11 @@ class AlertService:
                 event = None
                 if outcome.fired and outcome.check is not None:
                     check = outcome.check
+                    message = check.message
+                    if interval != "1D":
+                        message += f" (vela de las {pd.Timestamp(bars.index[-1]):%H:%M})"
                     event = AlertEvent(
-                        rule.id, rule.symbol, rule.description, check.message, check.bar_date, now
+                        rule.id, rule.symbol, rule.description, message, check.bar_date, now
                     )
                     events.append(event)
                 self._save_state(rule, event)
@@ -221,7 +239,7 @@ class AlertService:
             db.execute(
                 "UPDATE alerts SET armed = ?, last_bar = ?, "
                 "last_triggered_at = COALESCE(?, last_triggered_at) WHERE id = ?",
-                (int(rule.armed), rule.last_bar.isoformat() if rule.last_bar else None,
+                (int(rule.armed), rule.last_bar,
                  event.triggered_at.isoformat() if event else None, rule.id),
             )  # fmt: skip
             if event is not None:

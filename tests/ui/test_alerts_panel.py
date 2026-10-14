@@ -84,3 +84,28 @@ def test_main_window_notifies(
     with qtbot.waitSignal(window.alerts_panel.alerts_triggered, timeout=10000):
         window.alerts_panel.check_now()
     assert "Cierre > 105.00" in window.statusBar().currentMessage()
+
+
+def test_dialog_interval_and_fast_schedule(
+    qtbot: QtBot, services: tuple[MarketDataService, AlertService]
+) -> None:
+    from analisis_acciones.ui.alerts_panel import (
+        CHECK_INTERVAL_MS,
+        INTRADAY_CHECK_INTERVAL_MS,
+        AlertsPanel,
+        NewAlertDialog,
+    )
+
+    _market, alerts = services
+    panel = AlertsPanel(alerts)
+    qtbot.addWidget(panel)
+    assert panel.timer.interval() == CHECK_INTERVAL_MS
+    dialog = NewAlertDialog(alerts, "TEST")
+    qtbot.addWidget(dialog)
+    dialog.interval.setCurrentIndex(dialog.interval.findData("15m"))
+    dialog.kind.setCurrentIndex(dialog.kind.findData("price_below"))
+    dialog.accept()
+    assert dialog.created.interval == "15m"
+    panel.reload()
+    assert panel.timer.interval() == INTRADAY_CHECK_INTERVAL_MS
+    assert "(15 min)" in panel.table.item(0, 0).text()

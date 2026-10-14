@@ -124,6 +124,9 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   el programa y cada 15 minutos mientras está abierto (o con «Comprobar ahora»). Avisan en la
   barra de estado, con una notificación de Windows y en el historial. Las alertas de nivel
   avisan una vez y se rearman cuando la condición deja de cumplirse.
+  Cada alerta puede vigilar **velas diarias, de 1 hora o de 15 minutos** (campo «Velas»). Las
+  intradía se comprueban cada 2 minutos sobre velas ya cerradas y el aviso indica la hora de la
+  vela. Las alertas creadas desde Elliott o Patrones usan el intervalo del gráfico.
   En las pestañas **Elliott** y **Patrones**, «Crear alertas de precio» crea alertas para los
   objetivos y el nivel de invalidación de la cuenta, patrón o nivel seleccionado; cada alerta
   indica de dónde viene (p. ej. «Cierre > 125,46 (Elliott impulso alcista 1-2-3: …)»).

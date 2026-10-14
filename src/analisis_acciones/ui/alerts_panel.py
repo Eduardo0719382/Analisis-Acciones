@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from analisis_acciones.alerts.rules import ALERT_SPECS, AlertKind, validate_alert_params
+from analisis_acciones.alerts.rules import ALERT_SPECS, AlertKind, AlertRule, validate_alert_params
 from analisis_acciones.alerts.service import AlertEvent, AlertService, CheckSummary, kind_choices
 from analisis_acciones.models.errors import UserError, user_message_for
 from analisis_acciones.ui import strings
@@ -36,6 +36,9 @@ from analisis_acciones.ui.workers import Worker, start_worker
 logger = logging.getLogger(__name__)
 
 CHECK_INTERVAL_MS = 15 * 60 * 1000
+#: With intraday alerts active the check runs this often (intraday data is cached for
+#: a few minutes, so most checks do not touch the network).
+INTRADAY_CHECK_INTERVAL_MS = 2 * 60 * 1000
 FIRST_CHECK_DELAY_MS = 20 * 1000
 
 
@@ -53,7 +56,11 @@ class NewAlertDialog(QDialog):
             self.kind.addItem(label, value)
         self.kind.currentIndexChanged.connect(self._rebuild_params)
         self.form = QFormLayout()
+        self.interval = QComboBox()
+        for value, label in strings.ALERT_INTERVAL_CHOICES.items():
+            self.interval.addItem(label, value)
         self.form.addRow(strings.ALERT_SYMBOL, self.symbol)
+        self.form.addRow(strings.ALERT_INTERVAL, self.interval)
         self.form.addRow(strings.ALERT_CONDITION, self.kind)
         self.editors: dict[str, QSpinBox | QDoubleSpinBox] = {}
         self.preview = QLabel()
@@ -84,8 +91,8 @@ class NewAlertDialog(QDialog):
         return AlertKind(str(self.kind.currentData()))
 
     def _rebuild_params(self, _index: int = 0) -> None:
-        while self.form.rowCount() > 2:
-            self.form.removeRow(2)
+        while self.form.rowCount() > 3:
+            self.form.removeRow(3)
         self.editors.clear()
         for param in ALERT_SPECS[self.current_kind()].params:
             editor: QSpinBox | QDoubleSpinBox
@@ -115,8 +122,9 @@ class NewAlertDialog(QDialog):
 
     def accept(self) -> None:
         try:
+            interval = str(self.interval.currentData())
             self.created = self._service.create(self.symbol.text(), self.current_kind(),
-                                                self.params())  # fmt: skip
+                                                self.params(), interval=interval)  # fmt: skip
         except UserError as exc:
             self.error.setText(exc.user_message)
             return
@@ -185,6 +193,10 @@ class AlertsPanel(QWidget):
         self.reload()
 
     # Scheduling --------------------------------------------------------------
+    def _update_schedule(self, rules: list[AlertRule]) -> None:
+        intraday = any(r.enabled and r.interval != "1D" for r in rules)
+        self.timer.setInterval(INTRADAY_CHECK_INTERVAL_MS if intraday else CHECK_INTERVAL_MS)
+
     def start_schedule(self, first_delay_ms: int = FIRST_CHECK_DELAY_MS) -> None:
         self.timer.start()
         QTimer.singleShot(first_delay_ms, self.check_now)
@@ -234,6 +246,7 @@ class AlertsPanel(QWidget):
         except Exception as exc:  # e.g. closing: never break the UI
             logger.warning("Could not read alerts: %s", exc)
             return
+        self._update_schedule(rules)
         self.table.setRowCount(len(rules))
         for row, rule in enumerate(rules):
             condition = QTableWidgetItem(rule.description)

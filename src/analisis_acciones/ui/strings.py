@@ -194,10 +194,12 @@ ALERT_CHECKING = "Comprobando alertas…"
 ALERT_CHECKED = "Comprobadas {count} alertas; {fired} nuevas."
 ALERT_PROBLEMS = "{count} incidencia(s) (pase el ratón para ver el detalle)."
 ALERT_EOD_NOTE = (
-    "Las alertas se evalúan sobre barras diarias cerradas mientras el programa está abierto "
-    "(cada 15 minutos y al iniciarlo). Una alerta de nivel avisa al cumplirse la condición y "
-    "se rearma cuando deja de cumplirse."
+    "Las alertas se evalúan sobre velas cerradas del intervalo elegido mientras el programa está "
+    "abierto: diarias cada 15 minutos; intradía (1 hora, 15 min) cada 2 minutos. Una alerta de "
+    "nivel avisa al cumplirse la condición y se rearma cuando deja de cumplirse."
 )
+ALERT_INTERVAL = "Velas"
+ALERT_INTERVAL_CHOICES = {"1D": "Diarias", "1h": "De 1 hora", "15m": "De 15 minutos"}
 ALERT_NOTIFY_TITLE = "Alerta: {description}"
 
 MENU_TOOLS = "&Herramientas"

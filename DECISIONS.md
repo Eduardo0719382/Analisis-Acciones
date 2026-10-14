@@ -618,3 +618,14 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   value area grows from the point of control (POC) towards the larger neighbouring band until
   it holds 70 % of the volume. It is drawn by a series primitive at the right of the price
   pane, with POC/VAH/VAL as price lines, and switched on from the View menu.
+
+## D-036 — Intraday alerts
+
+- An alert has an interval: `1D` (default), `1h` or `15m` (migration 0008). The same rule
+  set applies, evaluated on **completed** bars of that interval. The bar still forming is
+  dropped, using the same in-progress test as the chart.
+- Event alerts (crossovers, breakouts) fire at most once per bar. The stored "last bar" key is
+  an ISO date for daily bars and an ISO date-time for intraday bars, so two crossovers on the
+  same day are both reported. Existing daily rows keep their date keys unchanged.
+- Checks run every 15 minutes, or every 2 minutes while any intraday alert is enabled. The
+  intraday cache (D-034) keeps most checks off the network.

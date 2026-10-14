@@ -472,7 +472,9 @@ class MainWindow(QMainWindow):
         series = self.current_result.series
         close = float(series.bars["close"].iloc[-1])
         try:
-            created = self._alert_service.create_level_alerts(series.symbol, close, levels)
+            interval = series.interval.value if series.interval.is_intraday else "1D"
+            created = self._alert_service.create_level_alerts(series.symbol, close, levels,
+                                                              interval)  # fmt: skip
         except AppError as exc:
             QMessageBox.warning(self, strings.APP_TITLE, exc.user_message)
             return
