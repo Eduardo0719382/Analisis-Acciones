@@ -32,6 +32,8 @@ ACTION_DARK_THEME = "Tema &oscuro"
 ACTION_RESET_LAYOUT = "&Restablecer diseño"
 ACTION_DISCLAIMER = "&Aviso legal"
 ACTION_ABOUT = "A&cerca de"
+ACTION_GUIDE = "&Guía de uso"
+GUIDE_TITLE = "Guía de uso"
 
 ABOUT_TEXT = (
     "<b>Análisis de Acciones</b> {version}<br><br>"

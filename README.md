@@ -59,6 +59,8 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
 
 ## Uso
 
+- **Guía de uso** (*Ayuda → Guía de uso*, F1): explica dentro del programa cada parte, cómo
+  leerla, los atajos de teclado, un glosario y los límites.
 - **Resumen del día** (*Ver → Resumen del día…*, Ctrl+D; se abre al iniciar si la lista de
   seguimiento tiene activos, lo que se puede desactivar): estado del mercado, cuántos activos de
   la lista suben y bajan (y los que más), una tarjeta por activo con su cambio y su evolución

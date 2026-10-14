@@ -70,6 +70,7 @@ from analisis_acciones.ui.details_panel import DetailsPanel
 from analisis_acciones.ui.disclaimer import DisclaimerDialog
 from analisis_acciones.ui.elliott_panel import ElliottPanel, ElliottView
 from analisis_acciones.ui.fundamentals_panel import FundamentalsPanel
+from analisis_acciones.ui.guide_dialog import GuideDialog
 from analisis_acciones.ui.indicator_dialog import IndicatorDialog
 from analisis_acciones.ui.market_controller import MarketController
 from analisis_acciones.ui.panels import Panel
@@ -131,6 +132,7 @@ class MainWindow(QMainWindow):
         self._update_worker: Worker | None = None
         self.daily_scan: DailyScanController | None = None
         self._summary_dialog: DaySummaryDialog | None = None
+        self._guide_dialog: GuideDialog | None = None
         self._benchmark_seq = 0
         self.benchmark_summary = ""
         self._benchmark_workers: set[Worker] = set()
@@ -383,6 +385,11 @@ class MainWindow(QMainWindow):
         view_menu.addAction(self.reset_layout_action)
 
         help_menu = menu_bar.addMenu(strings.MENU_HELP)
+        self.guide_action = QAction(strings.ACTION_GUIDE, self)
+        self.guide_action.setShortcut(QKeySequence(QKeySequence.StandardKey.HelpContents))
+        self.guide_action.triggered.connect(self.open_guide)
+        help_menu.addAction(self.guide_action)
+        help_menu.addSeparator()
         disclaimer_action = QAction(strings.ACTION_DISCLAIMER, self)
         disclaimer_action.triggered.connect(self._show_disclaimer)
         help_menu.addAction(disclaimer_action)
@@ -399,6 +406,13 @@ class MainWindow(QMainWindow):
         about_action = QAction(strings.ACTION_ABOUT, self)
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
+
+    def open_guide(self) -> None:
+        if self._guide_dialog is None or not shiboken6.isValid(self._guide_dialog):
+            self._guide_dialog = GuideDialog(self)
+        self._guide_dialog.show()
+        self._guide_dialog.raise_()
+        self._guide_dialog.activateWindow()
 
     # Market data -----------------------------------------------------------
     def _wire_market(self) -> None:
