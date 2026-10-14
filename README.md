@@ -195,6 +195,17 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   (con el mismo capital y fechas), la evolución diaria, las posiciones con su peso y la lista de
   operaciones. Se exporta a HTML, PDF o CSV. No permite ventas en corto ni gastar más efectivo
   del disponible.
+  - **Fracciones y compras en dólares:** se puede indicar la cantidad de acciones (con
+    decimales) o un importe en $ («Dólares ($)»), que se convierte en acciones al precio
+    elegido (hasta 6 decimales).
+  - **Comisiones:** el botón *Comisiones y dividendos…* fija por cartera una comisión fija en
+    $ por operación, un porcentaje del importe y un mínimo. Con «Automática» marcada se aplica
+    sola; desmarcándola se escribe la de esa operación.
+  - **Eventos corporativos:** los splits ajustan la cantidad de acciones y los dividendos se
+    cobran en efectivo en su fecha ex-dividendo (se puede desactivar). El informe los lista en
+    «Eventos corporativos». Sin impuestos ni retenciones.
+  - **Diario de operaciones:** cada operación guarda su motivo y, después, una revisión
+    (*Operaciones → Escribir revisión…*); ambos salen en el informe y en el CSV.
 - **Comparar activos:** *Herramientas → Comparar activos…* (hasta 6 tickers; se rellena con el
   activo actual y la lista de seguimiento). Gráfico de rendimiento normalizado a 0 % desde la
   primera sesión común (6M, 1A, 3A, 5A o máximo) y tabla con rentabilidad, volatilidad anual,

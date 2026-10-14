@@ -5,6 +5,14 @@ borrowing (a purchase can not cost more than the cash available). Commissions
 are paid in cash; for a purchase they add to the cost basis, for a sale they
 reduce the realised result. Trades are applied in date order, ties by entry
 order.
+
+Corporate events
+----------------
+Prices from the data source are split-adjusted for the whole history. Trades
+keep the real price and quantity the user entered; ``adjust_for_splits``
+converts them into today's share units (quantity × later splits, price ÷ later
+splits) so they match the price history. Dividends (per current share) are
+paid in cash on their ex-date to the shares held before that day.
 """
 
 from __future__ import annotations
@@ -18,6 +26,7 @@ import pandas as pd
 from analisis_acciones.models.errors import UserError
 
 BUY, SELL = "buy", "sell"
+DIVIDEND, SPLIT = "dividend", "split"
 EPSILON = 1e-9
 
 
@@ -31,10 +40,66 @@ class PaperTrade:
     commission: float = 0.0
     note: str = ""
     id: int | None = None
+    review: str = ""
+    split_factor: float = 1.0  # set by adjust_for_splits; messages show the original units
 
     @property
     def value(self) -> float:
         return self.quantity * self.price
+
+
+@dataclass(frozen=True)
+class CorporateEvent:
+    symbol: str
+    day: date  # ex-date
+    kind: str  # DIVIDEND (amount per share) or SPLIT (new shares per old share)
+    value: float
+
+
+@dataclass(frozen=True)
+class AppliedEvent:
+    """A corporate event that affected the portfolio, with its effect."""
+
+    event: CorporateEvent
+    shares: float  # shares held (today's units) on the event
+    cash: float  # cash credited (dividends), 0 for splits
+
+
+def split_factor_after(splits: pd.Series, day: date) -> float:
+    """Product of split ratios with an ex-date after ``day`` (1.0 when none)."""
+    later = splits[(splits.index > pd.Timestamp(day)) & (splits > 0)]
+    factor = 1.0
+    for ratio in later:
+        factor *= float(ratio)
+    return factor
+
+
+def adjust_for_splits(
+    trades: list[PaperTrade], splits: Mapping[str, pd.Series]
+) -> list[PaperTrade]:
+    """Trades expressed in today's share units (see module docstring)."""
+    out = []
+    for t in trades:
+        series = splits.get(t.symbol)
+        factor = split_factor_after(series, t.trade_date) if series is not None else 1.0
+        if factor == 1.0:
+            out.append(t)
+        else:
+            out.append(
+                PaperTrade(
+                    t.symbol,
+                    t.side,
+                    t.quantity * factor,
+                    t.price / factor,
+                    t.trade_date,
+                    t.commission,
+                    t.note,
+                    t.id,
+                    t.review,
+                    factor,
+                )
+            )
+    return out
 
 
 @dataclass
@@ -43,6 +108,7 @@ class Position:
     quantity: float = 0.0
     cost_basis: float = 0.0  # total cost of the shares held, commissions included
     realized: float = 0.0
+    dividends: float = 0.0
 
     @property
     def average_cost(self) -> float:
@@ -54,6 +120,11 @@ class PortfolioState:
     cash: float
     positions: dict[str, Position] = field(default_factory=dict)
     commissions: float = 0.0
+    applied: list[AppliedEvent] = field(default_factory=list)
+
+    @property
+    def dividends(self) -> float:
+        return sum(p.dividends for p in self.positions.values())
 
     @property
     def realized(self) -> float:
@@ -70,49 +141,83 @@ def ordered(trades: list[PaperTrade]) -> list[PaperTrade]:
 
 
 def replay(
-    trades: list[PaperTrade], initial_cash: float, until: date | None = None
+    trades: list[PaperTrade],
+    initial_cash: float,
+    until: date | None = None,
+    events: list[CorporateEvent] | tuple[CorporateEvent, ...] = (),
 ) -> PortfolioState:
-    """State after applying ``trades`` (up to ``until``, inclusive). Raises UserError when a
-    trade is impossible (selling shares not held, spending cash not available)."""
+    """State after applying ``trades`` and ``events`` (up to ``until``, inclusive).
+
+    Trades must already be in today's share units (``adjust_for_splits``). On a
+    given day, events are applied before trades: a dividend goes to the shares
+    held before its ex-date. Raises UserError when a trade is impossible
+    (selling shares not held, spending cash not available).
+    """
     state = PortfolioState(cash=initial_cash)
-    for trade in ordered(trades):
-        if until is not None and trade.trade_date > until:
+    timeline: list[tuple[date, int, int, PaperTrade | CorporateEvent]] = [
+        (e.day, 0, i, e) for i, e in enumerate(events)
+    ]
+    timeline += [(t.trade_date, 1, t.id or 0, t) for t in trades]
+    timeline.sort(key=lambda item: (item[0], item[1], item[2]))
+    for day, _order, _key, item in timeline:
+        if until is not None and day > until:
             break
-        position = state.positions.setdefault(trade.symbol, Position(trade.symbol))
-        state.commissions += trade.commission
-        if trade.side == BUY:
-            cost = trade.value + trade.commission
-            if cost > state.cash + EPSILON:
-                raise UserError(
-                    f"not enough cash for {trade}",
-                    user_message=(
-                        f"Efectivo insuficiente el {trade.trade_date:%d/%m/%Y} para comprar "
-                        f"{trade.quantity:g} {trade.symbol} ({cost:,.2f}; disponible "
-                        f"{state.cash:,.2f})."
-                    ),
-                )
-            state.cash -= cost
-            position.quantity += trade.quantity
-            position.cost_basis += cost
+        if isinstance(item, CorporateEvent):
+            _apply_event(state, item)
         else:
-            if trade.quantity > position.quantity + EPSILON:
-                raise UserError(
-                    f"selling more than held: {trade}",
-                    user_message=(
-                        f"El {trade.trade_date:%d/%m/%Y} solo había {position.quantity:g} "
-                        f"{trade.symbol}: no se pueden vender {trade.quantity:g} (la cartera "
-                        "simulada no permite ventas en corto)."
-                    ),
-                )
-            cost_out = position.average_cost * trade.quantity
-            proceeds = trade.value - trade.commission
-            position.realized += proceeds - cost_out
-            position.quantity -= trade.quantity
-            position.cost_basis -= cost_out
-            if position.quantity <= EPSILON:
-                position.quantity, position.cost_basis = 0.0, 0.0
-            state.cash += proceeds
+            _apply_trade(state, item)
     return state
+
+
+def _apply_event(state: PortfolioState, event: CorporateEvent) -> None:
+    position = state.positions.get(event.symbol)
+    if position is None or position.quantity <= EPSILON:
+        return
+    cash = 0.0
+    if event.kind == DIVIDEND:
+        cash = position.quantity * event.value
+        position.dividends += cash
+        state.cash += cash
+    state.applied.append(AppliedEvent(event, position.quantity, cash))
+
+
+def _apply_trade(state: PortfolioState, trade: PaperTrade) -> None:
+    position = state.positions.setdefault(trade.symbol, Position(trade.symbol))
+    state.commissions += trade.commission
+    if trade.side == BUY:
+        cost = trade.value + trade.commission
+        if cost > state.cash + 1e-6:
+            raise UserError(
+                f"not enough cash for {trade}",
+                user_message=(
+                    f"Efectivo insuficiente el {trade.trade_date:%d/%m/%Y} para comprar "
+                    f"{trade.quantity / trade.split_factor:g} {trade.symbol} ({cost:,.2f} $; "
+                    f"disponible {state.cash:,.2f} $)."
+                ),
+            )
+        state.cash -= cost
+        position.quantity += trade.quantity
+        position.cost_basis += cost
+        return
+    if trade.quantity > position.quantity + 1e-6:
+        raise UserError(
+            f"selling more than held: {trade}",
+            user_message=(
+                f"El {trade.trade_date:%d/%m/%Y} solo había "
+                f"{position.quantity / trade.split_factor:g} {trade.symbol}: no se pueden vender "
+                f"{trade.quantity / trade.split_factor:g} (la cartera "
+                "simulada no permite ventas en corto)."
+            ),
+        )
+    quantity = min(trade.quantity, position.quantity)  # absorb rounding of fractions
+    cost_out = position.average_cost * quantity
+    proceeds = trade.value - trade.commission
+    position.realized += proceeds - cost_out
+    position.quantity -= quantity
+    position.cost_basis -= cost_out
+    if position.quantity <= 1e-6:
+        position.quantity, position.cost_basis = 0.0, 0.0
+    state.cash += proceeds
 
 
 @dataclass(frozen=True)
@@ -135,6 +240,7 @@ class Valuation:
     realized: float
     commissions: float
     total_value: float | None  # None when a held symbol has no price
+    dividends: float = 0.0
 
     @property
     def total_return_pct(self) -> float | None:
@@ -192,11 +298,17 @@ def value(
             )
             for h in rows
         ]
-    return Valuation(initial_cash, state.cash, rows, state.realized, state.commissions, total)
+    return Valuation(
+        initial_cash, state.cash, rows, state.realized, state.commissions, total, state.dividends
+    )
 
 
 def equity_curve(
-    trades: list[PaperTrade], initial_cash: float, closes: Mapping[str, pd.Series], end: date
+    trades: list[PaperTrade],
+    initial_cash: float,
+    closes: Mapping[str, pd.Series],
+    end: date,
+    events: list[CorporateEvent] | tuple[CorporateEvent, ...] = (),
 ) -> pd.Series:
     """Daily total value from the first trade date to ``end`` (business days).
 
@@ -209,7 +321,7 @@ def equity_curve(
     aligned = {s: c.sort_index().reindex(days, method="ffill") for s, c in closes.items()}
     values: dict[pd.Timestamp, float] = {}
     for day in days:
-        state = replay(trades, initial_cash, until=day.date())
+        state = replay(trades, initial_cash, until=day.date(), events=events)
         total = state.cash
         complete = True
         for pos in state.open_positions():

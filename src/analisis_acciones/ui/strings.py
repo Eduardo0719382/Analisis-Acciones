@@ -566,14 +566,41 @@ PF_TRADE_COLUMNS = (
     "Ticker",
     "Operación",
     "Cantidad",
-    "Precio",
-    "Comisión",
-    "Importe",
-    "Nota",
+    "Precio ($)",
+    "Comisión ($)",
+    "Importe ($)",
+    "Motivo",
+    "Revisión",
+)
+PF_MODE_SHARES = "Acciones"
+PF_MODE_DOLLARS = "Dólares ($)"
+PF_AMOUNT = "Importe ($)"
+PF_COMMISSION_AUTO = "Automática"
+PF_COMMISSION_AUTO_TIP = (
+    "Marcada: se aplica la comisión configurada en la cartera. Desmarcada: escriba la comisión "
+    "de esta operación."
+)
+PF_COSTS = "Comisiones y dividendos…"
+PF_COSTS_TITLE = "Comisiones y eventos corporativos"
+PF_COSTS_INTRO = (
+    "Comisión de cada operación nueva = fija + porcentaje del importe, con un mínimo. Las "
+    "operaciones ya registradas conservan su comisión."
+)
+PF_COSTS_FIXED = "Comisión fija por operación ($):"
+PF_COSTS_PCT = "Porcentaje del importe (%):"
+PF_COSTS_MIN = "Comisión mínima ($):"
+PF_COSTS_DIVIDENDS = "Cobrar dividendos en efectivo (los splits se aplican siempre)"
+PF_COSTS_SUMMARY = "Comisión: {text}"
+PF_COSTS_NONE = "sin comisión"
+PF_NOTE_PLACEHOLDER = "Motivo de la operación (diario): por qué compra o vende"
+PF_REVIEW = "Escribir revisión…"
+PF_REVIEW_PROMPT = (
+    "Revisión de la operación (qué salió bien o mal, qué aprendió). Máximo 500 caracteres:"
 )
 PF_DISCLAIMER = (
     "Cartera de práctica: las operaciones son ficticias y no se envían a ningún broker. Con "
-    "«Cierre del día» se usa el precio de cierre de esa fecha. No permite ventas en corto ni "
+    "«Cierre del día» se usa el precio de cierre de esa fecha. Admite fracciones de acción y "
+    "compras por importe en dólares; aplica splits y dividendos. No permite ventas en corto ni "
     "gastar más efectivo del disponible. No es asesoramiento financiero."
 )
 PF_ITEM = "{name} · capital inicial {cash}"

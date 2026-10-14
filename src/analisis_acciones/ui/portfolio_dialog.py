@@ -15,9 +15,11 @@ from PySide6.QtWebEngineCore import QWebEngineSettings
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QDateEdit,
     QDialog,
+    QDialogButtonBox,
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
@@ -40,7 +42,11 @@ from PySide6.QtWidgets import (
 
 from analisis_acciones.models.errors import UserError, user_message_for
 from analisis_acciones.portfolio.engine import BUY, SELL
-from analisis_acciones.services.paper_portfolio import PaperPortfolioService, PortfolioReport
+from analisis_acciones.services.paper_portfolio import (
+    PaperPortfolioService,
+    Portfolio,
+    PortfolioReport,
+)
 from analisis_acciones.services.portfolio_report import (
     portfolio_html,
     portfolio_trades_csv,
@@ -54,6 +60,57 @@ from analisis_acciones.ui.workers import Worker, start_worker
 logger = logging.getLogger(__name__)
 
 TRADE_ROLE = Qt.ItemDataRole.UserRole
+SHARES, DOLLARS = "shares", "dollars"
+
+
+def costs_text(p: Portfolio) -> str:
+    parts = []
+    if p.commission_fixed:
+        parts.append(f"{num(p.commission_fixed)} $")
+    if p.commission_pct:
+        parts.append(f"{num(p.commission_pct, 3).rstrip('0').rstrip(',')} %")
+    text = " + ".join(parts)
+    if p.commission_min:
+        text += f" (mínimo {num(p.commission_min)} $)"
+    return strings.PF_COSTS_SUMMARY.format(text=text.strip() or strings.PF_COSTS_NONE)
+
+
+class CostsDialog(QDialog):
+    """Commission schedule and dividend option of one portfolio."""
+
+    def __init__(self, portfolio: Portfolio, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(strings.PF_COSTS_TITLE)
+        self.fixed = QDoubleSpinBox()
+        self.fixed.setRange(0, 1e4)
+        self.fixed.setDecimals(2)
+        self.fixed.setValue(portfolio.commission_fixed)
+        self.pct = QDoubleSpinBox()
+        self.pct.setRange(0, 9.999)
+        self.pct.setDecimals(3)
+        self.pct.setValue(portfolio.commission_pct)
+        self.minimum = QDoubleSpinBox()
+        self.minimum.setRange(0, 1e4)
+        self.minimum.setDecimals(2)
+        self.minimum.setValue(portfolio.commission_min)
+        self.dividends = QCheckBox(strings.PF_COSTS_DIVIDENDS)
+        self.dividends.setChecked(portfolio.apply_dividends)
+        intro = QLabel(strings.PF_COSTS_INTRO)
+        intro.setWordWrap(True)
+        form = QFormLayout()
+        form.addRow(strings.PF_COSTS_FIXED, self.fixed)
+        form.addRow(strings.PF_COSTS_PCT, self.pct)
+        form.addRow(strings.PF_COSTS_MIN, self.minimum)
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout = QVBoxLayout(self)
+        layout.addWidget(intro)
+        layout.addLayout(form)
+        layout.addWidget(self.dividends)
+        layout.addWidget(buttons)
 
 
 class PortfolioDialog(QDialog):
@@ -79,6 +136,8 @@ class PortfolioDialog(QDialog):
         new_button.clicked.connect(self._ask_new_portfolio)
         self.delete_portfolio_button = QPushButton(strings.PF_DELETE)
         self.delete_portfolio_button.clicked.connect(self._ask_delete_portfolio)
+        self.costs_button = QPushButton(strings.PF_COSTS)
+        self.costs_button.clicked.connect(self._ask_costs)
         self.export_button = QPushButton(strings.SCAN_EXPORT)
         menu = QMenu(self.export_button)
         menu.addAction(strings.SCAN_EXPORT_HTML, lambda: self._ask_and_export("html"))
@@ -90,6 +149,7 @@ class PortfolioDialog(QDialog):
         top.addWidget(self.portfolio, stretch=1)
         top.addWidget(new_button)
         top.addWidget(self.delete_portfolio_button)
+        top.addWidget(self.costs_button)
         top.addWidget(self.export_button)
 
         # Trade form
@@ -98,6 +158,11 @@ class PortfolioDialog(QDialog):
         self.side = QComboBox()
         self.side.addItem(strings.PF_BUY, BUY)
         self.side.addItem(strings.PF_SELL, SELL)
+        self.mode = QComboBox()
+        self.mode.addItem(strings.PF_MODE_SHARES, SHARES)
+        self.mode.addItem(strings.PF_MODE_DOLLARS, DOLLARS)
+        self.mode.currentIndexChanged.connect(lambda _i: self._mode_changed())
+        self.quantity_label = QLabel(strings.PF_QUANTITY)
         self.quantity = QDoubleSpinBox()
         self.quantity.setRange(0.0001, 1e9)
         self.quantity.setDecimals(4)
@@ -113,24 +178,40 @@ class PortfolioDialog(QDialog):
         self.commission = QDoubleSpinBox()
         self.commission.setRange(0, 1e6)
         self.commission.setDecimals(2)
+        self.commission.setSuffix(" $")
+        self.commission_auto = QCheckBox(strings.PF_COMMISSION_AUTO)
+        self.commission_auto.setToolTip(strings.PF_COMMISSION_AUTO_TIP)
+        self.commission_auto.toggled.connect(lambda on: self.commission.setEnabled(not on))
+        self.commission_auto.setChecked(True)
+        commission_box = QWidget()
+        commission_row = QHBoxLayout(commission_box)
+        commission_row.setContentsMargins(0, 0, 0, 0)
+        commission_row.addWidget(self.commission_auto)
+        commission_row.addWidget(self.commission, stretch=1)
         self.note = QLineEdit()
-        self.note.setMaxLength(120)
+        self.note.setMaxLength(500)
+        self.note.setPlaceholderText(strings.PF_NOTE_PLACEHOLDER)
+        self.costs_label = QLabel()
+        self.costs_label.setObjectName("detailsSource")
         self.add_button = QPushButton(strings.PF_ADD)
         self.add_button.clicked.connect(self.add_trade)
         form_box = QGroupBox(strings.PF_NEW_TRADE)
         grid = QGridLayout(form_box)
-        fields: list[tuple[str, QWidget]] = [
-            (strings.PF_SYMBOL, self.symbol), (strings.PF_SIDE, self.side),
-            (strings.PF_QUANTITY, self.quantity), (strings.PF_PRICE, self.price),
-            (strings.PF_DATE, self.trade_date), (strings.PF_COMMISSION, self.commission),
+        fields: list[tuple[QLabel, QWidget]] = [
+            (QLabel(strings.PF_SYMBOL), self.symbol), (QLabel(strings.PF_SIDE), self.side),
+            (QLabel(strings.PF_MODE_SHARES + " / $"), self.mode),
+            (self.quantity_label, self.quantity), (QLabel(strings.PF_PRICE), self.price),
+            (QLabel(strings.PF_DATE), self.trade_date),
+            (QLabel(strings.PF_COMMISSION), commission_box),
         ]  # fmt: skip
         for i, (label, widget) in enumerate(fields):
-            grid.addWidget(QLabel(label), 0, i)
+            grid.addWidget(label, 0, i)
             grid.addWidget(widget, 1, i)
         note_row = QFormLayout()
         note_row.addRow(strings.PF_NOTE, self.note)
-        grid.addLayout(note_row, 2, 0, 1, 5)
-        grid.addWidget(self.add_button, 2, 5)
+        grid.addLayout(note_row, 2, 0, 1, 6)
+        grid.addWidget(self.add_button, 2, 6)
+        grid.addWidget(self.costs_label, 3, 0, 1, 7)
 
         # Results
         self.view = QWebEngineView()
@@ -151,10 +232,16 @@ class PortfolioDialog(QDialog):
         self.trades.cellDoubleClicked.connect(self._activate)
         self.delete_trade_button = QPushButton(strings.PF_DELETE_TRADE)
         self.delete_trade_button.clicked.connect(self.delete_selected_trade)
+        self.review_button = QPushButton(strings.PF_REVIEW)
+        self.review_button.clicked.connect(self._ask_review)
         trades_page = QWidget()
         trades_layout = QVBoxLayout(trades_page)
         trades_layout.addWidget(self.trades, stretch=1)
-        trades_layout.addWidget(self.delete_trade_button, alignment=Qt.AlignmentFlag.AlignRight)
+        trade_buttons = QHBoxLayout()
+        trade_buttons.addStretch(1)
+        trade_buttons.addWidget(self.review_button)
+        trade_buttons.addWidget(self.delete_trade_button)
+        trades_layout.addLayout(trade_buttons)
         self.tabs = QTabWidget()
         self.tabs.addTab(self.view, strings.PF_TAB_SUMMARY)
         self.tabs.addTab(trades_page, strings.PF_TAB_TRADES)
@@ -217,7 +304,35 @@ class PortfolioDialog(QDialog):
             self._service.delete(self.portfolio_id)
             self._fill_portfolios()
 
+    def current_portfolio(self) -> Portfolio | None:
+        pid = self.portfolio.currentData()
+        return next((p for p in self._service.portfolios() if p.id == pid), None)
+
+    def _ask_costs(self) -> None:
+        current = self.current_portfolio()
+        if current is None:
+            return
+        dialog = CostsDialog(current, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.set_costs(dialog.fixed.value(), dialog.pct.value(), dialog.minimum.value(),
+                           dialog.dividends.isChecked())  # fmt: skip
+
+    def set_costs(self, fixed: float, pct: float, minimum: float, dividends: bool) -> None:
+        try:
+            self._service.set_costs(self.portfolio_id, fixed, pct, minimum, dividends)
+        except UserError as exc:
+            self.status.setText(exc.user_message)
+            return
+        self.refresh()
+
     # Trades ----------------------------------------------------------------------
+    def _mode_changed(self) -> None:
+        dollars = self.mode.currentData() == DOLLARS
+        self.quantity_label.setText(strings.PF_AMOUNT if dollars else strings.PF_QUANTITY)
+        self.quantity.setDecimals(2 if dollars else 4)
+        self.quantity.setMinimum(0.01 if dollars else 0.0001)
+        self.quantity.setSuffix(" $" if dollars else "")
+
     def _run(self, job: Callable[[], Any], done: Callable[[Any], None]) -> None:
         def fail(exc: BaseException) -> None:
             if shiboken6.isValid(self):
@@ -236,7 +351,10 @@ class PortfolioDialog(QDialog):
     def add_trade(self) -> None:
         pid = self.portfolio_id
         symbol, side = self.symbol.text(), str(self.side.currentData())
-        quantity, commission = self.quantity.value(), self.commission.value()
+        size = self.quantity.value()
+        dollars = self.mode.currentData() == DOLLARS
+        quantity, amount = (None, size) if dollars else (size, None)
+        commission = None if self.commission_auto.isChecked() else self.commission.value()
         price = self.price.value() or None
         day = date.fromisoformat(self.trade_date.date().toString("yyyy-MM-dd"))
         note = self.note.text()
@@ -249,7 +367,22 @@ class PortfolioDialog(QDialog):
             self.refresh()
 
         self._run(lambda: self._service.add_trade(pid, symbol, side, quantity, price, day,
-                                                  commission, note), done)  # fmt: skip
+                                                  commission, note, amount), done)  # fmt: skip
+
+    def _ask_review(self) -> None:
+        item = self.trades.item(self.trades.currentRow(), 0)
+        if item is None or self.report is None:
+            return
+        trade_id = int(item.data(TRADE_ROLE))
+        current = next((t.review for t in self.report.trades if t.id == trade_id), "")
+        text, ok = QInputDialog.getMultiLineText(self, strings.PF_REVIEW,
+                                                 strings.PF_REVIEW_PROMPT, current)  # fmt: skip
+        if ok:
+            self.set_review(trade_id, text)
+
+    def set_review(self, trade_id: int, text: str) -> None:
+        self._service.set_review(self.portfolio_id, trade_id, text)
+        self.refresh()
 
     def delete_selected_trade(self) -> None:
         item = self.trades.item(self.trades.currentRow(), 0)
@@ -280,6 +413,7 @@ class PortfolioDialog(QDialog):
             return  # another portfolio was selected meanwhile
         self.report = report
         self.status.setText("")
+        self.costs_label.setText(costs_text(report.portfolio))
         self.view.setHtml(portfolio_html(report, datetime.now()), QUrl("about:blank"))
         rows = list(reversed(report.trades))
         self.trades.setRowCount(len(rows))
@@ -287,13 +421,14 @@ class PortfolioDialog(QDialog):
             cells = [f"{t.trade_date:%d/%m/%Y}", t.symbol,
                      strings.PF_BUY if t.side == BUY else strings.PF_SELL, qty(t.quantity),
                      num(t.price, 4).rstrip("0").rstrip(","), num(t.commission),
-                     num(t.value), t.note]  # fmt: skip
+                     num(t.value), t.note, t.review]  # fmt: skip
             for c, text in enumerate(cells):
                 item = QTableWidgetItem(text)
                 if c == 0:
                     item.setData(TRADE_ROLE, t.id)
                 self.trades.setItem(r, c, item)
         self.delete_trade_button.setEnabled(bool(rows))
+        self.review_button.setEnabled(bool(rows))
 
     # Export ------------------------------------------------------------------
     def _ask_and_export(self, kind: str) -> None:

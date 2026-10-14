@@ -676,8 +676,8 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
 - **Value curve:** one point per business day from the first trade. A day is left out when a
   held symbol has no close yet, never estimated. The benchmark is invested with the same
   initial capital on the first day.
-- Amounts are added without currency conversion; the report says so. Taxes, dividends and
-  real costs are not modelled.
+- Amounts are added without currency conversion; the report says so. Taxes are not
+  modelled (dividends, splits and commissions: see D-042).
 
 ## D-041 — Fundamentals
 
@@ -695,3 +695,23 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   failure raises (so the stored copy is kept) instead of overwriting it with empty years.
 - The data is fetched only when the "Fundamentales" tab is shown, to keep symbol switching
   fast. A live CI test checks AAPL's values for plausible ranges.
+
+## D-042 — Paper portfolio: fractions, dollar amounts, commissions, corporate events, journal
+
+- **Fractions / dollars:** a trade gives either a quantity (decimals allowed) or an amount in
+  dollars, converted at the trade price and rounded to 6 decimals. A sale left with a rounding
+  remainder below 1e-6 closes the position.
+- **Commissions:** per portfolio (migration 0011): fixed $ + % of value, with a minimum,
+  rounded to cents. Applied when the trade is recorded; a manual commission overrides it.
+  Changing the schedule never rewrites existing trades.
+- **Corporate events:** Yahoo daily prices are split-adjusted but not dividend-adjusted
+  (`auto_adjust=False`). Trades keep the price and quantity the user entered (real units of
+  that day); for replay and valuation they are converted to today's units
+  (`adjust_for_splits`). Dividends (per current share) are credited in cash on the ex-date to
+  the shares held *before* that day (events go before same-day trades). Only events after a
+  symbol's first trade are used. Dividends can be switched off per portfolio; splits cannot
+  (they are needed for consistent quantities). "Cierre del día" returns the real quoted close
+  (adjusted close × later splits). The report shows events in the units of their day; error
+  messages show quantities in the units of the trade's day.
+- **Journal:** the existing note is the reason for the trade; a `review` column stores what
+  was learnt, editable afterwards, shown in the report and CSV.

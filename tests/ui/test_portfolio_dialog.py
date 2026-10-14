@@ -70,6 +70,41 @@ def test_trade_report_delete_and_export(qtbot: QtBot, service: PaperPortfolioSer
     assert not dialog.new_portfolio("Segunda", 100)
 
 
+def test_dollars_commission_and_journal(qtbot: QtBot, service: PaperPortfolioService) -> None:
+    dialog = PortfolioDialog(service, lambda: "SPY", "TEST")
+    qtbot.addWidget(dialog)
+    qtbot.waitUntil(lambda: dialog.report is not None, timeout=10000)
+    assert dialog.commission_auto.isChecked() and not dialog.commission.isEnabled()
+    dialog.set_costs(2.5, 0, 0, True)
+    qtbot.waitUntil(lambda: "2,50 $" in dialog.costs_label.text(), timeout=10000)
+
+    dialog.mode.setCurrentIndex(dialog.mode.findData("dollars"))
+    assert dialog.quantity_label.text() == "Importe ($)"
+    dialog.quantity.setValue(500)
+    dialog.price.setValue(80)
+    dialog.trade_date.setDate(QDate(2024, 2, 1))
+    dialog.note.setText("rotura de resistencia")
+    dialog.add_trade()
+    qtbot.waitUntil(lambda: dialog.report is not None and len(dialog.report.trades) == 1,
+                    timeout=10000)  # fmt: skip
+    trade = dialog.report.trades[0]
+    assert trade.quantity == pytest.approx(6.25) and trade.commission == 2.5
+    assert dialog.trades.item(0, 3).text() == "6,25"
+
+    dialog.commission_auto.setChecked(False)
+    dialog.commission.setValue(0.75)
+    dialog.mode.setCurrentIndex(dialog.mode.findData("shares"))
+    dialog.quantity.setValue(0.5)
+    dialog.add_trade()
+    qtbot.waitUntil(lambda: dialog.report is not None and len(dialog.report.trades) == 2,
+                    timeout=10000)  # fmt: skip
+    assert dialog.report.trades[1].commission == 0.75
+
+    dialog.set_review(trade.id or 0, "Salió bien")
+    qtbot.waitUntil(lambda: dialog.trades.item(1, 8) is not None
+                    and dialog.trades.item(1, 8).text() == "Salió bien", timeout=10000)  # fmt: skip
+
+
 def test_menu_opens_portfolio(qtbot: QtBot, settings: SettingsService, market: MarketDataService,
                               service: PaperPortfolioService) -> None:  # fmt: skip
     win = MainWindow(settings, market_service=market, portfolio_service=service)

@@ -16,7 +16,7 @@ from html import escape
 import pandas as pd
 
 from analisis_acciones.data.export import safe_cell
-from analisis_acciones.portfolio.engine import BUY
+from analisis_acciones.portfolio.engine import BUY, DIVIDEND
 from analisis_acciones.services.paper_portfolio import PortfolioReport
 from analisis_acciones.services.scan_report import STYLE, num
 
@@ -40,6 +40,8 @@ td.up::before { content: "▲ "; color: var(--up); } td.down::before { content: 
 .panel { background: var(--card); border: 1px solid var(--border); border-radius: 10px;
   padding: 12px 16px; margin: 14px 0; break-inside: avoid; }
 .warn { color: var(--ink-2); font-size: 12px; }
+.review { color: var(--ink-2); font-size: 12px; margin-top: 2px; }
+.review b { color: var(--ink); }
 """  # noqa: E501
 
 
@@ -127,6 +129,50 @@ def curve_svg(
     return "".join(parts) + legend
 
 
+def _journal(note: str, review: str) -> str:
+    text = escape(note) if note else '<span class="muted">—</span>'
+    if review:
+        text += f'<div class="review"><b>Revisión:</b> {escape(review)}</div>'
+    return text
+
+
+def _events_panel(report: PortfolioReport) -> str:
+    """Dividends and splits that affected the portfolio, newest first."""
+    if not report.events:
+        return ""
+    rows = []
+    for applied in reversed(report.events):
+        e = applied.event
+        shares = applied.shares
+        if e.kind == DIVIDEND:
+            what = "Dividendo"
+            detail = f"{num(e.value, 4).rstrip('0').rstrip(',')} $ por acción"
+            effect = f"+{num(applied.cash)} $ en efectivo"
+            affected = shares
+        else:
+            what = "Split"
+            ratio = qty(e.value)
+            detail = (
+                f"{ratio} acciones nuevas por cada una"
+                if e.value >= 1
+                else f"contrasplit: {ratio} por cada una"
+            )
+            affected = shares / e.value
+            effect = f"de {qty(affected)} a {qty(shares)} acciones"
+        rows.append(
+            f"<tr><td>{e.day:%d/%m/%Y}</td><td><b>{escape(e.symbol)}</b></td><td>{what}</td>"
+            f"<td>{detail}</td><td class=n>{qty(affected)}</td><td>{effect}</td></tr>"
+        )
+    return (
+        '<div class="panel"><h3>Eventos corporativos</h3><p class="muted small">Dividendos '
+        "cobrados y splits aplicados a las acciones que tenía la cartera en cada fecha.</p>"
+        "<table><thead><tr><th>Fecha ex</th><th>Activo</th><th>Evento</th><th>Detalle</th>"
+        "<th>Acciones afectadas</th><th>Efecto</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table></div>"
+    )
+
+
 def portfolio_html(report: PortfolioReport, generated: datetime) -> str:
     v = report.valuation
     p = report.portfolio
@@ -162,7 +208,11 @@ def portfolio_html(report: PortfolioReport, generated: datetime) -> str:
                 f"latente {num(v.unrealized, 2, sign=True)})",
                 result_css,
             ),
-            tile(num(v.cash), "efectivo disponible", f"comisiones pagadas {num(v.commissions)}"),
+            tile(
+                num(v.cash),
+                "efectivo disponible",
+                f"comisiones pagadas {num(v.commissions)} · dividendos cobrados {num(v.dividends)}",
+            ),
             tile(
                 f"{num(diff, 1, sign=True)} pts" if diff is not None else "—",
                 f"frente a {escape(report.benchmark_symbol)}",
@@ -204,11 +254,12 @@ def portfolio_html(report: PortfolioReport, generated: datetime) -> str:
             f"<td>{'Compra ▲' if t.side == BUY else 'Venta ▼'}</td>"
             f"<td class=n>{qty(t.quantity)}</td><td class=n>{num(t.price)}</td>"
             f"<td class=n>{num(t.commission)}</td><td class=n>{num(t.value)}</td>"
-            f"<td>{escape(t.note)}</td></tr>"
+            f"<td>{_journal(t.note, t.review)}</td></tr>"
             for t in reversed(report.trades)
         )
         or '<tr><td colspan="8" class="muted">Todavía no hay operaciones.</td></tr>'
     )
+    events = _events_panel(report)
     problems = ""
     if report.problems:
         items = "".join(f"<li>{escape(x)}</li>" for x in report.problems)
@@ -231,11 +282,16 @@ diario · generado el {generated:%d/%m/%Y %H:%M}. Los importes se suman sin conv
 <table><thead><tr><th>Activo</th><th>Cantidad</th><th>Coste medio</th><th>Último cierre</th>
 <th>Valor</th><th>Resultado latente</th><th>%</th><th>Peso</th></tr></thead>
 <tbody>{rows}</tbody></table></div>
+{events}
 <h2 class="section-title">Operaciones</h2>
 <table><thead><tr><th>Fecha</th><th>Activo</th><th>Operación</th><th>Cantidad</th><th>Precio</th>
-<th>Comisión</th><th>Importe</th><th>Nota</th></tr></thead><tbody>{trades}</tbody></table>
-<footer>Análisis de Acciones · Cartera simulada: no refleja impuestos, dividendos ni costes reales.
-No es asesoramiento financiero.</footer>
+<th>Comisión</th><th>Importe</th><th>Diario (motivo y revisión)</th></tr></thead>
+<tbody>{trades}</tbody></table>
+<footer>Análisis de Acciones · Cartera simulada: importes en dólares (sin conversión de moneda);
+no refleja impuestos ni retenciones sobre dividendos. Los splits se aplican a la cantidad de
+acciones y los dividendos se cobran en efectivo en su fecha ex-dividendo. No es asesoramiento
+financiero.
+</footer>
 </body></html>"""
 
 
@@ -243,7 +299,17 @@ def portfolio_trades_csv(report: PortfolioReport) -> str:
     buffer = io.StringIO()
     writer = csv.writer(buffer, lineterminator="\n")
     writer.writerow(
-        ["fecha", "ticker", "operacion", "cantidad", "precio", "comision", "importe", "nota"]
+        [
+            "fecha",
+            "ticker",
+            "operacion",
+            "cantidad",
+            "precio",
+            "comision",
+            "importe",
+            "motivo",
+            "revision",
+        ]
     )
     for t in report.trades:
         writer.writerow(
@@ -258,6 +324,7 @@ def portfolio_trades_csv(report: PortfolioReport) -> str:
                     t.commission,
                     round(t.value, 4),
                     t.note,
+                    t.review,
                 )
             ]
         )

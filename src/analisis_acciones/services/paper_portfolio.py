@@ -7,7 +7,7 @@ import sqlite3
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 
 import pandas as pd
@@ -16,11 +16,17 @@ from analisis_acciones.models.errors import AppError, InternalError, UserError
 from analisis_acciones.models.market import Interval
 from analisis_acciones.portfolio.engine import (
     BUY,
+    DIVIDEND,
     SELL,
+    SPLIT,
+    AppliedEvent,
+    CorporateEvent,
     PaperTrade,
     Valuation,
+    adjust_for_splits,
     equity_curve,
     replay,
+    split_factor_after,
     value,
 )
 from analisis_acciones.providers.base import normalize_symbol
@@ -33,22 +39,38 @@ DEFAULT_CASH = 10_000.0
 MAX_NAME = 40
 
 
+MAX_TEXT = 500
+QUANTITY_DECIMALS = 6
+
+
 @dataclass(frozen=True)
 class Portfolio:
     id: int
     name: str
     initial_cash: float
+    commission_fixed: float = 0.0  # per trade, in dollars
+    commission_pct: float = 0.0  # percent of the traded value
+    commission_min: float = 0.0  # minimum per trade, in dollars
+    apply_dividends: bool = True
+
+    def commission_for(self, value: float) -> float:
+        """Commission of a trade of ``value`` dollars under this portfolio's schedule."""
+        fee = self.commission_fixed + value * self.commission_pct / 100
+        return round(max(fee, self.commission_min), 2) if fee or self.commission_min else 0.0
 
 
 @dataclass(frozen=True)
 class PortfolioReport:
     portfolio: Portfolio
-    trades: list[PaperTrade]
+    trades: list[PaperTrade]  # as entered (real prices and quantities)
     valuation: Valuation
     equity: pd.Series  # daily total value
     benchmark: pd.Series  # benchmark rebased to the initial cash, same days (may be empty)
     benchmark_symbol: str
     problems: list[str]
+    # Dividends and splits that affected the portfolio, in the share units of their day
+    # (``shares`` is the count after the event for a split).
+    events: list[AppliedEvent] = field(default_factory=list)
 
 
 class PaperPortfolioService:
@@ -67,9 +89,27 @@ class PaperPortfolioService:
     # Portfolios ------------------------------------------------------------------
     def portfolios(self) -> list[Portfolio]:
         with self._db() as db:
-            rows = db.execute("SELECT id, name, initial_cash FROM paper_portfolios ORDER BY id")
-            found = [Portfolio(r["id"], r["name"], r["initial_cash"]) for r in rows.fetchall()]
+            rows = db.execute("SELECT * FROM paper_portfolios ORDER BY id")
+            found = [Portfolio(r["id"], r["name"], r["initial_cash"], r["commission_fixed"],
+                               r["commission_pct"], r["commission_min"],
+                               bool(r["apply_dividends"])) for r in rows.fetchall()]  # fmt: skip
         return found or [self.create(DEFAULT_NAME, DEFAULT_CASH)]
+
+    def set_costs(self, portfolio_id: int, fixed: float, pct: float, minimum: float,
+                  apply_dividends: bool = True) -> Portfolio:  # fmt: skip
+        """Commission schedule for new trades (existing trades keep theirs)."""
+        if fixed < 0 or minimum < 0 or not 0 <= pct < 10:
+            raise UserError(
+                "bad commission schedule",
+                user_message="Comisión no válida: importes ≥ 0 y porcentaje < 10 %.",
+            )
+        with self._db() as db:
+            db.execute(
+                "UPDATE paper_portfolios SET commission_fixed = ?, commission_pct = ?, "
+                "commission_min = ?, apply_dividends = ? WHERE id = ?",
+                (float(fixed), float(pct), float(minimum), int(apply_dividends), portfolio_id),
+            )
+        return self._portfolio(portfolio_id)
 
     def create(self, name: str, initial_cash: float) -> Portfolio:
         clean = " ".join(str(name).split())
@@ -113,10 +153,57 @@ class PaperPortfolioService:
             ).fetchall()
         return [PaperTrade(r["symbol"], r["side"], r["quantity"], r["price"],
                            date.fromisoformat(r["trade_date"]), r["commission"], r["note"],
-                           r["id"]) for r in rows]  # fmt: skip
+                           r["id"], r["review"]) for r in rows]  # fmt: skip
+
+    def set_review(self, portfolio_id: int, trade_id: int, text: str) -> None:
+        """Journal: what the trade taught, written after the fact."""
+        clean = text.strip()[:MAX_TEXT]
+        with self._db() as db:
+            db.execute("UPDATE paper_trades SET review = ? WHERE id = ? AND portfolio_id = ?",
+                       (clean, trade_id, portfolio_id))  # fmt: skip
+
+    # Market data and corporate events -------------------------------------------------
+    def _bars(self, symbols: set[str]) -> tuple[dict[str, pd.DataFrame], list[str]]:
+        bars: dict[str, pd.DataFrame] = {}
+        problems: list[str] = []
+        for symbol in sorted(symbols):
+            try:
+                bars[symbol] = self._market.load(symbol, Interval.D1).series.bars
+            except AppError as exc:
+                problems.append(f"{symbol}: {exc.user_message}")
+        return bars, problems
+
+    @staticmethod
+    def _events(trades: list[PaperTrade], bars: dict[str, pd.DataFrame],
+                dividends: bool) -> list[CorporateEvent]:  # fmt: skip
+        """Dividends and splits after each symbol's first trade."""
+        events: list[CorporateEvent] = []
+        for symbol, frame in bars.items():
+            first = min((t.trade_date for t in trades if t.symbol == symbol), default=None)
+            if first is None:
+                continue
+            after = frame[frame.index > pd.Timestamp(first)]
+            for column, kind in (("dividends", DIVIDEND), ("splits", SPLIT)):
+                if kind == DIVIDEND and not dividends:
+                    continue
+                paid = after[column][after[column] > 0]
+                for ts, v in zip(pd.DatetimeIndex(paid.index), paid, strict=True):
+                    events.append(CorporateEvent(symbol, ts.date(), kind, float(v)))
+        return events
+
+    def _check(self, portfolio: Portfolio, trades: list[PaperTrade]) -> None:
+        """Raise UserError if the history (with corporate events) is impossible."""
+        bars, _problems = self._bars({t.symbol for t in trades})
+        splits = {s: b["splits"] for s, b in bars.items()}
+        replay(adjust_for_splits(trades, splits), portfolio.initial_cash,
+               events=self._events(trades, bars, portfolio.apply_dividends))  # fmt: skip
 
     def close_on(self, symbol: str, day: date) -> tuple[float, date]:
-        """Close of ``symbol`` on ``day`` or the last session before it."""
+        """Real close of ``symbol`` on ``day`` or the session before it.
+
+        The price history is split-adjusted; the close is scaled back by the splits
+        that came later so it is the price that was actually quoted that day.
+        """
         bars = self._market.load(symbol, Interval.D1).series.bars
         before = bars[bars.index <= pd.Timestamp(day)]
         if before.empty:
@@ -124,18 +211,33 @@ class PaperPortfolioService:
                 f"no price for {symbol} on {day}",
                 user_message=f"No hay cotización de {symbol} en esa fecha o antes.",
             )
-        return float(before["close"].iloc[-1]), pd.Timestamp(before.index[-1]).date()
+        session = pd.Timestamp(before.index[-1]).date()
+        factor = split_factor_after(bars["splits"], session)
+        return float(before["close"].iloc[-1]) * factor, session
 
-    def add_trade(self, portfolio_id: int, symbol: str, side: str, quantity: float,
-                  price: float | None = None, trade_date: date | None = None,
-                  commission: float = 0.0, note: str = "") -> PaperTrade:  # fmt: skip
-        """Record a trade; ``price`` None uses that day's close. Refuses impossible trades."""
+    def add_trade(self, portfolio_id: int, symbol: str, side: str,
+                  quantity: float | None = None, price: float | None = None,
+                  trade_date: date | None = None, commission: float | None = None,
+                  note: str = "", amount: float | None = None) -> PaperTrade:  # fmt: skip
+        """Record a trade and refuse impossible ones.
+
+        Give either ``quantity`` (fractions allowed) or ``amount`` in dollars, which
+        buys or sells that value at the price. ``price`` None uses that day's close;
+        ``commission`` None applies the portfolio's commission schedule.
+        """
         if side not in (BUY, SELL):
             raise UserError(f"bad side {side!r}", user_message="Operación no válida.")
         symbol = normalize_symbol(symbol)
-        if not quantity > 0:
+        if (quantity is None) == (amount is None):
+            raise UserError(
+                "quantity xor amount",
+                user_message="Indique la cantidad de acciones o el importe en $.",
+            )
+        if amount is not None and not amount > 0:
+            raise UserError("amount <= 0", user_message="El importe debe ser positivo.")
+        if quantity is not None and not quantity > 0:
             raise UserError("quantity <= 0", user_message="La cantidad debe ser positiva.")
-        if commission < 0:
+        if commission is not None and commission < 0:
             raise UserError("commission < 0", user_message="La comisión no puede ser negativa.")
         today = self._clock().date()
         day = trade_date or today
@@ -145,12 +247,18 @@ class PaperPortfolioService:
             price, _session = self.close_on(symbol, day)
         if not price > 0:
             raise UserError("price <= 0", user_message="El precio debe ser positivo.")
-        trade = PaperTrade(symbol, side, float(quantity), float(price), day, float(commission),
-                           " ".join(note.split())[:120])  # fmt: skip
+        if quantity is None:
+            assert amount is not None
+            quantity = round(amount / price, QUANTITY_DECIMALS)
+            if quantity <= 0:
+                raise UserError("amount too small", user_message="Importe demasiado pequeño.")
         portfolio = self._portfolio(portfolio_id)
+        fee = portfolio.commission_for(quantity * price) if commission is None else commission
+        trade = PaperTrade(symbol, side, float(quantity), float(price), day, float(fee),
+                           " ".join(note.split())[:MAX_TEXT])  # fmt: skip
         # Validate against every trade, including later ones (a back-dated sale may make a
-        # later sale impossible).
-        replay([*self.trades(portfolio_id), trade], portfolio.initial_cash)
+        # later sale impossible), with dividends and splits applied.
+        self._check(portfolio, [*self.trades(portfolio_id), trade])
         with self._db() as db:
             cursor = db.execute(
                 "INSERT INTO paper_trades (portfolio_id, symbol, side, quantity, price, "
@@ -165,31 +273,28 @@ class PaperPortfolioService:
     def delete_trade(self, portfolio_id: int, trade_id: int) -> None:
         """Delete a trade unless the remaining history becomes impossible."""
         remaining = [t for t in self.trades(portfolio_id) if t.id != trade_id]
-        replay(remaining, self._portfolio(portfolio_id).initial_cash)
+        self._check(self._portfolio(portfolio_id), remaining)
         with self._db() as db:
             db.execute("DELETE FROM paper_trades WHERE id = ? AND portfolio_id = ?",
                        (trade_id, portfolio_id))  # fmt: skip
 
     # Report ----------------------------------------------------------------------
     def report(self, portfolio_id: int, benchmark: str = "SPY") -> PortfolioReport:
-        """Current valuation, daily value curve and benchmark (cache-first loads)."""
+        """Current valuation, events, daily value curve and benchmark (cache-first loads)."""
         portfolio = self._portfolio(portfolio_id)
         trades = self.trades(portfolio_id)
-        problems: list[str] = []
-        closes: dict[str, pd.Series] = {}
-        for symbol in sorted({t.symbol for t in trades}):
-            try:
-                closes[symbol] = self._market.load(symbol, Interval.D1).series.bars["close"]
-            except AppError as exc:
-                problems.append(f"{symbol}: {exc.user_message}")
-        state = replay(trades, portfolio.initial_cash)
+        bars, problems = self._bars({t.symbol for t in trades})
+        closes = {s: b["close"] for s, b in bars.items()}
+        adjusted = adjust_for_splits(trades, {s: b["splits"] for s, b in bars.items()})
+        events = self._events(trades, bars, portfolio.apply_dividends)
+        state = replay(adjusted, portfolio.initial_cash, events=events)
         end = self._clock().date()
         prices: dict[str, float | None] = {}
         for symbol, series in closes.items():
             known = series[series.index <= pd.Timestamp(end)]  # same day as the value curve
             prices[symbol] = float(known.iloc[-1]) if len(known) else None
         valuation = value(state, portfolio.initial_cash, prices)
-        equity = equity_curve(trades, portfolio.initial_cash, closes, end)
+        equity = equity_curve(adjusted, portfolio.initial_cash, closes, end, events)
         bench = pd.Series(dtype=float)
         if not equity.empty:
             try:
@@ -199,4 +304,21 @@ class PaperPortfolioService:
                     bench = aligned / float(aligned.iloc[0]) * portfolio.initial_cash
             except AppError as exc:
                 problems.append(f"{benchmark}: {exc.user_message}")
-        return PortfolioReport(portfolio, trades, valuation, equity, bench, benchmark, problems)
+        splits = {s: b["splits"] for s, b in bars.items()}
+        return PortfolioReport(portfolio, trades, valuation, equity, bench, benchmark, problems,
+                               [self._as_quoted(e, splits) for e in state.applied])  # fmt: skip
+
+    @staticmethod
+    def _as_quoted(applied: AppliedEvent, splits: dict[str, pd.Series]) -> AppliedEvent:
+        """An applied event with shares and per-share amount as they were on that day.
+
+        The replay counts shares in today's units; later splits are undone here so the
+        report shows the numbers the holder saw then (the cash is unchanged).
+        """
+        e = applied.event
+        factor = split_factor_after(splits[e.symbol], e.day) if e.symbol in splits else 1.0
+        if factor == 1.0:
+            return applied
+        amount = e.value * factor if e.kind == DIVIDEND else e.value
+        return AppliedEvent(CorporateEvent(e.symbol, e.day, e.kind, amount),
+                            applied.shares / factor, applied.cash)  # fmt: skip
