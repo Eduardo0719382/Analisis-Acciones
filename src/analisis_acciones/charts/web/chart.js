@@ -68,7 +68,11 @@
       },
       crosshair: { mode: LWC.CrosshairMode.Normal },
       rightPriceScale: { borderColor: t.border },
-      timeScale: { borderColor: t.border, rightOffset: 3, minBarSpacing: 0.5 },
+      timeScale: {
+        borderColor: t.border, rightOffset: 3, minBarSpacing: 0.5,
+        // Intraday times are exchange wall-clock times encoded as UTC: show hours.
+        timeVisible: !!(state.payload && state.payload.intraday), secondsVisible: false,
+      },
       localization: { locale: state.locale, dateFormat: "dd/MM/yyyy" },
     };
   }
@@ -514,6 +518,7 @@
       state.indicators = payload.indicators || [];
       state.priceFormat = numberFormat(payload.decimals);
       ensureChart();
+      state.chart.applyOptions({ timeScale: { timeVisible: !!payload.intraday } });
       buildSeries();
       if (keep) state.chart.timeScale().setVisibleLogicalRange(keep);
       else {
@@ -579,6 +584,8 @@
       const range = state.chart ? state.chart.timeScale().getVisibleLogicalRange() : null;
       return {
         bars: state.payload ? state.payload.candles.length : 0,
+        intraday: !!(state.payload && state.payload.intraday),
+        timeVisible: state.chart ? !!state.chart.options().timeScale.timeVisible : false,
         chartType: state.chartType,
         priceSeriesType: state.priceSeries ? state.priceSeries.seriesType() : null,
         hasVolume: !!state.volumeSeries,

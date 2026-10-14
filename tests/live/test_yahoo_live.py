@@ -71,3 +71,21 @@ def test_service_end_to_end(provider: YahooFinanceProvider) -> None:
     second = service.load("TSLA", Interval.D1)
     assert not first.from_cache and second.from_cache
     assert len(second.series) > len(first.series)
+
+
+@pytest.mark.parametrize(("interval", "minutes", "min_days"),
+                         [(Interval.H1, 60, 300), (Interval.M15, 15, 30)])  # fmt: skip
+def test_intraday_history(provider: YahooFinanceProvider, interval: Interval, minutes: int,
+                          min_days: int) -> None:  # fmt: skip
+    series = provider.get_historical_data("AAPL", interval)
+    bars = series.bars
+    index = bars.index
+    days = len(set(index.date))
+    print(f"AAPL {interval.value}: {len(bars)} bars over {days} days, {index[0]} .. {index[-1]}")
+    assert days >= min_days
+    assert index.is_monotonic_increasing and not index.has_duplicates
+    # Regular session only, New York wall-clock time.
+    times = {(t.hour, t.minute) for t in index}
+    assert min(times) == (9, 30) and max(times) < (16, 0)
+    assert all(m % minutes in (0, 30 % minutes) for _h, m in times)
+    assert (bars["high"] >= bars["low"]).all()

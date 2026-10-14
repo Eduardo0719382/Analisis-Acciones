@@ -99,7 +99,7 @@ def test_symbol_normalization() -> None:
 
 def test_unsupported_interval(provider: YahooFinanceProvider) -> None:
     with pytest.raises(UserError):
-        provider.get_historical_data("TEST", Interval.H1)
+        provider.get_historical_data("TEST", Interval.M5)
 
 
 @pytest.mark.parametrize(

@@ -62,8 +62,14 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
 - **Buscar:** escriba un ticker (p. ej. `AAPL`) o el nombre de una empresa en el cuadro de
   búsqueda. Use ↑/↓ y Enter, o haga clic en un resultado. Con el cuadro vacío se muestran
   los símbolos recientes.
-- **Intervalo:** Diario, Semanal o Mensual (los dos últimos se calculan a partir de los datos
-  diarios).
+- **Intervalo:** 15 minutos, 1 hora, Diario, Semanal o Mensual (los dos últimos se calculan a
+  partir de los datos diarios). Intradía: solo horario regular (9:30–16:00 de Nueva York, que es
+  la hora que muestra el gráfico); Yahoo ofrece unos 60 días de barras de 15 minutos y unos 2 años
+  de barras horarias. El programa guarda las que descarga, así que el historial crece con el uso.
+  Todas las herramientas (indicadores, análisis, proyección, Elliott, patrones, backtesting)
+  funcionan también en intradía. Los dibujos se guardan por fecha de sesión y por eso solo están
+  en los gráficos diario, semanal y mensual. Las alertas y el escáner usan sesiones diarias
+  cerradas.
 - **Gráfico:** velas o línea (selector junto al intervalo). Rueda del ratón = zoom; arrastrar =
   desplazarse; la leyenda superior muestra apertura, máximo, mínimo, cierre, cambio y volumen
   de la barra bajo el cursor. El volumen aparece en un panel propio bajo el precio.

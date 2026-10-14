@@ -581,3 +581,25 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   same asset on any day, in the same direction and for the same number of sessions. Groups with
   fewer than 20 trades are flagged as small samples.
 - The report reuses the scanner report's visual language and export path (HTML/PDF/CSV).
+
+## D-034 — Intraday data (1 hour, 15 minutes)
+
+- **Source:** Yahoo through yfinance (`interval="1h"/"15m"`, `prepost=False`). Yahoo serves
+  about 730 days of hourly bars and 60 days of 15-minute bars, so requests are clamped to those
+  windows.
+- **Time:** bars keep the exchange's wall-clock time (New York for US stocks), stored without a
+  time zone. The chart receives these times encoded as UTC seconds, so it shows 9:30, 10:30
+  and so on, whatever the user's PC time zone. Daily and longer bars still use "YYYY-MM-DD".
+  `chart_times()` picks the form from the data (intraday bars have a time of day), so overlays
+  and indicators share one code path.
+- **Cache:** new tables `intraday_bars` and `intraday_meta` (migration 0007). A cached series
+  is current for 10 min (1 h) or 3 min (15 m). After that, the last 3 days are requested again
+  and merged. Stored bars are kept beyond Yahoo's window, so history grows with use. If
+  overlapping closes differ (a split re-adjustment), the stored series is replaced. When
+  offline, the cache is served and marked stale.
+- **Bar in progress:** a bar is incomplete until its start plus the interval, or until the
+  16:00 close if that comes first (the last hourly bar starts at 15:30).
+- **Scope:** CSV imports, alerts, the daily scan and the watchlist stay on daily sessions.
+  Drawings are keyed by session date, so they are disabled on intraday charts.
+  Future times (Ichimoku cloud, projection) step through weekday sessions; holidays are not
+  modelled.

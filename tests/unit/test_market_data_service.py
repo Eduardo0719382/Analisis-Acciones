@@ -47,7 +47,13 @@ def service(conn: sqlite3.Connection, client: FakeYahooClient, clock: Clock) -> 
 
 
 def test_intervals_include_derived(service: MarketDataService) -> None:
-    assert service.available_intervals() == [Interval.D1, Interval.W1, Interval.MN1]
+    assert service.available_intervals() == [
+        Interval.M15,
+        Interval.H1,
+        Interval.D1,
+        Interval.W1,
+        Interval.MN1,
+    ]
 
 
 def test_first_load_fetches_full_history_and_caches(

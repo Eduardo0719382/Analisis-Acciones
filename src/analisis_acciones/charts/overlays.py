@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from analisis_acciones.charts.payload import ChartTime
 from analisis_acciones.forecast.projection import Projection
 from analisis_acciones.patterns.chart_patterns import ChartPattern
 from analisis_acciones.patterns.elliott import CORRECTION, WaveCount
@@ -22,7 +23,8 @@ _BAND_STYLE = {
 }
 
 
-def projection_overlay(projection: Projection, past_dates: list[str], future_dates: list[str],
+def projection_overlay(projection: Projection, past_dates: list[ChartTime],
+                       future_dates: list[ChartTime],
                        color: str, median_color: str) -> list[dict[str, Any]]:  # fmt: skip
     """One line per band.
 
@@ -49,7 +51,7 @@ def projection_overlay(projection: Projection, past_dates: list[str], future_dat
     return items
 
 
-def elliott_overlay(counts: list[WaveCount], dates: list[str], selected: WaveCount | None,
+def elliott_overlay(counts: list[WaveCount], dates: list[ChartTime], selected: WaveCount | None,
                     colors: dict[str, str]) -> list[dict[str, Any]]:  # fmt: skip
     """Lines through each count's pivots with wave labels; levels for the selected count.
 
@@ -96,7 +98,7 @@ def levels_overlay(levels: list[Level], close: float, support_color: str,
     ]  # fmt: skip
 
 
-def patterns_overlay(patterns: list[ChartPattern], dates: list[str],
+def patterns_overlay(patterns: list[ChartPattern], dates: list[ChartTime],
                      selected: ChartPattern | None,
                      colors: dict[str, str]) -> list[dict[str, Any]]:  # fmt: skip
     """Pivots, labels and pattern lines; targets/invalidation for the selected one.

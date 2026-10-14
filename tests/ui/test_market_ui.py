@@ -74,7 +74,8 @@ def test_controls_enabled_with_service(window: MainWindow) -> None:
     assert window.search_box.isEnabled()
     assert window.timeframe_combo.isEnabled()
     labels = [window.timeframe_combo.itemText(i) for i in range(window.timeframe_combo.count())]
-    assert labels == ["Diario", "Semanal", "Mensual"]
+    assert labels == ["15 min", "1 hora", "Diario", "Semanal", "Mensual"]
+    assert window.timeframe_combo.currentText() == "Diario"
     assert "Yahoo Finance" in window.provider_label.text()
 
 
@@ -98,7 +99,7 @@ def test_interval_change_reloads(qtbot: QtBot, window: MainWindow) -> None:
     with qtbot.waitSignal(window.market.load_finished, timeout=5000):
         window.open_symbol("TEST")
     with qtbot.waitSignal(window.market.load_finished, timeout=5000) as blocker:
-        window.timeframe_combo.setCurrentIndex(1)
+        window.timeframe_combo.setCurrentIndex(window.timeframe_combo.findData("1W"))
     assert blocker.args[0].series.interval is Interval.W1
     assert window.chart.current_series is not None
     assert window.chart.current_series.interval is Interval.W1
@@ -127,7 +128,7 @@ def test_failed_load_keeps_previous_data(qtbot: QtBot, window: MainWindow) -> No
     assert "NOPE" in window.statusBar().currentMessage()
     # Changing interval reloads the symbol actually shown, not the failed one.
     with qtbot.waitSignal(window.market.load_finished, timeout=5000) as blocker:
-        window.timeframe_combo.setCurrentIndex(2)
+        window.timeframe_combo.setCurrentIndex(window.timeframe_combo.findData("1M"))
     assert blocker.args[0].series.symbol == "TEST"
 
 
@@ -310,7 +311,7 @@ def test_indicators_follow_interval_change(qtbot: QtBot, window: MainWindow) -> 
     with qtbot.waitSignal(window.market.load_finished, timeout=5000):
         window.open_symbol("TEST")
     with qtbot.waitSignal(window.market.load_finished, timeout=5000):
-        window.timeframe_combo.setCurrentIndex(1)  # weekly
+        window.timeframe_combo.setCurrentIndex(window.timeframe_combo.findData("1W"))  # weekly
     qtbot.waitUntil(lambda: chart_state(qtbot, window)["bars"] == 60, timeout=20000)
     assert chart_state(qtbot, window)["indicators"] == ["SMA (5)"]
 

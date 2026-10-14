@@ -496,3 +496,8 @@ PBT_TRADE_COLUMNS = (
     "Motivo",
     "Resultado %",
 )
+
+DRAW_INTRADAY = (
+    "Los dibujos se guardan por fecha de sesión: están disponibles en los gráficos diario, "
+    "semanal y mensual."
+)

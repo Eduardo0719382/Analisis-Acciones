@@ -11,6 +11,9 @@ Flow for ``load(symbol, interval)``:
 3. If the provider fails with a network or provider error and a cache exists,
    the cached data is returned marked as stale. Nothing is ever fabricated.
 4. Weekly/monthly bars are derived from daily bars.
+5. Intraday bars (1h, 15m) have their own cache, refreshed when older than a
+   few minutes and merged with what is stored, so history accumulates beyond
+   the provider's window (Yahoo: 60 days of 15m bars, 730 days of 1h bars).
 
 All methods are blocking and thread-safe; the UI calls them from workers.
 """
@@ -31,7 +34,12 @@ import pandas as pd
 
 from analisis_acciones.data.csv_import import read_csv_bars
 from analisis_acciones.data.details import AssetDetails, build_details
-from analisis_acciones.data.freshness import needs_refresh, session_in_progress
+from analisis_acciones.data.freshness import (
+    NEW_YORK,
+    SESSION_CLOSE,
+    needs_refresh,
+    session_in_progress,
+)
 from analisis_acciones.data.resample import resample_daily
 from analisis_acciones.models.errors import (
     AppError,
@@ -44,6 +52,7 @@ from analisis_acciones.models.errors import (
 from analisis_acciones.models.market import BarSeries, CompanyInfo, Interval, Quote, SearchResult
 from analisis_acciones.providers.base import MarketDataProvider, normalize_symbol
 from analisis_acciones.storage.bar_repository import BarRepository
+from analisis_acciones.storage.intraday_repository import IntradayRepository
 from analisis_acciones.storage.recent_repository import RecentSymbolRepository
 
 logger = logging.getLogger(__name__)
@@ -54,6 +63,13 @@ OVERLAP_DAYS = 30
 OVERLAP_TOLERANCE = 1e-4  # relative difference in close prices
 SEARCH_CACHE_TTL = timedelta(minutes=10)
 DERIVED_INTERVALS = (Interval.W1, Interval.MN1)
+#: Display order of intervals (shortest first).
+INTERVAL_ORDER = (Interval.M1, Interval.M5, Interval.M15, Interval.M30, Interval.H1,
+                  Interval.H4, Interval.D1, Interval.W1, Interval.MN1)  # fmt: skip
+#: Intraday bar length and how long a cached intraday series counts as current.
+INTRADAY_STEP = {Interval.H1: timedelta(hours=1), Interval.M15: timedelta(minutes=15)}
+INTRADAY_REFRESH = {Interval.H1: timedelta(minutes=10), Interval.M15: timedelta(minutes=3)}
+INTRADAY_OVERLAP_DAYS = 3
 
 
 @dataclass(frozen=True)
@@ -89,6 +105,7 @@ class MarketDataService:
     ) -> None:
         self._provider = provider
         self._bars = BarRepository(conn)
+        self._intraday = IntradayRepository(conn)
         self._recent = RecentSymbolRepository(conn)
         self._clock = clock
         self._lock = threading.RLock()  # one connection shared by worker threads
@@ -121,7 +138,7 @@ class MarketDataService:
     def available_intervals(self) -> list[Interval]:
         native = self._provider.get_available_intervals()
         derived = [i for i in DERIVED_INTERVALS if Interval.D1 in native and i not in native]
-        return [*native, *derived]
+        return sorted({*native, *derived}, key=INTERVAL_ORDER.index)
 
     # Search ----------------------------------------------------------------
     def search(self, query: str, limit: int = 10) -> list[SearchResult]:
@@ -153,6 +170,8 @@ class MarketDataService:
                 f"interval {interval} not available",
                 user_message=f"El intervalo {interval.value} no está disponible.",
             )
+        if interval.is_intraday:
+            return self._load_intraday(symbol, interval)
         daily = self._load_daily(symbol)
         if interval is Interval.D1:
             return daily
@@ -168,6 +187,71 @@ class MarketDataService:
             daily.session_in_progress,
             daily.notices,
         )
+
+    def _load_intraday(self, raw_symbol: str, interval: Interval) -> LoadResult:
+        if is_csv_symbol(raw_symbol) or interval not in INTRADAY_STEP:
+            raise UserError(
+                f"intraday not available for {raw_symbol}",
+                user_message="Los intervalos intradía solo están disponibles para tickers de "
+                "Yahoo Finance (no para series importadas de CSV).",
+            )
+        symbol = normalize_symbol(raw_symbol)
+        now = self._clock()
+        with self._db():
+            meta = self._intraday.meta(symbol, interval.value)
+            cached = self._intraday.load(symbol, interval.value)
+        have_cache = meta is not None and not cached.empty
+        if have_cache and meta is not None and now - meta.fetched_at < INTRADAY_REFRESH[interval]:
+            return self._intraday_result(symbol, interval, cached, meta.source, meta.fetched_at,
+                                         now, True)  # fmt: skip
+        start = cached.index[-1].date() - timedelta(days=INTRADAY_OVERLAP_DAYS) \
+            if have_cache else None  # fmt: skip
+        try:
+            series = self._provider.get_historical_data(symbol, interval, start=start)
+        except (NetworkError, ProviderError, DataError) as exc:
+            if not have_cache or meta is None:
+                raise
+            logger.warning("Intraday refresh of %s failed, serving cache: %s", symbol, exc)
+            return self._intraday_result(symbol, interval, cached, meta.source,
+                                         meta.fetched_at, now, True, stale=True,
+                                         notices=(exc.user_message,))  # fmt: skip
+        new = series.bars
+        # A split re-adjusts past prices at the source: then the stored series is replaced.
+        replace = not have_cache or (not new.empty and self._intraday_rescaled(cached, new))
+        with self._db():
+            if new.empty:
+                self._intraday.touch(symbol, interval.value, series.source, now)
+            else:
+                self._intraday.upsert(symbol, interval.value, series.source, new, now,
+                                      replace=replace)  # fmt: skip
+            bars = self._intraday.load(symbol, interval.value)
+        if bars.empty:
+            raise DataError(f"{symbol}: no intraday bars",
+                            user_message=f"No hay datos intradía para {symbol}.")  # fmt: skip
+        return self._intraday_result(symbol, interval, bars, series.source, now, now, False,
+                                     notices=series.warnings)  # fmt: skip
+
+    @staticmethod
+    def _intraday_result(
+        symbol: str, interval: Interval, bars: pd.DataFrame, source: str,
+        fetched_at: datetime | None, now: datetime, from_cache: bool, *,
+        stale: bool = False, notices: tuple[str, ...] = (),
+    ) -> LoadResult:  # fmt: skip
+        series = BarSeries(symbol, interval, bars, source, tuple(notices))
+        last = pd.Timestamp(bars.index[-1]).to_pydatetime() if not bars.empty else None
+        in_progress = intraday_bar_in_progress(last, interval, now)
+        return LoadResult(series, fetched_at, from_cache, stale, in_progress, tuple(notices))
+
+    @staticmethod
+    def _intraday_rescaled(cached: pd.DataFrame, new: pd.DataFrame) -> bool:
+        """Do overlapping closes differ (split re-adjustment)? The last cached bar may
+        have been partial, so it is not compared. No overlap is not a change."""
+        common = cached.index[:-1].intersection(new.index)
+        if common.empty:
+            return False
+        old = cached.loc[common, "close"].to_numpy()
+        rel = np.abs(new.loc[common, "close"].to_numpy() - old) / np.maximum(np.abs(old), 1e-12)
+        return bool((rel > OVERLAP_TOLERANCE).any())
 
     def _load_daily(self, raw_symbol: str) -> LoadResult:
         if is_csv_symbol(raw_symbol):
@@ -334,3 +418,16 @@ class MarketDataService:
                 user_message=f"No hay datos importados con el nombre «{symbol}».",
             )
         return self._result(symbol, bars, meta.source, meta.fetched_at, self._clock(), True)
+
+
+def intraday_bar_in_progress(last_start: datetime | None, interval: Interval,
+                             now: datetime) -> bool:  # fmt: skip
+    """Is the bar starting at ``last_start`` (New York wall time) still being formed?
+
+    A bar ends ``interval`` later or at the 16:00 close, whichever is first.
+    """
+    if last_start is None or interval not in INTRADAY_STEP:
+        return False
+    close = datetime.combine(last_start.date(), SESSION_CLOSE)
+    end = min(last_start + INTRADAY_STEP[interval], close)
+    return now.astimezone(NEW_YORK).replace(tzinfo=None) < end

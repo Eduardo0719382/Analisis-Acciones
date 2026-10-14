@@ -9,7 +9,6 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
 from PySide6.QtCore import QByteArray, QLocale, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
@@ -41,7 +40,7 @@ from analisis_acciones.charts.overlays import (
     patterns_overlay,
     projection_overlay,
 )
-from analisis_acciones.charts.payload import future_times
+from analisis_acciones.charts.payload import chart_times, future_times
 from analisis_acciones.data.export import bars_to_csv
 from analisis_acciones.indicators.registry import IndicatorConfig
 from analisis_acciones.models.errors import AppError, UserError
@@ -359,6 +358,9 @@ class MainWindow(QMainWindow):
         for interval in service.available_intervals():
             label = strings.INTERVAL_LABELS.get(interval.value, interval.value)
             self.timeframe_combo.addItem(label, interval.value)
+        self.timeframe_combo.setCurrentIndex(
+            max(self.timeframe_combo.findData(Interval.D1.value), 0)
+        )
         self.timeframe_combo.setEnabled(self.timeframe_combo.count() > 0)
         self.timeframe_combo.currentIndexChanged.connect(self._on_interval_changed)
 
@@ -428,10 +430,7 @@ class MainWindow(QMainWindow):
         tokens = tokens_for(self._settings.theme())
         items = projection_overlay(
             outcome.projection,
-            [
-                pd.Timestamp(t).strftime("%Y-%m-%d")
-                for t in bars.index[-max(len(outcome.projection.fitted.get("p50", [])), 1) :]
-            ],
+            chart_times(bars.index)[-max(len(outcome.projection.fitted.get("p50", [])), 1) :],
             future_times(bars, outcome.projection.horizon),
             tokens.text_muted,
             tokens.accent,
@@ -443,7 +442,7 @@ class MainWindow(QMainWindow):
             self.chart.set_overlay("elliott", [])
             return
         tokens = tokens_for(self._settings.theme())
-        dates = pd.DatetimeIndex(view.series.bars.index).strftime("%Y-%m-%d").tolist()
+        dates = chart_times(view.series.bars.index)
         colors = {"up": tokens.up, "down": tokens.down, "correction": tokens.text_muted,
                   "current": tokens.accent, "invalid": tokens.down}  # fmt: skip
         items = elliott_overlay(view.counts, dates, view.selected, colors)
@@ -474,7 +473,7 @@ class MainWindow(QMainWindow):
             self.chart.set_overlay("patterns", [])
             return
         tokens = tokens_for(self._settings.theme())
-        dates = pd.DatetimeIndex(view.series.bars.index).strftime("%Y-%m-%d").tolist()
+        dates = chart_times(view.series.bars.index)
         self.chart.set_overlay("levels", levels_overlay(view.levels, view.close, tokens.up,
                                                         tokens.down))  # fmt: skip
         colors = {"up": tokens.up, "down": tokens.down, "neutral": tokens.text_muted,
@@ -488,7 +487,18 @@ class MainWindow(QMainWindow):
             return None
         return self.current_result.series.symbol
 
+    def _intraday_chart(self) -> bool:
+        return self.current_result is not None and self.current_result.series.interval.is_intraday
+
     def _refresh_drawings(self) -> None:
+        # Drawings are anchored to session dates: shown on daily/weekly/monthly charts only.
+        intraday = self._intraday_chart()
+        self.draw_button.setEnabled(not intraday)
+        self.draw_button.setToolTip(strings.DRAW_INTRADAY if intraday else "")
+        if intraday:
+            self.chart.set_draw_mode(None)
+            self.chart.set_drawings([])
+            return
         symbol = self._drawing_symbol()
         if symbol is not None and self._drawings is not None:
             self.chart.set_drawings(self._drawings.drawings(symbol))
@@ -496,6 +506,9 @@ class MainWindow(QMainWindow):
     def start_drawing(self, mode: str) -> None:
         if self._drawing_symbol() is None:
             self.statusBar().showMessage(strings.DRAW_NEED_SYMBOL)
+            return
+        if self._intraday_chart():
+            self.statusBar().showMessage(strings.DRAW_INTRADAY)
             return
         self.chart.set_draw_mode(mode)
         self.statusBar().showMessage(strings.DRAW_HINTS[mode][0])

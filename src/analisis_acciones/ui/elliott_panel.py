@@ -170,7 +170,8 @@ class ElliottPanel(QWidget):
     # Presentation -----------------------------------------------------------------
     def _date(self, index: int) -> str:
         assert self._series is not None
-        return pd.Timestamp(self._series.bars.index[index]).strftime("%d/%m/%Y")
+        fmt = "%d/%m/%Y %H:%M" if self._series.interval.is_intraday else "%d/%m/%Y"
+        return pd.Timestamp(self._series.bars.index[index]).strftime(fmt)
 
     def _item_text(self, count: WaveCount) -> str:
         if count.guidelines:

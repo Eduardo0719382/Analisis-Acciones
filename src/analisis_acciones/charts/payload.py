@@ -20,6 +20,26 @@ logger = logging.getLogger(__name__)
 
 INITIAL_VISIBLE_BARS = 180
 
+#: Chart time: "YYYY-MM-DD" for daily and longer bars; for intraday bars, seconds
+#: since the epoch of the exchange wall-clock time read as UTC, so the chart (which
+#: shows UTC) displays exchange time (9:30, 10:30, ...).
+ChartTime = str | int
+SESSION_OPEN = pd.Timedelta(hours=9, minutes=30)
+SESSION_CLOSE = pd.Timedelta(hours=16)
+
+
+def is_intraday_index(index: pd.Index) -> bool:
+    """Intraday bars have times of day; daily and longer bars sit at midnight."""
+    idx = pd.DatetimeIndex(index)
+    return len(idx) > 0 and bool((idx != idx.normalize()).any())
+
+
+def chart_times(index: pd.Index) -> list[ChartTime]:
+    idx = pd.DatetimeIndex(index)
+    if is_intraday_index(idx):
+        return [int(ts.value // 1_000_000_000) for ts in idx]
+    return list(idx.strftime("%Y-%m-%d"))
+
 
 def price_decimals(bars: pd.DataFrame) -> int:
     """2 decimals for normal prices, 4 for sub-dollar instruments."""
@@ -39,8 +59,8 @@ def build_payload(series: BarSeries, title: str, up_color: str, down_color: str)
     candles: list[dict[str, Any]] = []
     volume: list[dict[str, Any]] = []
     volume_by_index: list[float | None] = []
-    for ts, o, h, low, c, v in zip(
-        pd.DatetimeIndex(bars.index),
+    for day, o, h, low, c, v in zip(
+        chart_times(bars.index),
         bars["open"],
         bars["high"],
         bars["low"],
@@ -48,7 +68,6 @@ def build_payload(series: BarSeries, title: str, up_color: str, down_color: str)
         bars["volume"],
         strict=True,
     ):
-        day = ts.strftime("%Y-%m-%d")
         candles.append({"time": day, "open": float(o), "high": float(h), "low": float(low),
                         "close": float(c)})  # fmt: skip
         vol = _finite(v)
@@ -63,6 +82,7 @@ def build_payload(series: BarSeries, title: str, up_color: str, down_color: str)
     return {
         "symbol": series.symbol,
         "title": title,
+        "intraday": is_intraday_index(bars.index),
         "decimals": price_decimals(bars),
         "initialBars": INITIAL_VISIBLE_BARS,
         "candles": candles,
@@ -71,15 +91,18 @@ def build_payload(series: BarSeries, title: str, up_color: str, down_color: str)
     }
 
 
-def future_times(bars: pd.DataFrame, count: int) -> list[str]:
-    """Approximate dates of the next ``count`` bars (used to draw shifted lines ahead).
+def future_times(bars: pd.DataFrame, count: int) -> list[ChartTime]:
+    """Approximate times of the next ``count`` bars (used to draw shifted lines ahead).
 
     Daily series step over weekends (holidays are not modelled); weekly and
-    monthly series step by the typical gap between their last bars.
+    monthly series step by the typical gap between their last bars; intraday
+    series step through the 9:30–16:00 session on weekdays.
     """
     if count <= 0 or bars.empty:
         return []
     index = pd.DatetimeIndex(bars.index)
+    if is_intraday_index(index):
+        return chart_times(pd.DatetimeIndex(_future_intraday(index, count)))
     last = index[-1]
     gaps = index.to_series().diff().dropna().dt.days.tail(20)
     typical = float(gaps.median()) if not gaps.empty else 1.0
@@ -92,7 +115,24 @@ def future_times(bars: pd.DataFrame, count: int) -> list[str]:
     return [d.strftime("%Y-%m-%d") for d in dates]
 
 
-def _points(times: list[str], values: list[float | None], style: str, up_color: str,
+def _future_intraday(index: pd.DatetimeIndex, count: int) -> list[pd.Timestamp]:
+    same_day = pd.Series(index[1:] - index[:-1])[index[1:].normalize() == index[:-1].normalize()]
+    step = same_day.median() if not same_day.empty else pd.Timedelta(hours=1)
+    out: list[pd.Timestamp] = []
+    t = index[-1]
+    while len(out) < count:
+        t = t + step
+        day = t.normalize()
+        if t - day >= SESSION_CLOSE or day.weekday() >= 5:
+            day = day + pd.Timedelta(days=1)
+            while day.weekday() >= 5:
+                day += pd.Timedelta(days=1)
+            t = day + SESSION_OPEN
+        out.append(t)
+    return out
+
+
+def _points(times: list[ChartTime], values: list[float | None], style: str, up_color: str,
             down_color: str) -> list[dict[str, Any]]:  # fmt: skip
     if style == "histogram":
         up, down = up_color + "99", down_color + "99"
@@ -107,7 +147,7 @@ def _points(times: list[str], values: list[float | None], style: str, up_color: 
     ]
 
 
-def _shifted_points(raw: list[float | None], times: list[str], future: list[str],
+def _shifted_points(raw: list[float | None], times: list[ChartTime], future: list[ChartTime],
                     shift: int) -> list[dict[str, Any]]:  # fmt: skip
     """Value computed at bar i drawn at bar i + shift (beyond the last bar: future dates)."""
     all_times = times + future
@@ -133,7 +173,7 @@ def build_indicator_payload(
 
     A failing indicator is skipped (and reported) instead of breaking the chart.
     """
-    times = pd.DatetimeIndex(bars.index).strftime("%Y-%m-%d").tolist()
+    times = chart_times(bars.index)
     decimals = price_decimals(bars)
     payload: list[dict[str, Any]] = []
     failed: list[str] = []

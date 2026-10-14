@@ -61,8 +61,13 @@ _NETWORK_ERROR_NAMES = {
 }
 
 
+#: Intraday intervals: yfinance code and how many days back Yahoo serves them.
+INTRADAY = {Interval.H1: ("1h", 729), Interval.M15: ("15m", 59)}
+
+
 class YahooClient(Protocol):
-    def history(self, symbol: str, start: date | None, end: date | None) -> pd.DataFrame: ...
+    def history(self, symbol: str, start: date | None, end: date | None,
+                interval: str = "1d") -> pd.DataFrame: ...  # fmt: skip
     def search(self, query: str, limit: int) -> list[dict[str, Any]]: ...
     def info(self, symbol: str) -> dict[str, Any]: ...
 
@@ -86,10 +91,12 @@ def _raises_by_config(yf: Any) -> bool:
 class YFinanceClient:
     """Thin wrapper over yfinance; the only place that imports it."""
 
-    def history(self, symbol: str, start: date | None, end: date | None) -> pd.DataFrame:
+    def history(self, symbol: str, start: date | None, end: date | None,
+                interval: str = "1d") -> pd.DataFrame:  # fmt: skip
         yf = _yfinance()
         kwargs: dict[str, Any] = {
-            "interval": "1d",
+            "interval": interval,
+            "prepost": False,  # regular session only
             "auto_adjust": False,
             "actions": True,
             "repair": False,
@@ -190,8 +197,8 @@ class YahooFinanceProvider(MarketDataProvider):
         self._info_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
     def get_available_intervals(self) -> list[Interval]:
-        # MVP: end-of-day only (PLAN.md Q5). Weekly/monthly are built from daily.
-        return [Interval.D1]
+        # Weekly/monthly are built from daily by the market data service.
+        return [Interval.D1, *INTRADAY]
 
     def get_historical_data(
         self, symbol: str, interval: Interval, start: date | None = None, end: date | None = None
@@ -202,9 +209,14 @@ class YahooFinanceProvider(MarketDataProvider):
                 f"interval {interval} not supported by Yahoo provider",
                 user_message=f"El intervalo {interval.value} no está disponible.",
             )
+        code = "1d"
+        if interval in INTRADAY:
+            code, max_days = INTRADAY[interval]
+            earliest = date.today() - timedelta(days=max_days)
+            start = earliest if start is None or start < earliest else start
         try:
             with self._lock:
-                raw = self._client.history(symbol, start, end)
+                raw = self._client.history(symbol, start, end, code)
         except Exception as exc:
             mapped = map_yahoo_error(exc, symbol)
             if start is not None and isinstance(mapped, UserError):
@@ -222,12 +234,12 @@ class YahooFinanceProvider(MarketDataProvider):
         frame = raw.rename(columns=_COLUMN_MAP)
         index = pd.DatetimeIndex(frame.index)
         if index.tz is not None:
-            # Daily bars are stamped at exchange-local midnight: keep the calendar date.
+            # Keep exchange-local wall-clock times (daily bars: exchange-local midnight).
             index = index.tz_localize(None)
-        frame.index = index.normalize()
+        frame.index = index if interval in INTRADAY else index.normalize()
         bars, warnings = validate_bars(frame, symbol)
         if end is not None:
-            bars = bars[bars.index <= pd.Timestamp(end)]
+            bars = bars[bars.index < pd.Timestamp(end) + pd.Timedelta(days=1)]
         return BarSeries(symbol, interval, bars, SOURCE_NAME, tuple(warnings))
 
     def _confirm_not_found(self, symbol: str) -> AppError:

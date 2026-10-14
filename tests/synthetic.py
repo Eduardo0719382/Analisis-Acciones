@@ -56,6 +56,34 @@ def to_yfinance_frame(bars: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
+def synthetic_intraday(start: str | None = None, days: int = 40, minutes: int = 60,
+                       seed: int = 11) -> pd.DataFrame:  # fmt: skip
+    """Regular-session bars (9:30–16:00 New York wall time) on business days.
+
+    By default the series ends a few days before today, inside Yahoo's intraday window.
+    """
+    if start is None:
+        start = (pd.Timestamp.today().normalize() - pd.offsets.BDay(days + 3)).strftime("%Y-%m-%d")
+    stamps: list[pd.Timestamp] = []
+    for day in pd.bdate_range(start, periods=days):
+        t = day + pd.Timedelta(hours=9, minutes=30)
+        while t < day + pd.Timedelta(hours=16):
+            stamps.append(t)
+            t += pd.Timedelta(minutes=minutes)
+    rng = np.random.default_rng(seed)
+    n = len(stamps)
+    close = 100.0 * np.exp(np.cumsum(rng.normal(0, 0.003, n)))
+    open_ = np.concatenate([[100.0], close[:-1]])
+    high = np.maximum(open_, close) * (1 + np.abs(rng.normal(0, 0.001, n)))
+    low = np.minimum(open_, close) * (1 - np.abs(rng.normal(0, 0.001, n)))
+    return pd.DataFrame(
+        {"open": open_, "high": high, "low": low, "close": close, "adj_close": close,
+         "volume": rng.integers(10_000, 50_000, n).astype(float), "dividends": 0.0,
+         "splits": 0.0},
+        index=pd.DatetimeIndex(stamps, name="date"),
+    )  # fmt: skip
+
+
 class FakeYahooClient:
     """Stands in for YFinanceClient. Serves slices of a synthetic series."""
 
@@ -67,14 +95,25 @@ class FakeYahooClient:
         self.error: Exception | None = None
         self.search_error: Exception | None = None
         self.known = {"TEST"}
+        self.intraday_calls: list[tuple[str, date | None, date | None, str]] = []
+        #: interval code ("1h", "15m") -> canonical bars with exchange-local times.
+        self.intraday: dict[str, pd.DataFrame] = {
+            "1h": synthetic_intraday(), "15m": synthetic_intraday(minutes=15),
+        }  # fmt: skip
 
-    def history(self, symbol: str, start: date | None, end: date | None) -> pd.DataFrame:
-        self.history_calls.append((symbol, start, end))
+    def history(self, symbol: str, start: date | None, end: date | None,
+                interval: str = "1d") -> pd.DataFrame:  # fmt: skip
+        if interval != "1d":
+            self.intraday_calls.append((symbol, start, end, interval))
+        else:
+            self.history_calls.append((symbol, start, end))
         if self.error:
             raise self.error
         if symbol not in self.known:
             return pd.DataFrame()
-        bars = self.bars
+        bars = self.bars if interval == "1d" else self.intraday.get(interval, pd.DataFrame())
+        if bars.empty:
+            return pd.DataFrame()
         if start is not None:
             bars = bars[bars.index >= pd.Timestamp(start)]
         if end is not None:
