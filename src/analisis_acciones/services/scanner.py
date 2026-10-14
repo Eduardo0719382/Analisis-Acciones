@@ -19,7 +19,7 @@ import pandas as pd
 
 from analisis_acciones.analysis.engine import analyze as analyze_signals
 from analisis_acciones.analysis.model import Direction
-from analisis_acciones.indicators.functions import rsi
+from analisis_acciones.indicators.functions import rsi, sma
 from analisis_acciones.models.errors import AppError
 from analisis_acciones.models.market import Interval
 from analisis_acciones.patterns import chart_patterns, elliott
@@ -33,6 +33,8 @@ RECENT_BARS = 10
 MIN_BARS = 60
 #: Closes kept per row for the report's mini chart.
 HISTORY_BARS = 120
+#: Candles kept per row for the report's price chart.
+CANDLE_BARS = 90
 FORMING_NOTE, BREAKOUT_NOTE = "en formación", "ruptura reciente"
 
 
@@ -65,6 +67,12 @@ class ScanRow:
     #: Last closes (oldest first) and the date of the first one, for the mini chart.
     history: tuple[float, ...] = ()
     history_start: date | None = None
+    #: Last ``CANDLE_BARS`` bars as (open, high, low, close, volume or NaN), oldest first,
+    #: with SMA 20 / SMA 50 aligned to them (NaN while not yet defined).
+    candles: tuple[tuple[float, float, float, float, float], ...] = ()
+    sma20: tuple[float, ...] = ()
+    sma50: tuple[float, ...] = ()
+    candles_start: date | None = None
 
     @property
     def patterns(self) -> tuple[str, ...]:
@@ -118,6 +126,12 @@ def scan_bars(symbol: str, bars: pd.DataFrame) -> ScanRow:
     support = max(supports) if supports else None
     resistance = min(resistances) if resistances else None
     recent = close.tail(HISTORY_BARS)
+    tail = bars.tail(CANDLE_BARS)
+    candles = tuple(
+        (float(o), float(h), float(lo), float(c), float(v))
+        for o, h, lo, c, v in zip(tail["open"], tail["high"], tail["low"], tail["close"],
+                                  tail["volume"], strict=True)
+    )  # fmt: skip
     return ScanRow(
         symbol=symbol,
         close=last,
@@ -135,6 +149,10 @@ def scan_bars(symbol: str, bars: pd.DataFrame) -> ScanRow:
         as_of=pd.Timestamp(bars.index[-1]).date(),
         history=tuple(float(v) for v in recent),
         history_start=pd.Timestamp(recent.index[0]).date(),
+        candles=candles,
+        sma20=tuple(float(v) for v in sma(close, 20).tail(CANDLE_BARS)),
+        sma50=tuple(float(v) for v in sma(close, 50).tail(CANDLE_BARS)),
+        candles_start=pd.Timestamp(tail.index[0]).date(),
     )
 
 

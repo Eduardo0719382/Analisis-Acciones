@@ -164,7 +164,8 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   **Exportar** guarda lo que muestra el filtro como:
   - **Informe visual (HTML o PDF):** resumen con casillas (cuántos activos tienen más señales
     alcistas o bajistas y cuántos tienen patrones) y una ficha por activo con una frase clara, un
-    mini-gráfico del precio con soporte y resistencia, la barra de señales, el indicador RSI y
+    gráfico de velas de las últimas 90 sesiones (con volumen, medias de 20 y 50, soporte y
+    resistencia), la barra de señales, el indicador RSI y
     los patrones. Incluye cómo leer cada ficha y un glosario. Alcista = ▲ azul, bajista = ▼ rojo
     (colores distinguibles también con daltonismo). El HTML no contiene scripts ni recursos
     externos.

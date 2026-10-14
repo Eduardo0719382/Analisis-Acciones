@@ -629,3 +629,13 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   same day are both reported. Existing daily rows keep their date keys unchanged.
 - Checks run every 15 minutes, or every 2 minutes while any intraday alert is enabled. The
   intraday cache (D-034) keeps most checks off the network.
+
+## D-037 — Candlestick chart in the scanner report
+
+- Each card shows the last 90 sessions as candles, with volume, SMA 20, SMA 50 and the nearest
+  support and resistance, drawn as inline SVG (no scripts), so it prints the same in the PDF.
+- **Colours:** candles reuse the report's blue/red, and SMA 20 is green. This set passes the
+  palette validator on the light surface (red/green CVD separation is in the warning band, so
+  every line also has a direct label and a legend). SMA 50 is the neutral ink colour. Labels are
+  moved apart so they never overlap. Every candle has a native tooltip with open, close, high
+  and low.

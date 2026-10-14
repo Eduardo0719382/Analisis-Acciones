@@ -98,3 +98,19 @@ def test_pattern_report_and_csv() -> None:
     assert "No hubo ninguna operación" in pattern_report_html(empty, datetime(2025, 1, 1))
     rows = list(csv.reader(io.StringIO(pattern_trades_csv(result))))
     assert rows[1][:3] == ["<X>", "Doble suelo", "compra"] and rows[1][8] == "objetivo"
+
+
+def test_candles_chart_in_card() -> None:
+    from analisis_acciones.services.scan_report import candles_svg
+
+    candles = tuple((10.0 + i, 11.5 + i, 9.5 + i, 10.5 + i, 1000.0) for i in range(30))
+    row = make_row(candles=candles, sma20=(float("nan"),) * 19 + tuple(range(11)),
+                   sma50=(float("nan"),) * 30, candles_start=date(2025, 1, 2))  # fmt: skip
+    svg = candles_svg(row)
+    assert svg.count('<g class="up">') == 30
+    assert svg.count('class="vol"') == 30
+    assert 'class="sma20"' in svg and 'class="sma50"' not in svg  # undefined SMA 50: no line
+    assert "Media 20" in svg and "Soporte 100,00" in svg and "02/01/2025" in svg
+    assert "media 20 sesiones" in svg  # legend
+    html = scan_report_html(ScanResult([row]), datetime(2025, 3, 8))
+    assert '<svg class="candles"' in html

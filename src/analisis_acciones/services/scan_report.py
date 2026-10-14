@@ -116,6 +116,94 @@ def sparkline(row: ScanRow, width: int = 520, height: int = 120) -> str:
     return "".join(parts)
 
 
+def candles_svg(row: ScanRow, width: int = 520, height: int = 190) -> str:
+    """Candlestick chart of the last bars with SMA 20/50, volume and the nearest S/R."""
+    candles = list(row.candles)
+    if len(candles) < 2:
+        return sparkline(row)
+    n = len(candles)
+    levels = [v for v in (row.support, row.resistance) if v is not None]
+    smas = [v for v in (*row.sma20, *row.sma50) if v == v]  # drop NaN
+    lows = [c[2] for c in candles] + levels + smas
+    highs = [c[1] for c in candles] + levels + smas
+    low, high = min(lows), max(highs)
+    span = (high - low) or 1.0
+    left, right, top, price_bottom = 4, width - 118, 8, height - 46
+    vol_top, vol_bottom = height - 40, height - 18
+    step = (right - left) / n
+    body = max(step * 0.62, 1.0)
+
+    def x(i: int) -> float:
+        return left + (i + 0.5) * step
+
+    def y(v: float) -> float:
+        return top + (high - v) * (price_bottom - top) / span
+
+    parts = [
+        f'<svg class="candles" viewBox="0 0 {width} {height}" role="img" '
+        f'aria-label="Gráfico de velas de {escape(row.symbol)}">',
+        f"<title>{escape(row.symbol)}: últimas {n} sesiones, del {_date(row.candles_start)} "
+        f"al {_date(row.as_of)}</title>",
+    ]
+    vols = [c[4] for c in candles if c[4] == c[4] and c[4] > 0]
+    max_vol = max(vols) if vols else 0.0
+    for i, (o, h, lo, c, v) in enumerate(candles):
+        css = "up" if c >= o else "down"
+        cx = x(i)
+        y1, y2 = y(max(o, c)), y(min(o, c))
+        parts.append(
+            f'<g class="{css}"><title>{num(o)} → {num(c)} (máx. {num(h)}, mín. {num(lo)})'
+            f'</title><line x1="{cx:.1f}" x2="{cx:.1f}" y1="{y(h):.1f}" y2="{y(lo):.1f}"/>'
+            f'<rect x="{cx - body / 2:.1f}" y="{y1:.1f}" width="{body:.1f}" '
+            f'height="{max(y2 - y1, 1):.1f}" rx="1"/></g>'
+        )
+        if max_vol and v == v and v > 0:
+            vh = (vol_bottom - vol_top) * v / max_vol
+            parts.append(f'<rect class="vol" x="{cx - body / 2:.1f}" y="{vol_bottom - vh:.1f}" '
+                         f'width="{body:.1f}" height="{vh:.1f}"/>')  # fmt: skip
+
+    def line(values: tuple[float, ...], css: str, label: str) -> None:
+        points = [(x(i), y(v)) for i, v in enumerate(values) if v == v]
+        if len(points) < 2:
+            return
+        coords = " ".join(f"{px:.1f},{py:.1f}" for px, py in points)
+        parts.append(f'<polyline class="{css}" points="{coords}"><title>{label}: '
+                     f"{num(values[-1])}</title></polyline>")  # fmt: skip
+
+    line(row.sma50, "sma50", "Media de 50 sesiones")
+    line(row.sma20, "sma20", "Media de 20 sesiones")
+    labels: list[tuple[float, str, str]] = []
+    for value, css, label in ((row.resistance, "res", "Resistencia"),
+                              (row.support, "sup", "Soporte")):  # fmt: skip
+        if value is None:
+            continue
+        ly = y(value)
+        parts.append(f'<line class="{css}" x1="{left}" x2="{right + 6}" y1="{ly:.1f}" '
+                     f'y2="{ly:.1f}"><title>{label}: {num(value)}</title></line>')  # fmt: skip
+        labels.append((ly + 4, f"{label} {num(value)}", "lvl"))
+    for values, label in ((row.sma20, "Media 20"), (row.sma50, "Media 50")):
+        if values and values[-1] == values[-1]:
+            labels.append((y(values[-1]) + 4, label, "lvl"))
+    labels.sort()
+    placed: list[float] = []
+    for ly, text, css in labels:  # direct labels, nudged apart so they never overlap
+        ly = max(ly, placed[-1] + 13) if placed else ly
+        placed.append(ly)
+        parts.append(f'<text class="{css}" x="{right + 10}" y="{ly:.1f}">{text}</text>')
+    parts.append(f'<text class="axis" x="{left}" y="{height - 4}">{_date(row.candles_start)}'
+                 f'</text><text class="axis" x="{right}" y="{height - 4}" text-anchor="end">'
+                 f"{_date(row.as_of)}</text>")  # fmt: skip
+    parts.append("</svg>")
+    parts.append(
+        '<div class="chart-legend"><span><i class="k-up"></i>vela alcista</span>'
+        '<span><i class="k-down"></i>vela bajista</span>'
+        '<span><i class="k-sma20"></i>media 20 sesiones</span>'
+        '<span><i class="k-sma50"></i>media 50</span>'
+        '<span><i class="k-lvl"></i>soporte / resistencia</span></div>'
+    )
+    return "".join(parts)
+
+
 def balance_bar(row: ScanRow, scale: int) -> str:
     """Two-sided bar: bearish signals to the left, bullish to the right."""
     up, down = len(row.bullish), len(row.bearish)
@@ -201,7 +289,7 @@ def card(row: ScanRow, scale: int) -> str:
       <span class="chg"><i class="{change_css}">{change_icon}</i> {num(row.change_pct, 2, sign=True)} %</span></div>
   </header>
   <div class="verdict {css}"><i>{icon}</i> {sentence}</div>
-  <section><h3>Precio de los últimos meses</h3>{sparkline(row)}</section>
+  <section><h3>Precio de las últimas sesiones</h3>{candles_svg(row)}</section>
   <section><h3>Balance de señales</h3>{balance_bar(row, scale)}</section>
   <div class="two">
     <section><h3>Fuerza reciente (RSI)</h3>{rsi_gauge(row.rsi14)}</section>
@@ -247,7 +335,7 @@ STYLE = """
   color-scheme: light;
   --surface: #fcfcfb; --card: #ffffff; --border: #e3e2de;
   --ink: #0b0b0b; --ink-2: #52514e; --muted: #77766f;
-  --up: #2a78d6; --down: #e34948; --flat: #8a8984;
+  --up: #2a78d6; --down: #e34948; --flat: #8a8984; --sma20: #008300;
   --up-bg: #e8f1fc; --down-bg: #fdecec; --flat-bg: #f0efec;
   --zone-lo: #e8f1fc; --zone-mid: #f0efec; --zone-hi: #fdecec;
 }
@@ -256,7 +344,7 @@ STYLE = """
     color-scheme: dark;
     --surface: #1a1a19; --card: #232321; --border: #3a3a37;
     --ink: #f0efec; --ink-2: #c3c2b7; --muted: #9a998f;
-    --up: #3987e5; --down: #e66767; --flat: #9a998f;
+    --up: #3987e5; --down: #e66767; --flat: #9a998f; --sma20: #008300;
     --up-bg: #1c2d44; --down-bg: #44201f; --flat-bg: #2c2c2a;
     --zone-lo: #1c2d44; --zone-mid: #2c2c2a; --zone-hi: #44201f;
   }
@@ -302,6 +390,25 @@ i.flat, .verdict.flat i { color: var(--flat); font-style: normal; }
 .spark .sup { stroke: var(--up); stroke-width: 1.5; stroke-dasharray: 5 4; }
 .spark .res { stroke: var(--down); stroke-width: 1.5; stroke-dasharray: 5 4; }
 .spark .lvl { font-size: 12px; fill: var(--ink-2); }
+.candles { width: 100%; height: auto; display: block; }
+.candles .up { stroke: var(--up); fill: var(--up); }
+.candles .down { stroke: var(--down); fill: var(--down); }
+.candles line { stroke-width: 1; }
+.candles .vol { fill: var(--flat); opacity: .45; }
+.candles .sma20 { fill: none; stroke: var(--sma20); stroke-width: 1.6; }
+.candles .sma50 { fill: none; stroke: var(--ink-2); stroke-width: 1.6; }
+.candles .sup { stroke: var(--up); stroke-width: 1.2; stroke-dasharray: 5 4; }
+.candles .res { stroke: var(--down); stroke-width: 1.2; stroke-dasharray: 5 4; }
+.candles .lvl { font-size: 11.5px; fill: var(--ink-2); }
+.candles .axis { font-size: 10.5px; fill: var(--muted); }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11.5px;
+  color: var(--ink-2); margin-top: 2px; }
+.chart-legend i { display: inline-block; width: 14px; height: 3px; vertical-align: 3px;
+  margin-right: 5px; border-radius: 2px; }
+.k-up { background: var(--up); height: 9px !important; vertical-align: 0 !important; }
+.k-down { background: var(--down); height: 9px !important; vertical-align: 0 !important; }
+.k-sma20 { background: var(--sma20); } .k-sma50 { background: var(--ink-2); }
+.k-lvl { background: repeating-linear-gradient(90deg, var(--ink-2) 0 4px, transparent 4px 7px); }
 .balance { display: grid; grid-template-columns: 1fr 2px 1fr; align-items: center; gap: 6px; }
 .balance .side { display: flex; align-items: center; gap: 6px; }
 .balance .left { flex-direction: row; } .balance .left .track { transform: scaleX(-1); }
@@ -389,9 +496,10 @@ los datos con reglas fijas; no predice el futuro ni es una recomendación de inv
 <li><b>Franja de color y frase de arriba:</b> {UP_ICON} azul si hay más señales alcistas que
 bajistas, {DOWN_ICON} roja si ocurre lo contrario y {FLAT_ICON} gris si están igualadas o no hay
 ninguna.</li>
-<li><b>Gráfico:</b> precio de cierre de los últimos meses. La línea discontinua azul es el
-<b>soporte</b> (zona donde el precio dejó de bajar otras veces) y la roja, la <b>resistencia</b>
-(zona donde dejó de subir).</li>
+<li><b>Gráfico:</b> velas de las últimas sesiones (azul = cerró por encima de la apertura, roja =
+por debajo) con el volumen debajo y las medias de 20 y 50 sesiones. La línea discontinua azul es
+el <b>soporte</b> (zona donde el precio dejó de bajar otras veces) y la roja, la
+<b>resistencia</b> (zona donde dejó de subir).</li>
 <li><b>Balance de señales:</b> barra roja hacia la izquierda = señales bajistas; barra azul hacia
 la derecha = señales alcistas. Debajo se lista cada señal.</li>
 <li><b>RSI:</b> mide si el precio ha subido o bajado muy deprisa. Por encima de 70 suele
