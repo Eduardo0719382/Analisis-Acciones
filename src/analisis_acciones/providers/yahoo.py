@@ -23,8 +23,10 @@ import pandas as pd
 from analisis_acciones.data.validation import validate_bars
 from analisis_acciones.models.errors import AppError, NetworkError, ProviderError, UserError
 from analisis_acciones.models.market import (
+    AnnualFigures,
     BarSeries,
     CompanyInfo,
+    Fundamentals,
     Interval,
     Quote,
     SearchResult,
@@ -70,6 +72,7 @@ class YahooClient(Protocol):
                 interval: str = "1d") -> pd.DataFrame: ...  # fmt: skip
     def search(self, query: str, limit: int) -> list[dict[str, Any]]: ...
     def info(self, symbol: str) -> dict[str, Any]: ...
+    def income_statement(self, symbol: str) -> pd.DataFrame: ...
 
 
 def _yfinance() -> Any:
@@ -129,6 +132,12 @@ class YFinanceClient:
     def info(self, symbol: str) -> dict[str, Any]:
         yf = _yfinance()
         return dict(yf.Ticker(symbol).info or {})
+
+    def income_statement(self, symbol: str) -> pd.DataFrame:
+        """Annual income statement: rows are items (TotalRevenue, ...), columns period ends."""
+        yf = _yfinance()
+        frame = yf.Ticker(symbol).get_income_stmt(pretty=False, freq="yearly")
+        return frame if isinstance(frame, pd.DataFrame) else pd.DataFrame()
 
 
 def _num(value: object) -> float | None:
@@ -321,6 +330,52 @@ class YahooFinanceProvider(MarketDataProvider):
             as_of=datetime.fromtimestamp(timestamp, tz=UTC) if timestamp else None,
         )
 
+    def get_fundamentals(self, symbol: str) -> Fundamentals:
+        """Ratios from the quote payload plus the annual income statement.
+
+        Ratio fields that Yahoo reports as fractions are range-checked; a value outside a
+        plausible range is dropped rather than shown with the wrong unit.
+        """
+        symbol = normalize_symbol(symbol)
+        info = self._info(symbol)
+
+        def fraction(key: str, limit: float = 50.0) -> float | None:
+            value = _num(info.get(key))
+            return value if value is not None and abs(value) <= limit else None
+
+        price = _first_num(info, "regularMarketPrice", "currentPrice")
+        rate = _first_num(info, "dividendRate", "trailingAnnualDividendRate")
+        dividend_yield = rate / price if rate is not None and price else None
+        try:
+            with self._lock:
+                statement = self._client.income_statement(symbol)
+        except Exception as exc:
+            mapped = map_yahoo_error(exc, symbol)
+            if isinstance(mapped, NetworkError | ProviderError):
+                # Offline or failing source: let the caller keep its previous copy.
+                raise mapped from exc
+            logger.info("No income statement for %s: %s", symbol, exc)
+            statement = pd.DataFrame()
+        return Fundamentals(
+            symbol=symbol,
+            currency=_text(info.get("financialCurrency")) or _text(info.get("currency")),
+            market_cap=_num(info.get("marketCap")),
+            trailing_pe=_num(info.get("trailingPE")),
+            forward_pe=_num(info.get("forwardPE")),
+            trailing_eps=_num(info.get("trailingEps")),
+            price_to_book=_num(info.get("priceToBook")),
+            dividend_rate=rate,
+            dividend_yield=dividend_yield,
+            payout_ratio=fraction("payoutRatio"),
+            profit_margin=fraction("profitMargins"),
+            operating_margin=fraction("operatingMargins"),
+            return_on_equity=fraction("returnOnEquity"),
+            revenue_growth=fraction("revenueGrowth"),
+            earnings_growth=fraction("earningsGrowth"),
+            beta=_num(info.get("beta")),
+            annual=_annual_figures(statement),
+        )
+
     def get_company_info(self, symbol: str) -> CompanyInfo:
         symbol = normalize_symbol(symbol)
         info = self._info(symbol)
@@ -337,3 +392,42 @@ class YahooFinanceProvider(MarketDataProvider):
             fifty_two_week_high=_num(info.get("fiftyTwoWeekHigh")),
             fifty_two_week_low=_num(info.get("fiftyTwoWeekLow")),
         )
+
+
+_STATEMENT_ROWS = {
+    "revenue": ("TotalRevenue", "Total Revenue"),
+    "net_income": ("NetIncome", "Net Income", "NetIncomeCommonStockholders"),
+    "operating_income": ("OperatingIncome", "Operating Income"),
+    "eps": ("DilutedEPS", "Diluted EPS", "BasicEPS"),
+}
+
+
+def _annual_figures(statement: pd.DataFrame) -> tuple[AnnualFigures, ...]:
+    """Parse yfinance's annual income statement (external data: every cell is checked)."""
+    if statement is None or statement.empty:
+        return ()
+    rows: dict[str, pd.Series] = {}
+    for field_name, candidates in _STATEMENT_ROWS.items():
+        for name in candidates:
+            if name in statement.index:
+                row = statement.loc[name]
+                if isinstance(row, pd.Series):  # a duplicated label would give a frame
+                    rows[field_name] = row
+                    break
+    figures = []
+    for column in statement.columns:
+        try:
+            year = pd.Timestamp(column).year
+        except (TypeError, ValueError):
+            continue
+        values = {k: _num(_plain(v.get(column))) for k, v in rows.items()}
+        if any(value is not None for value in values.values()):
+            figures.append(AnnualFigures(year, **values))
+    figures.sort(key=lambda f: f.year)
+    return tuple(figures)
+
+
+def _plain(value: object) -> object:
+    """numpy scalars -> Python numbers (``_num`` only accepts int/float)."""
+    item = getattr(value, "item", None)
+    return item() if callable(item) else value

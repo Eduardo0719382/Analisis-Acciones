@@ -92,6 +92,8 @@ class FakeYahooClient:
         self.history_calls: list[tuple[str, date | None, date | None]] = []
         self.search_payload: list[dict[str, object]] = []
         self.info_payload: dict[str, object] = {}
+        #: Annual income statement shaped like yfinance's (pretty=False) output.
+        self.statement = pd.DataFrame()
         self.error: Exception | None = None
         self.search_error: Exception | None = None
         self.known = {"TEST"}
@@ -129,6 +131,11 @@ class FakeYahooClient:
         if self.error:
             raise self.error
         return self.info_payload
+
+    def income_statement(self, symbol: str) -> pd.DataFrame:
+        if self.error:
+            raise self.error
+        return self.statement
 
 
 def path(*prices: float, leg: int = 10, start: str = "2024-01-01") -> pd.DataFrame:

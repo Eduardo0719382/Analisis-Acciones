@@ -577,3 +577,8 @@ PF_DISCLAIMER = (
     "gastar más efectivo del disponible. No es asesoramiento financiero."
 )
 PF_ITEM = "{name} · capital inicial {cash}"
+
+TAB_FUNDAMENTALS = "Fundamentales"
+FUND_EMPTY = "Abra un activo para ver sus datos fundamentales."
+FUND_LOADING = "Cargando datos fundamentales de {symbol}…"
+FUND_UNAVAILABLE = "No hay datos fundamentales para series importadas de CSV."

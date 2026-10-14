@@ -678,3 +678,20 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   initial capital on the first day.
 - Amounts are added without currency conversion; the report says so. Taxes, dividends and
   real costs are not modelled.
+
+## D-041 — Fundamentals
+
+- **Source:** the Yahoo quote payload (ratios) and yfinance's annual income statement
+  (`get_income_stmt(pretty=False)`: TotalRevenue, NetIncome, OperatingIncome, DilutedEPS).
+  Each cell is checked as external data, and a missing value stays `None` and is shown as
+  "—".
+- **Units:** Yahoo's dividend-yield field has changed units between versions, so the yield is
+  computed as dividend rate / price. Fraction fields (margins, ROE, growth, payout) beyond
+  ±5000 % are dropped as unit errors rather than shown wrong.
+- **Dividends per year** come from the dividends column of the cached daily bars (real
+  payments), not from the provider's ratios.
+- **Cache:** migration 0010 adds `fundamentals_cache`, refreshed once a day. If the source
+  fails, the stored copy is served and marked with its date. An income-statement network
+  failure raises (so the stored copy is kept) instead of overwriting it with empty years.
+- The data is fetched only when the "Fundamentales" tab is shown, to keep symbol switching
+  fast. A live CI test checks AAPL's values for plausible ranges.

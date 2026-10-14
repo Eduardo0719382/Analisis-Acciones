@@ -112,3 +112,35 @@ def empty_bars() -> pd.DataFrame:
     frame = pd.DataFrame({c: pd.Series(dtype="float64") for c in BAR_COLUMNS})
     frame.index = pd.DatetimeIndex([], name="date")
     return frame
+
+
+@dataclass(frozen=True)
+class AnnualFigures:
+    year: int  # fiscal year (year of the period end)
+    revenue: float | None = None
+    net_income: float | None = None
+    operating_income: float | None = None
+    eps: float | None = None  # diluted earnings per share
+
+
+@dataclass(frozen=True)
+class Fundamentals:
+    """Company figures as reported by the data source. Missing values stay None."""
+
+    symbol: str
+    currency: str | None = None
+    market_cap: float | None = None
+    trailing_pe: float | None = None
+    forward_pe: float | None = None
+    trailing_eps: float | None = None
+    price_to_book: float | None = None
+    dividend_rate: float | None = None  # annual dividend per share
+    dividend_yield: float | None = None  # fraction (0.02 = 2 %)
+    payout_ratio: float | None = None  # fraction
+    profit_margin: float | None = None  # fraction
+    operating_margin: float | None = None  # fraction
+    return_on_equity: float | None = None  # fraction
+    revenue_growth: float | None = None  # fraction, year over year
+    earnings_growth: float | None = None  # fraction, year over year
+    beta: float | None = None
+    annual: tuple[AnnualFigures, ...] = ()  # oldest first

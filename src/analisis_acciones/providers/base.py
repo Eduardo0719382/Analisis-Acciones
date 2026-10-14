@@ -12,7 +12,14 @@ from abc import ABC, abstractmethod
 from datetime import date
 
 from analisis_acciones.models.errors import UserError
-from analisis_acciones.models.market import BarSeries, CompanyInfo, Interval, Quote, SearchResult
+from analisis_acciones.models.market import (
+    BarSeries,
+    CompanyInfo,
+    Fundamentals,
+    Interval,
+    Quote,
+    SearchResult,
+)
 
 _SYMBOL = re.compile(r"^[A-Z0-9^][A-Z0-9.\-=]{0,14}$")
 
@@ -46,6 +53,13 @@ class MarketDataProvider(ABC):
 
     @abstractmethod
     def get_company_info(self, symbol: str) -> CompanyInfo: ...
+
+    def get_fundamentals(self, symbol: str) -> Fundamentals:
+        """Company figures; providers without them raise UserError."""
+        raise UserError(
+            f"{self.name} has no fundamentals",
+            user_message=f"{self.name} no ofrece datos fundamentales.",
+        )
 
     @abstractmethod
     def get_available_intervals(self) -> list[Interval]:

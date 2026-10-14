@@ -202,6 +202,11 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
 - **Detalles (panel derecho):** precio, cambio, apertura/máximo/mínimo, volumen, rango de 52
   semanas, moneda, mercado, sector. Sin conexión se muestran los datos de la última barra
   guardada, indicándolo.
+- **Fundamentales (pestaña del panel derecho):** capitalización, PER, beneficio por acción,
+  precio/valor contable, dividendo y su rentabilidad, pay-out, márgenes, ROE, crecimiento y beta,
+  cada uno con una explicación breve, y gráficos por año de ingresos, beneficio neto, BPA y
+  dividendos cobrados. Se descargan solo al abrir la pestaña, se guardan (se actualizan una vez
+  al día) y sin conexión se muestran los últimos guardados, indicándolo.
 - **Importar CSV:** *Archivo → Importar CSV…*. Columnas `date, open, high, low, close`
   (opcionales `volume`, `adj close`); también en español (`fecha; apertura; máximo; mínimo;
   cierre; volumen`) con coma decimal. Fechas `AAAA-MM-DD` o `DD/MM/AAAA`.

@@ -20,12 +20,13 @@ All methods are blocking and thread-safe; the UI calls them from workers.
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -49,7 +50,15 @@ from analisis_acciones.models.errors import (
     ProviderError,
     UserError,
 )
-from analisis_acciones.models.market import BarSeries, CompanyInfo, Interval, Quote, SearchResult
+from analisis_acciones.models.market import (
+    AnnualFigures,
+    BarSeries,
+    CompanyInfo,
+    Fundamentals,
+    Interval,
+    Quote,
+    SearchResult,
+)
 from analisis_acciones.providers.base import MarketDataProvider, normalize_symbol
 from analisis_acciones.storage.bar_repository import BarRepository
 from analisis_acciones.storage.intraday_repository import IntradayRepository
@@ -70,6 +79,19 @@ INTERVAL_ORDER = (Interval.M1, Interval.M5, Interval.M15, Interval.M30, Interval
 INTRADAY_STEP = {Interval.H1: timedelta(hours=1), Interval.M15: timedelta(minutes=15)}
 INTRADAY_REFRESH = {Interval.H1: timedelta(minutes=10), Interval.M15: timedelta(minutes=3)}
 INTRADAY_OVERLAP_DAYS = 3
+
+
+FUNDAMENTALS_TTL = timedelta(hours=24)
+
+
+@dataclass(frozen=True)
+class FundamentalsResult:
+    data: Fundamentals
+    fetched_at: datetime
+    stale: bool = False
+    notice: str | None = None
+    #: Dividends per share by calendar year, from the cached daily bars (oldest first).
+    dividends: tuple[tuple[int, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -364,6 +386,41 @@ class MarketDataService:
             rows.append(WatchRow(symbol, last, change, result.series.last_date, stale=result.stale))
         return rows
 
+    # Fundamentals ------------------------------------------------------------
+    def fundamentals(self, raw_symbol: str) -> FundamentalsResult:
+        """Company figures, refreshed daily; the last stored copy is served when offline."""
+        if is_csv_symbol(raw_symbol):
+            raise UserError(
+                "no fundamentals for CSV",
+                user_message="No hay datos fundamentales para series importadas.",
+            )
+        symbol = normalize_symbol(raw_symbol)
+        now = self._clock()
+        with self._db():
+            row = self._conn.execute(
+                "SELECT fetched_at, payload FROM fundamentals_cache WHERE symbol = ?", (symbol,)
+            ).fetchone()
+            daily = self._bars.load(symbol)
+        cached = _fundamentals_from_json(row["payload"]) if row else None
+        fetched = datetime.fromisoformat(row["fetched_at"]) if row else None
+        dividends = annual_dividends(daily)
+        if cached is not None and fetched is not None and now - fetched < FUNDAMENTALS_TTL:
+            return FundamentalsResult(cached, fetched, dividends=dividends)
+        try:
+            data = self._provider.get_fundamentals(symbol)
+        except (NetworkError, ProviderError) as exc:
+            if cached is None or fetched is None:
+                raise
+            return FundamentalsResult(cached, fetched, True, exc.user_message, dividends)
+        with self._db():
+            self._conn.execute(
+                "INSERT INTO fundamentals_cache (symbol, fetched_at, payload) VALUES (?, ?, ?) "
+                "ON CONFLICT(symbol) DO UPDATE SET fetched_at = excluded.fetched_at, "
+                "payload = excluded.payload",
+                (symbol, now.isoformat(), json.dumps(asdict(data), allow_nan=False)),
+            )
+        return FundamentalsResult(data, now, dividends=dividends)
+
     # Details ---------------------------------------------------------------
     def details(self, raw_symbol: str) -> AssetDetails:
         """Details for the info panel: cached bars plus a live quote when reachable.
@@ -431,3 +488,28 @@ def intraday_bar_in_progress(last_start: datetime | None, interval: Interval,
     close = datetime.combine(last_start.date(), SESSION_CLOSE)
     end = min(last_start + INTRADAY_STEP[interval], close)
     return now.astimezone(NEW_YORK).replace(tzinfo=None) < end
+
+
+def annual_dividends(daily: pd.DataFrame) -> tuple[tuple[int, float], ...]:
+    """Dividends per share summed per calendar year (years with none are left out)."""
+    if daily.empty or "dividends" not in daily:
+        return ()
+    paid = daily["dividends"][daily["dividends"] > 0]
+    if paid.empty:
+        return ()
+    years = pd.DatetimeIndex(paid.index).year
+    by_year = paid.groupby(years).sum()
+    return tuple(
+        (int(year), float(total)) for year, total in zip(by_year.index, by_year, strict=True)
+    )
+
+
+def _fundamentals_from_json(payload: str) -> Fundamentals | None:
+    """Rebuild stored fundamentals; anything malformed is treated as not cached."""
+    try:
+        raw = json.loads(payload)
+        annual = tuple(AnnualFigures(**item) for item in raw.pop("annual", []))
+        return Fundamentals(**raw, annual=annual)
+    except (ValueError, TypeError):
+        logger.warning("Ignoring malformed cached fundamentals")
+        return None

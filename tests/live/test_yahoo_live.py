@@ -89,3 +89,16 @@ def test_intraday_history(provider: YahooFinanceProvider, interval: Interval, mi
     assert min(times) == (9, 30) and max(times) < (16, 0)
     assert all(m % minutes in (0, 30 % minutes) for _h, m in times)
     assert (bars["high"] >= bars["low"]).all()
+
+
+def test_fundamentals(provider: YahooFinanceProvider) -> None:
+    f = provider.get_fundamentals("AAPL")
+    print(f"AAPL fundamentals: cap={f.market_cap} pe={f.trailing_pe} yield={f.dividend_yield} "
+          f"margin={f.profit_margin} roe={f.return_on_equity} "
+          f"annual={[(a.year, a.revenue, a.net_income, a.eps) for a in f.annual]}")  # fmt: skip
+    assert f.market_cap is not None and f.market_cap > 1e11
+    assert f.trailing_pe is not None and 1 < f.trailing_pe < 500
+    assert f.dividend_yield is not None and 0 < f.dividend_yield < 0.1
+    assert f.profit_margin is not None and 0 < f.profit_margin < 1
+    assert len(f.annual) >= 3
+    assert all(a.revenue is None or a.revenue > 1e10 for a in f.annual)

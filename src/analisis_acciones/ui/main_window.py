@@ -69,6 +69,7 @@ from analisis_acciones.ui.day_summary_dialog import DaySummaryDialog
 from analisis_acciones.ui.details_panel import DetailsPanel
 from analisis_acciones.ui.disclaimer import DisclaimerDialog
 from analisis_acciones.ui.elliott_panel import ElliottPanel, ElliottView
+from analisis_acciones.ui.fundamentals_panel import FundamentalsPanel
 from analisis_acciones.ui.indicator_dialog import IndicatorDialog
 from analisis_acciones.ui.market_controller import MarketController
 from analisis_acciones.ui.panels import Panel
@@ -256,6 +257,9 @@ class MainWindow(QMainWindow):
         self.patterns_panel.overlay_ready.connect(self._draw_patterns)
         self.patterns_panel.alerts_requested.connect(self.create_level_alerts)
         self.right_tabs.addTab(self.patterns_panel, strings.TAB_PATTERNS)
+        self.fundamentals_panel = FundamentalsPanel(self.market.service if self.market else None)
+        self.right_tabs.addTab(self.fundamentals_panel, strings.TAB_FUNDAMENTALS)
+        self.right_tabs.currentChanged.connect(self._on_right_tab_changed)
         self.alerts_panel: AlertsPanel | None = None
         if self._alert_service is not None:
             self.alerts_panel = AlertsPanel(self._alert_service)
@@ -530,6 +534,8 @@ class MainWindow(QMainWindow):
     def _on_benchmark_toggled(self, enabled: bool) -> None:
         self._settings.set_benchmark_on(enabled)
         self._draw_benchmark()
+        if self.right_tabs.currentWidget() is self.fundamentals_panel:
+            self._load_fundamentals()
 
     def choose_benchmark(self) -> None:
         text, ok = QInputDialog.getText(self, strings.ACTION_BENCHMARK_CHOOSE.rstrip("…"),
@@ -597,6 +603,15 @@ class MainWindow(QMainWindow):
         self._benchmark_workers.add(worker)
         worker.signals.succeeded.connect(lambda _r: self._benchmark_workers.discard(worker))
         worker.signals.failed.connect(lambda _e: self._benchmark_workers.discard(worker))
+
+    def _on_right_tab_changed(self, _index: int) -> None:
+        # Fundamentals need a network request: only fetched when the tab is looked at.
+        if self.right_tabs.currentWidget() is self.fundamentals_panel:
+            self._load_fundamentals()
+
+    def _load_fundamentals(self) -> None:
+        if self.current_result is not None:
+            self.fundamentals_panel.set_symbol(self.current_result.series.symbol)
 
     def _on_volume_profile_toggled(self, enabled: bool) -> None:
         self._settings.set_volume_profile(enabled)
