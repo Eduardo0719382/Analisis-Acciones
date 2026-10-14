@@ -360,3 +360,52 @@ ELL_DISCLAIMER = (
     "válidas y la detección automática depende del umbral. Solo se muestran cuentas que cumplen "
     "las reglas clásicas. No es una predicción ni una recomendación de inversión."
 )
+
+TAB_PATTERNS = "Patrones"
+PAT_THRESHOLD = "Umbral de giros"
+PAT_SHOW_LEVELS = "Soportes y resistencias en el gráfico"
+PAT_SHOW_PATTERNS = "Patrones en el gráfico"
+PAT_RUN = "Buscar patrones"
+PAT_RUNNING = "Buscando patrones…"
+PAT_EMPTY = "Abra un activo y pulse «Buscar patrones»."
+PAT_STALE = "Los datos del gráfico cambiaron: vuelva a buscar los patrones."
+PAT_SUMMARY = (
+    "Giros con umbral {threshold:.1f} %, tolerancia {tolerance:.1f} %: {levels} niveles y "
+    "{patterns} patrones."
+)
+PAT_TRACK = (
+    "Historial en este activo: de {total} patrones confirmados con resultado, {hit} alcanzaron "
+    "su objetivo y {failed} se invalidaron antes."
+)
+PAT_TRACK_NONE = "Aún no hay patrones confirmados con resultado en este activo."
+PAT_LEVELS_GROUP = "Soportes y resistencias"
+PAT_FORMING_GROUP = "Patrones en formación"
+PAT_PAST_GROUP = "Patrones pasados"
+PAT_NONE = "(ninguno)"
+PAT_SUPPORT = "Soporte"
+PAT_RESISTANCE = "Resistencia"
+PAT_LEVEL_ITEM = "{role} {price} · {touches} toques · último {last}"
+PAT_LEVEL_DETAILS = (
+    "{role} en {price} (zona {low}–{high}).\n{touches} giros del precio en esta zona entre "
+    "{first} y {last}. Cuantos más toques, más relevante suele ser el nivel; un nivel roto "
+    "suele cambiar de papel (la resistencia pasa a soporte y viceversa)."
+)
+PAT_ITEM = "{name} · {start} → {end} · {status}"
+PAT_STATUS = {
+    "forming": "en formación",
+    "confirmed": "confirmado, objetivo pendiente",
+    "target": "objetivo alcanzado",
+    "invalidated": "invalidado",
+}
+PAT_CONDITIONS = "Condiciones comprobadas:"
+PAT_BREAKOUT = "Ruptura confirmada al cierre del {date}."
+PAT_NO_BREAKOUT = (
+    "Sin ruptura todavía: el patrón solo se confirma cuando el precio cierra más allá de la "
+    "línea de ruptura."
+)
+PAT_INVALIDATION = "Nivel de invalidación: {price}."
+PAT_DISCLAIMER = (
+    "Detección automática con reglas fijas; los patrones fallan con frecuencia (vea el "
+    "historial de arriba). Los objetivos son la medida clásica del patrón, no una predicción. "
+    "No es una recomendación de inversión."
+)

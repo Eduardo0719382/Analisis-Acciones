@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Any
 
 from analisis_acciones.forecast.projection import Projection
+from analisis_acciones.patterns.chart_patterns import ChartPattern
 from analisis_acciones.patterns.elliott import CORRECTION, WaveCount
+from analisis_acciones.patterns.levels import Level
 from analisis_acciones.patterns.zigzag import HIGH
 
 # Lightweight Charts LineStyle values.
@@ -76,6 +78,56 @@ def elliott_overlay(counts: list[WaveCount], dates: list[str], selected: WaveCou
     if selected is not None:
         for target in selected.targets:
             items.append({"kind": "level", "price": target.price, "color": colors["current"],
+                          "style": DASHED, "title": target.label})  # fmt: skip
+        if selected.invalidation is not None:
+            items.append({"kind": "level", "price": selected.invalidation,
+                          "color": colors["invalid"], "style": DOTTED,
+                          "title": "Invalidación"})  # fmt: skip
+    return items
+
+
+def levels_overlay(levels: list[Level], close: float, support_color: str,
+                   resistance_color: str) -> list[dict[str, Any]]:  # fmt: skip
+    return [
+        {"kind": "level", "price": lv.price, "style": DASHED,
+         "color": support_color if lv.role(close) == "support" else resistance_color,
+         "title": f"{'S' if lv.role(close) == 'support' else 'R'} ×{lv.touches}"}
+        for lv in levels
+    ]  # fmt: skip
+
+
+def patterns_overlay(patterns: list[ChartPattern], dates: list[str],
+                     selected: ChartPattern | None,
+                     colors: dict[str, str]) -> list[dict[str, Any]]:  # fmt: skip
+    """Pivots, labels and pattern lines; targets/invalidation for the selected one.
+
+    ``colors`` keys: ``up``, ``down``, ``neutral``, ``target`` and ``invalid``.
+    """
+    items: list[dict[str, Any]] = []
+    for pattern in patterns:
+        color = colors["up"] if pattern.bias > 0 else colors["down"] if pattern.bias < 0 \
+            else colors["neutral"]  # fmt: skip
+        width = 2 if pattern is selected else 1
+        labels = [
+            {"time": dates[p.index], "text": text,
+             "position": "aboveBar" if p.kind == HIGH else "belowBar"}
+            for p, text in zip(pattern.points, pattern.labels, strict=True) if text
+        ]  # fmt: skip
+        items.append({
+            "kind": "line", "color": color, "style": SOLID, "width": width, "labels": labels,
+            "points": [{"time": dates[p.index], "value": p.price} for p in pattern.points],
+        })  # fmt: skip
+        for seg in pattern.lines:
+            if seg.end <= seg.start:
+                continue
+            items.append({
+                "kind": "line", "color": color, "style": DASHED, "width": width,
+                "points": [{"time": dates[seg.start], "value": seg.start_price},
+                           {"time": dates[seg.end], "value": seg.end_price}],
+            })  # fmt: skip
+    if selected is not None:
+        for target in selected.targets:
+            items.append({"kind": "level", "price": target.price, "color": colors["target"],
                           "style": DASHED, "title": target.label})  # fmt: skip
         if selected.invalidation is not None:
             items.append({"kind": "level", "price": selected.invalidation,

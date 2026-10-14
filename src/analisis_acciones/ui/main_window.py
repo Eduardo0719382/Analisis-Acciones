@@ -34,7 +34,12 @@ from PySide6.QtWidgets import (
 from analisis_acciones import __version__
 from analisis_acciones.alerts.service import AlertEvent, AlertService
 from analisis_acciones.charts.chart_widget import ChartWidget
-from analisis_acciones.charts.overlays import elliott_overlay, projection_overlay
+from analisis_acciones.charts.overlays import (
+    elliott_overlay,
+    levels_overlay,
+    patterns_overlay,
+    projection_overlay,
+)
 from analisis_acciones.charts.payload import future_times
 from analisis_acciones.data.export import bars_to_csv
 from analisis_acciones.indicators.registry import IndicatorConfig
@@ -56,6 +61,7 @@ from analisis_acciones.ui.elliott_panel import ElliottPanel, ElliottView
 from analisis_acciones.ui.indicator_dialog import IndicatorDialog
 from analisis_acciones.ui.market_controller import MarketController
 from analisis_acciones.ui.panels import Panel
+from analisis_acciones.ui.patterns_panel import PatternsPanel, PatternsView
 from analisis_acciones.ui.projection_panel import ProjectionOutcome, ProjectionPanel
 from analisis_acciones.ui.report import build_report_html, write_pdf
 from analisis_acciones.ui.search_box import SearchBox
@@ -209,6 +215,9 @@ class MainWindow(QMainWindow):
         self.elliott_panel = ElliottPanel()
         self.elliott_panel.overlay_ready.connect(self._draw_elliott)
         self.right_tabs.addTab(self.elliott_panel, strings.TAB_ELLIOTT)
+        self.patterns_panel = PatternsPanel()
+        self.patterns_panel.overlay_ready.connect(self._draw_patterns)
+        self.right_tabs.addTab(self.patterns_panel, strings.TAB_PATTERNS)
         self.alerts_panel: AlertsPanel | None = None
         if self._alert_service is not None:
             self.alerts_panel = AlertsPanel(self._alert_service)
@@ -410,6 +419,20 @@ class MainWindow(QMainWindow):
                   "current": tokens.accent, "invalid": tokens.down}  # fmt: skip
         items = elliott_overlay(view.counts, dates, view.selected, colors)
         self.chart.set_overlay("elliott", items)
+
+    def _draw_patterns(self, view: object) -> None:
+        if not isinstance(view, PatternsView):
+            self.chart.set_overlay("levels", [])
+            self.chart.set_overlay("patterns", [])
+            return
+        tokens = tokens_for(self._settings.theme())
+        dates = pd.DatetimeIndex(view.series.bars.index).strftime("%Y-%m-%d").tolist()
+        self.chart.set_overlay("levels", levels_overlay(view.levels, view.close, tokens.up,
+                                                        tokens.down))  # fmt: skip
+        colors = {"up": tokens.up, "down": tokens.down, "neutral": tokens.text_muted,
+                  "target": tokens.accent, "invalid": tokens.down}  # fmt: skip
+        items = patterns_overlay(view.patterns, dates, view.selected, colors)
+        self.chart.set_overlay("patterns", items)
 
     # Drawings ----------------------------------------------------------------
     def _drawing_symbol(self) -> str | None:
@@ -627,6 +650,7 @@ class MainWindow(QMainWindow):
         self._refresh_drawings()
         self.projection_panel.set_series(series)
         self.elliott_panel.set_series(series)
+        self.patterns_panel.set_series(series)
         self.analysis_panel.analyze(
             series, f"{series.symbol} · {interval_label}", result.session_in_progress
         )

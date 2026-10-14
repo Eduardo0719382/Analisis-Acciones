@@ -5,7 +5,12 @@ import json
 import numpy as np
 import pytest
 
-from analisis_acciones.charts.overlays import elliott_overlay, projection_overlay
+from analisis_acciones.charts.overlays import (
+    elliott_overlay,
+    levels_overlay,
+    patterns_overlay,
+    projection_overlay,
+)
 from analisis_acciones.forecast.projection import regression_channel, volatility_cone
 from analisis_acciones.patterns.elliott import analyze
 from tests.synthetic import path
@@ -55,3 +60,23 @@ def test_elliott_overlay_labels_and_levels() -> None:
     assert len(levels) == len(selected.targets) + 1
     assert levels[-1]["price"] == 158 and levels[-1]["color"] == "#f0f"
     json.dumps(items, allow_nan=False)
+
+
+def test_levels_and_patterns_overlay() -> None:
+    from analisis_acciones.patterns.chart_patterns import analyze as find
+
+    bars = path(100, 130, 115, 129.5, 112, 98, 104)
+    result = find(bars, threshold=0.05)
+    dates = bars.index.strftime("%Y-%m-%d").tolist()
+    levels = levels_overlay(result.levels, result.close, "#0f0", "#f00")
+    assert all(item["kind"] == "level" for item in levels)
+    assert all(item["title"][0] in "SR" for item in levels)
+    top = next(p for p in result.patterns if p.name == "Doble techo")
+    colors = {"up": "#0f0", "down": "#f00", "neutral": "#888", "target": "#0af",
+              "invalid": "#f0f"}  # fmt: skip
+    items = patterns_overlay([top], dates, top, colors)
+    pivots_line, neckline, target, invalidation = items
+    assert [lbl["text"] for lbl in pivots_line["labels"]] == ["T1", "T2"]
+    assert neckline["points"][0]["value"] == neckline["points"][1]["value"] == 115
+    assert target["price"] == 100 and invalidation["price"] == 130
+    json.dumps(items + levels, allow_nan=False)

@@ -99,6 +99,14 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   el territorio de la 1). También muestra las **posibles cuentas en curso** con sus niveles de
   Fibonacci de referencia y el precio que las invalidaría. Cada cuenta lista las reglas y pautas
   comprobadas con sus valores. Es una interpretación: suele haber varias cuentas posibles.
+- **Patrones (pestaña del panel derecho):** «Buscar patrones» marca en el gráfico los
+  **soportes y resistencias** (zonas donde el precio giró varias veces; «R ×4» = resistencia con
+  4 toques) y detecta **doble techo/suelo, hombro-cabeza-hombro (normal e invertido),
+  triángulos ascendentes, descendentes y simétricos, y banderas**. Cada patrón muestra las
+  condiciones que cumple, la fecha de ruptura, el objetivo clásico y el nivel de invalidación.
+  Un patrón solo se confirma cuando el precio cierra más allá de su línea de ruptura; antes
+  aparece «en formación». El resumen indica, para ese activo, cuántos patrones pasados
+  alcanzaron su objetivo y cuántos se invalidaron antes.
 - **Alertas (pestaña del panel derecho):** precio por encima/debajo de X, cambio diario
   mayor/menor que X %, RSI por encima/debajo de X, cruces de EMAs, cruces MACD/señal y
   rupturas de máximo/mínimo de N barras. Se comprueban sobre barras diarias cerradas al iniciar

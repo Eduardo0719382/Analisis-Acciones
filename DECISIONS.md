@@ -484,3 +484,25 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   pivots and their labels would stack. Past counts are always drawn.
 - **Not done:** nested degrees (sub-waves), triangles, diagonals and complex corrections
   (W-X-Y). Labelling them automatically would be far more subjective.
+
+## D-028 — Support/resistance and chart patterns
+
+- **Pivots:** the ZigZag from D-027 with a finer default threshold (2 × the median ATR%,
+  minimum 2 %). Tolerances scale with volatility: `tolerance` = median ATR/close, clamped to
+  0.5–5 %.
+- **Support/resistance:** swing highs and lows from about the last 500 bars are grouped into
+  zones no wider than 2 × tolerance. A zone needs at least 2 touches. Highs and lows share
+  zones because levels change role once they are broken. The 4 nearest zones on each side of
+  the price are shown.
+- **Patterns** (`patterns/chart_patterns.py`): double top/bottom, head and shoulders (and
+  inverse), ascending/descending/symmetric triangles, and bull/bear flags. Every condition is a
+  requirement and is listed with its measured value. A pattern is confirmed only by a close
+  beyond its breakout line, within a bounded number of bars. An unconfirmed pattern is shown
+  only while it is the latest structure and has not been invalidated. Overlap is resolved
+  only within the same pattern type.
+- **Track record instead of promises.** After a breakout, each pattern is followed until it
+  reaches its classic measured target or its invalidation level. If both happen on the same
+  daily bar, it counts as invalidated (the conservative choice). The panel reports the counts
+  for the asset. On random-walk test data most patterns fail, as they should.
+- **Display:** levels are price lines; patterns in formation are always drawn. A past pattern
+  is drawn with its target and invalidation when it is selected.
