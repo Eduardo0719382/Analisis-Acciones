@@ -19,6 +19,7 @@ from analisis_acciones.models.errors import AppError, user_message_for
 from analisis_acciones.providers.yahoo import YahooFinanceProvider
 from analisis_acciones.services.drawing_service import DrawingService
 from analisis_acciones.services.market_data_service import MarketDataService
+from analisis_acciones.services.paper_portfolio import PaperPortfolioService
 from analisis_acciones.services.settings_service import SettingsService
 from analisis_acciones.services.update_service import UpdateService
 from analisis_acciones.services.watchlist_service import WatchlistService
@@ -87,6 +88,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         # Separate connection for market data: it is used from worker threads.
         market_conn = open_database(paths.database)
         alerts_conn = open_database(paths.database)
+        portfolio_conn = open_database(paths.database)
     except (AppError, sqlite3.Error, OSError) as exc:
         logger.exception("Could not open database %s", paths.database)
         QMessageBox.critical(
@@ -118,6 +120,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             watchlist_service=WatchlistService(conn),
             alert_service=alerts,
             drawing_service=DrawingService(conn),
+            portfolio_service=PaperPortfolioService(portfolio_conn, market),
         )
         window.show()
         if smoke_test:
@@ -146,6 +149,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             alerts.close()
         else:
             alerts_conn.close()
+        portfolio_conn.close()
         if market is not None:
             market.close()
         else:

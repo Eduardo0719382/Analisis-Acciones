@@ -535,3 +535,45 @@ BENCHMARK_SUMMARY = (
 )
 BENCHMARK_NO_OVERLAP = "No hay fechas comunes con {bench} para comparar."
 BENCHMARK_FAILED = "No se pudo cargar {bench}: {error}"
+
+ACTION_PORTFOLIO = "Cartera &simulada…"
+PF_TITLE = "Cartera simulada"
+PF_PORTFOLIO = "Cartera:"
+PF_NEW = "Nueva cartera…"
+PF_NEW_NAME = "Nombre de la cartera:"
+PF_NEW_CASH = "Capital inicial (ficticio):"
+PF_DELETE = "Eliminar cartera"
+PF_DELETE_CONFIRM = "¿Eliminar «{name}» y todas sus operaciones? No se puede deshacer."
+PF_NEW_TRADE = "Nueva operación ficticia"
+PF_SYMBOL = "Ticker"
+PF_SIDE = "Operación"
+PF_BUY = "Compra"
+PF_SELL = "Venta"
+PF_QUANTITY = "Cantidad"
+PF_PRICE = "Precio"
+PF_PRICE_CLOSE = "Cierre del día"
+PF_DATE = "Fecha"
+PF_COMMISSION = "Comisión"
+PF_NOTE = "Nota:"
+PF_ADD = "Registrar"
+PF_SAVING = "Registrando la operación…"
+PF_LOADING = "Calculando la cartera…"
+PF_DELETE_TRADE = "Eliminar operación seleccionada"
+PF_TAB_SUMMARY = "Resumen"
+PF_TAB_TRADES = "Operaciones"
+PF_TRADE_COLUMNS = (
+    "Fecha",
+    "Ticker",
+    "Operación",
+    "Cantidad",
+    "Precio",
+    "Comisión",
+    "Importe",
+    "Nota",
+)
+PF_DISCLAIMER = (
+    "Cartera de práctica: las operaciones son ficticias y no se envían a ningún broker. Con "
+    "«Cierre del día» se usa el precio de cierre de esa fecha. No permite ventas en corto ni "
+    "gastar más efectivo del disponible. No es asesoramiento financiero."
+)
+PF_ITEM = "{name} · capital inicial {cash}"

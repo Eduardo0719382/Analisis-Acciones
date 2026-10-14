@@ -54,6 +54,7 @@ from analisis_acciones.services.comparison import benchmark_line
 from analisis_acciones.services.daily_scan import Novelty
 from analisis_acciones.services.drawing_service import DrawingService
 from analisis_acciones.services.market_data_service import LoadResult, MarketDataService
+from analisis_acciones.services.paper_portfolio import PaperPortfolioService
 from analisis_acciones.services.scanner import ScanResult
 from analisis_acciones.services.settings_service import SettingsService, Theme
 from analisis_acciones.services.update_service import UpdateCheck, UpdateService
@@ -73,6 +74,7 @@ from analisis_acciones.ui.market_controller import MarketController
 from analisis_acciones.ui.panels import Panel
 from analisis_acciones.ui.pattern_backtest_dialog import PatternBacktestDialog
 from analisis_acciones.ui.patterns_panel import PatternsPanel, PatternsView
+from analisis_acciones.ui.portfolio_dialog import PortfolioDialog
 from analisis_acciones.ui.projection_panel import ProjectionOutcome, ProjectionPanel
 from analisis_acciones.ui.report import build_report_html, write_pdf
 from analisis_acciones.ui.scanner_dialog import ScannerDialog
@@ -111,6 +113,7 @@ class MainWindow(QMainWindow):
         watchlist_service: WatchlistService | None = None,
         alert_service: AlertService | None = None,
         drawing_service: DrawingService | None = None,
+        portfolio_service: PaperPortfolioService | None = None,
     ) -> None:
         super().__init__(parent)
         self._settings = settings
@@ -119,6 +122,7 @@ class MainWindow(QMainWindow):
         self._watchlists = watchlist_service
         self._alert_service = alert_service
         self._drawings = drawing_service
+        self._portfolio = portfolio_service
         self._tray: QSystemTrayIcon | None = None
         self.current_symbol: str | None = None
         self.current_result: LoadResult | None = None
@@ -321,6 +325,10 @@ class MainWindow(QMainWindow):
         self.compare_action = QAction(strings.ACTION_COMPARE, self)
         self.compare_action.triggered.connect(self.open_comparison)
         tools_menu.addAction(self.compare_action)
+        self.portfolio_action = QAction(strings.ACTION_PORTFOLIO, self)
+        self.portfolio_action.triggered.connect(self.open_portfolio)
+        self.portfolio_action.setEnabled(self._portfolio is not None)
+        tools_menu.addAction(self.portfolio_action)
         self.pattern_backtest_action = QAction(strings.ACTION_PATTERN_BACKTEST, self)
         self.pattern_backtest_action.triggered.connect(self.open_pattern_backtest)
         tools_menu.addAction(self.pattern_backtest_action)
@@ -846,6 +854,16 @@ class MainWindow(QMainWindow):
         if isinstance(self.watchlist_panel, WatchlistPanel):
             return self.watchlist_panel.list_combo.currentText()
         return ""
+
+    def open_portfolio(self) -> None:
+        if self._portfolio is None:
+            return
+        symbol = self.current_result.series.symbol if self.current_result else ""
+        dialog = PortfolioDialog(self._portfolio, self._settings.benchmark,
+                                 "" if symbol.startswith("CSV:") else symbol, self)  # fmt: skip
+        dialog.symbol_activated.connect(self.open_symbol)
+        dialog.show()
+        self._portfolio_dialog = dialog
 
     def open_pattern_backtest(self) -> None:
         if self.market is None:

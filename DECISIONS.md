@@ -661,3 +661,20 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   states both returns and the difference in percentage points.
 - It is loaded cache-first in a worker with the chart's interval, and stale replies are
   dropped. Days missing from either series are gaps, never filled.
+
+## D-040 — Paper portfolio
+
+- **Storage:** migration 0009 adds `paper_portfolios` and `paper_trades`. A default "Mi
+  cartera" with 10 000 of fictitious cash is created on first use.
+- **Accounting** (`portfolio/engine.py`, Qt-free): trades are replayed in date order using
+  average cost. Commissions add to the cost basis of purchases and reduce the proceeds of
+  sales. Long positions only, and no borrowing. Every new or deleted trade is validated by
+  replaying the whole history, so a back-dated trade can never make a later one impossible.
+- **Prices:** a missing price uses the close of that session (or the previous one). The
+  valuation uses the last close on or before today, which is the same day the value curve
+  ends.
+- **Value curve:** one point per business day from the first trade. A day is left out when a
+  held symbol has no close yet, never estimated. The benchmark is invested with the same
+  initial capital on the first day.
+- Amounts are added without currency conversion; the report says so. Taxes, dividends and
+  real costs are not modelled.

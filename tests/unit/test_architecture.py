@@ -19,6 +19,7 @@ CORE_LAYERS = [
     "strategies",
     "backtesting",
     "forecast",
+    "portfolio",
     "patterns",
     "storage",
     "services",
