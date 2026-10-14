@@ -40,3 +40,12 @@ def session_in_progress(last_bar: date | None, now: datetime) -> bool:
     local = now.astimezone(NEW_YORK)
     close = datetime.combine(local.date(), SESSION_CLOSE, tzinfo=NEW_YORK)
     return last_bar == local.date() and local < close + SETTLE
+
+
+SESSION_OPEN = time(9, 30)
+
+
+def market_open(now: datetime) -> bool:
+    """Regular US session hours on a weekday (holidays are not modelled)."""
+    local = now.astimezone(NEW_YORK)
+    return local.weekday() < 5 and SESSION_OPEN <= local.time() < SESSION_CLOSE

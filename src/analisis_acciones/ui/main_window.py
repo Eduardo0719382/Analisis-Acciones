@@ -9,6 +9,7 @@ from functools import partial
 from pathlib import Path
 from typing import Any
 
+import shiboken6
 from PySide6.QtCore import QByteArray, QLocale, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
@@ -60,6 +61,7 @@ from analisis_acciones.ui.analysis_panel import AnalysisPanel
 from analisis_acciones.ui.backtest_dialog import BacktestDialog
 from analisis_acciones.ui.comparison_dialog import ComparisonDialog
 from analisis_acciones.ui.daily_scan import DailyScanController
+from analisis_acciones.ui.day_summary_dialog import DaySummaryDialog
 from analisis_acciones.ui.details_panel import DetailsPanel
 from analisis_acciones.ui.disclaimer import DisclaimerDialog
 from analisis_acciones.ui.elliott_panel import ElliottPanel, ElliottView
@@ -112,6 +114,7 @@ class MainWindow(QMainWindow):
         self.restart_requested = False
         self._update_worker: Worker | None = None
         self.daily_scan: DailyScanController | None = None
+        self._summary_dialog: DaySummaryDialog | None = None
         if market_service is not None:
             self.daily_scan = DailyScanController(settings, market_service,
                                                   self._watchlist_symbols, parent=self)  # fmt: skip
@@ -327,6 +330,10 @@ class MainWindow(QMainWindow):
         self.dark_theme_action.setChecked(self._settings.theme() is Theme.DARK)
         self.dark_theme_action.toggled.connect(self._on_dark_theme_toggled)
         view_menu.addAction(self.dark_theme_action)
+        self.summary_action = QAction(strings.ACTION_SUMMARY, self)
+        self.summary_action.setShortcut(QKeySequence("Ctrl+D"))
+        self.summary_action.triggered.connect(self.open_day_summary)
+        view_menu.addAction(self.summary_action)
         self.volume_profile_action = QAction(strings.ACTION_VOLUME_PROFILE, self)
         self.volume_profile_action.setCheckable(True)
         self.volume_profile_action.setChecked(self._settings.volume_profile())
@@ -712,6 +719,32 @@ class MainWindow(QMainWindow):
         dialog.show_result(result)
         dialog.show()
         self._scanner_dialog = dialog
+
+    def open_day_summary(self) -> None:
+        if self.market is None:
+            return
+        current = self._summary_dialog
+        if current is not None and shiboken6.isValid(current) and current.isVisible():
+            current.raise_()
+            current.refresh()
+            return
+        dialog = DaySummaryDialog(
+            self.market.service, self._settings, self._watchlist_symbols, self._alert_service,
+            list_name=self._watchlist_name, parent=self,
+        )  # fmt: skip
+        dialog.symbol_activated.connect(self.open_symbol)
+        dialog.show()
+        dialog.refresh()
+        self._summary_dialog = dialog
+
+    def show_day_summary_on_start(self) -> None:
+        if self._settings.summary_on_start() and self._watchlist_symbols():
+            self.open_day_summary()
+
+    def _watchlist_name(self) -> str:
+        if isinstance(self.watchlist_panel, WatchlistPanel):
+            return self.watchlist_panel.list_combo.currentText()
+        return ""
 
     def open_pattern_backtest(self) -> None:
         if self.market is None:

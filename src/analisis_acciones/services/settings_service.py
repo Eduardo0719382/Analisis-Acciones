@@ -34,6 +34,7 @@ CHART_TYPES = ("candles", "line")
 KEY_LAST_INTERVAL = "market.last_interval"
 KEY_DAILY_SCAN = "scanner.daily_enabled"
 KEY_VOLUME_PROFILE = "chart.volume_profile"
+KEY_SUMMARY_ON_START = "ui.summary_on_start"
 KEY_SCAN_SNAPSHOT = "scanner.daily_snapshot"
 
 
@@ -118,6 +119,12 @@ class SettingsService:
         self._repo.set(KEY_WATCHLIST, int(list_id))
 
     # Layout ----------------------------------------------------------------
+    def summary_on_start(self) -> bool:
+        return self._repo.get(KEY_SUMMARY_ON_START) is not False
+
+    def set_summary_on_start(self, enabled: bool) -> None:
+        self._repo.set(KEY_SUMMARY_ON_START, bool(enabled))
+
     def volume_profile(self) -> bool:
         return self._repo.get(KEY_VOLUME_PROFILE) is True
 

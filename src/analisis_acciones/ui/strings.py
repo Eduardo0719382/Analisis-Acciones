@@ -509,3 +509,9 @@ VOLUME_PROFILE_TIP = (
     "Volumen negociado en cada franja de precio durante las últimas {bars} barras. POC = precio "
     "con más volumen; VA = zona donde se negoció el 70 % del volumen."
 )
+
+ACTION_SUMMARY = "&Resumen del día…"
+SUMMARY_TITLE = "Resumen del día"
+SUMMARY_ON_START = "Mostrar al iniciar el programa"
+SUMMARY_REFRESH = "Actualizar"
+SUMMARY_LOADING = "Cargando {count} activos…"

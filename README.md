@@ -59,6 +59,11 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
 
 ## Uso
 
+- **Resumen del día** (*Ver → Resumen del día…*, Ctrl+D; se abre al iniciar si la lista de
+  seguimiento tiene activos, lo que se puede desactivar): estado del mercado, cuántos activos de
+  la lista suben y bajan (y los que más), una tarjeta por activo con su cambio y su evolución
+  reciente, y los avisos de los últimos días (alertas y novedades del escaneo diario). Al pulsar
+  un activo se abre en el gráfico.
 - **Buscar:** escriba un ticker (p. ej. `AAPL`) o el nombre de una empresa en el cuadro de
   búsqueda. Use ↑/↓ y Enter, o haga clic en un resultado. Con el cuadro vacío se muestran
   los símbolos recientes.

@@ -639,3 +639,16 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   every line also has a direct label and a legend). SMA 50 is the neutral ink colour. Labels are
   moved apart so they never overlap. Every candle has a native tooltip with open, close, high
   and low.
+
+## D-038 — Day summary
+
+- One self-contained HTML page shown in a QWebEngineView with JavaScript disabled. It
+  reuses the reports' visual language: tiles for list size, rising, falling and recent
+  notices; one card per watchlist symbol with the change bar and a mini chart; and the
+  notices of the last 3 days.
+- Tickers are links to `http://abrir.local/<TICKER>`. The page intercepts them in
+  `acceptNavigationRequest` (they never reach the network), opens the symbol on the chart and
+  blocks every other navigation.
+- It opens at start-up only when the watchlist has symbols; this can be turned off from the
+  window. Data is loaded cache-first in a worker. The market-open badge uses regular US hours
+  on weekdays (holidays are not modelled).
