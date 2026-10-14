@@ -64,6 +64,9 @@ class IndicatorSpec:
     levels: tuple[float, ...] = ()
     #: Fixed number of decimals for display (None = same as the price).
     decimals: int | None = None
+    #: Shaded areas between two outputs (Ichimoku cloud): green where the first
+    #: is above the second, red otherwise.
+    fills: tuple[tuple[str, str], ...] = ()
 
     def defaults(self) -> dict[str, int | float]:
         return {p.key: p.default for p in self.params}
@@ -187,6 +190,7 @@ SPECS = (
                        shift_sign=-1),
         ),
         placement="overlay",
+        fills=(("senkou_a", "senkou_b"),),
         compute=lambda b, p: f.ichimoku(
             b["high"], b["low"], b["close"], int(p["tenkan"]), int(p["kijun"]),
             int(p["senkou_b"]),

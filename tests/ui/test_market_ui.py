@@ -291,6 +291,12 @@ def test_indicators_drawn_persisted_and_restored(
     window.apply_indicators(hidden)
     qtbot.waitUntil(lambda: chart_state(qtbot, window)["indicators"] == ["SMA (20)"], timeout=20000)
     assert chart_state(qtbot, window)["panes"] == 2
+    assert chart_state(qtbot, window)["bandFills"] == 0
+
+    # Ichimoku's cloud is shaded between Senkou A and B.
+    window.apply_indicators([IndicatorConfig.create("ichimoku")])
+    qtbot.waitUntil(lambda: chart_state(qtbot, window)["bandFills"] == 1, timeout=20000)
+    window.apply_indicators(hidden)
 
     # A new window restores the saved indicators.
     second = MainWindow(settings, market_service=market)

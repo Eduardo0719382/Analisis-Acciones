@@ -87,3 +87,22 @@ def test_indicator_payload_warmup_and_hidden() -> None:
     coloured = [p for p in hist["points"] if "value" in p]
     assert all(p["color"].startswith("#00ff00" if p["value"] >= 0 else "#ff0000") for p in coloured)
     json.dumps(payload, allow_nan=False)
+
+
+def test_ichimoku_cloud_fill_in_payload() -> None:
+    from analisis_acciones.charts.payload import build_indicator_payload
+    from analisis_acciones.indicators.registry import IndicatorConfig
+
+    bars = synthetic_daily(sessions=120)
+    payload, failed = build_indicator_payload(
+        [IndicatorConfig.create("ichimoku"), IndicatorConfig.create("sma")],
+        bars,
+        "#00ff00",
+        "#ff0000",
+        "#888888",
+    )
+    assert failed == []
+    assert payload[0]["fills"] == [
+        {"a": "senkou_a", "b": "senkou_b", "upColor": "#00ff0033", "downColor": "#ff000033"}
+    ]
+    assert payload[1]["fills"] == []

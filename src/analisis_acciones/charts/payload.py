@@ -188,5 +188,9 @@ def build_indicator_payload(
             "levels": list(spec.levels),
             "levelColor": level_color,
             "outputs": outputs,
+            "fills": [
+                {"a": a, "b": b, "upColor": up_color + "33", "downColor": down_color + "33"}
+                for a, b in spec.fills
+            ],
         })  # fmt: skip
     return payload, failed

@@ -14,6 +14,7 @@
     priceSeries: null,
     volumeSeries: null,
     indicatorSeries: [],
+    bandFills: [],
     overlays: {},
     overlaySeries: [],
     overlayLines: [],
@@ -86,6 +87,7 @@
     if (state.priceSeries) state.chart.removeSeries(state.priceSeries);
     if (state.volumeSeries) state.chart.removeSeries(state.volumeSeries);
     for (const s of state.indicatorSeries) state.chart.removeSeries(s);
+    state.bandFills = [];
     for (const s of state.drawingSeries) state.chart.removeSeries(s);
     for (const s of state.overlaySeries) state.chart.removeSeries(s);
     state.overlaySeries = [];
@@ -98,6 +100,60 @@
     state.indicatorSeries = [];
   }
 
+  // Shaded area between two lines of one indicator (Ichimoku cloud). Drawn
+  // behind the series; colour flips where the lines cross.
+  class BandFill {
+    constructor(points, upColor, downColor) {
+      this.points = points;
+      this.upColor = upColor;
+      this.downColor = downColor;
+      const self = this;
+      this._view = { zOrder: () => "bottom", renderer: () => ({ draw: (t) => self.draw(t) }) };
+    }
+    attached({ chart, series }) { this.chart = chart; this.series = series; }
+    detached() { this.chart = null; this.series = null; }
+    updateAllViews() {}
+    paneViews() { return [this._view]; }
+    draw(target) {
+      if (!this.chart || !this.series || this.points.length < 2) return;
+      const ts = this.chart.timeScale();
+      const xy = [];
+      for (const p of this.points) {
+        const x = ts.timeToCoordinate(p.time);
+        const ya = this.series.priceToCoordinate(p.a);
+        const yb = this.series.priceToCoordinate(p.b);
+        xy.push(x === null || ya === null || yb === null ? null : { x, ya, yb, up: p.a >= p.b });
+      }
+      target.useBitmapCoordinateSpace(({ context: ctx, horizontalPixelRatio: hr,
+                                         verticalPixelRatio: vr }) => {
+        const quad = (x0, a0, b0, x1, a1, b1, up) => {
+          ctx.fillStyle = up ? this.upColor : this.downColor;
+          ctx.beginPath();
+          ctx.moveTo(x0 * hr, a0 * vr); ctx.lineTo(x1 * hr, a1 * vr);
+          ctx.lineTo(x1 * hr, b1 * vr); ctx.lineTo(x0 * hr, b0 * vr);
+          ctx.closePath(); ctx.fill();
+        };
+        for (let i = 1; i < xy.length; i++) {
+          const p = xy[i - 1];
+          const q = xy[i];
+          if (!p || !q) continue;
+          if (p.up === q.up) {
+            quad(p.x, p.ya, p.yb, q.x, q.ya, q.yb, p.up);
+          } else {
+            // Lines cross between the two bars: split at the intersection.
+            const d0 = p.ya - p.yb;
+            const d1 = q.ya - q.yb;
+            const f = d0 / (d0 - d1);
+            const xc = p.x + f * (q.x - p.x);
+            const yc = p.ya + f * (q.ya - p.ya);
+            quad(p.x, p.ya, p.yb, xc, yc, yc, p.up);
+            quad(xc, yc, yc, q.x, q.ya, q.yb, q.up);
+          }
+        }
+      });
+    }
+  }
+
   function addIndicators(firstFreePane) {
     const chart = state.chart;
     let nextPane = firstFreePane;
@@ -108,6 +164,7 @@
         type: "custom", minMove: Math.pow(10, -ind.decimals), formatter: (v) => nf.format(v),
       };
       let first = null;
+      const byKey = {};
       for (const out of ind.outputs) {
         const common = { priceFormat, priceLineVisible: false, lastValueVisible: true,
                          title: "" };
@@ -118,7 +175,21 @@
             }, pane);
         series.setData(out.points);
         state.indicatorSeries.push(series);
+        byKey[out.key] = { series, points: out.points };
         if (!first) first = series;
+      }
+      for (const fill of ind.fills || []) {
+        const a = byKey[fill.a];
+        const b = byKey[fill.b];
+        if (!a || !b) continue;
+        const bValues = new Map(b.points.filter((p) => "value" in p).map((p) => [p.time, p.value]));
+        const band = [];
+        for (const p of a.points) {
+          if ("value" in p && bValues.has(p.time)) band.push({ time: p.time, a: p.value, b: bValues.get(p.time) });
+        }
+        const primitive = new BandFill(band, fill.upColor, fill.downColor);
+        a.series.attachPrimitive(primitive);
+        state.bandFills.push(primitive);
       }
       if (first) {
         for (const level of ind.levels) {
@@ -521,6 +592,7 @@
         drawMode: state.drawMode,
         bridge: !!window.bridge,
         indicatorSeries: state.indicatorSeries.length,
+        bandFills: state.bandFills.length,
         panes: state.chart ? state.chart.panes().length : 0,
         legend: legendTitle.textContent + " | " + legendValues.textContent,
         indicatorLegend: legendIndicators.textContent,
