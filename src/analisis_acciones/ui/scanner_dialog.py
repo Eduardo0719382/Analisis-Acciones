@@ -11,8 +11,10 @@ from PySide6.QtCore import QLocale, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QDialog,
+    QDoubleSpinBox,
     QFileDialog,
     QHBoxLayout,
     QHeaderView,
@@ -29,7 +31,13 @@ from PySide6.QtWidgets import (
 from analisis_acciones.models.errors import user_message_for
 from analisis_acciones.services.market_data_service import MarketDataService
 from analisis_acciones.services.scan_report import default_file_stem, scan_csv, scan_report_html
-from analisis_acciones.services.scanner import MAX_SYMBOLS, ScanResult, ScanRow, run_scan
+from analisis_acciones.services.scanner import (
+    MAX_SYMBOLS,
+    ScanResult,
+    ScanRow,
+    passes_fundamentals,
+    run_scan,
+)
 from analisis_acciones.ui import strings
 from analisis_acciones.ui.html_pdf import HtmlPdfWriter
 from analisis_acciones.ui.workers import Worker, start_worker
@@ -100,6 +108,25 @@ class ScannerDialog(QDialog):
         filters = QHBoxLayout()
         filters.addWidget(QLabel(strings.SCAN_FILTER))
         filters.addWidget(self.filter)
+        self.with_fundamentals = QCheckBox(strings.SCAN_FUNDAMENTALS)
+        self.with_fundamentals.setToolTip(strings.SCAN_FUNDAMENTALS_TIP)
+        self.max_pe = QDoubleSpinBox()
+        self.max_pe.setRange(0, 1000)
+        self.max_pe.setDecimals(1)
+        self.max_pe.setSpecialValueText(strings.SCAN_NO_LIMIT)
+        self.min_yield = QDoubleSpinBox()
+        self.min_yield.setRange(0, 30)
+        self.min_yield.setDecimals(1)
+        self.min_yield.setSingleStep(0.5)
+        self.min_yield.setSuffix(" %")
+        self.min_yield.setSpecialValueText(strings.SCAN_NO_LIMIT)
+        self.max_pe.valueChanged.connect(self._fill)
+        self.min_yield.valueChanged.connect(self._fill)
+        filters.addWidget(self.with_fundamentals)
+        filters.addWidget(QLabel(strings.SCAN_MAX_PE))
+        filters.addWidget(self.max_pe)
+        filters.addWidget(QLabel(strings.SCAN_MIN_YIELD))
+        filters.addWidget(self.min_yield)
         filters.addStretch(1)
         self.export_button = QPushButton(strings.SCAN_EXPORT)
         export_menu = QMenu(self.export_button)
@@ -129,7 +156,7 @@ class ScannerDialog(QDialog):
         self.status = QLabel()
         self.status.setObjectName("detailsSource")
         self.status.setWordWrap(True)
-        note = QLabel(strings.SCAN_NOTE)
+        note = QLabel(strings.SCAN_NOTE + " " + strings.SCAN_FUNDAMENTALS_NOTE)
         note.setObjectName("detailsSource")
         note.setWordWrap(True)
 
@@ -162,7 +189,10 @@ class ScannerDialog(QDialog):
                 self.run_button.setEnabled(True)
                 self.status.setText(user_message_for(exc))
 
-        worker = start_worker(lambda: run_scan(self._market, symbols), done, fail)
+        fundamentals = self.with_fundamentals.isChecked()
+        worker = start_worker(
+            lambda: run_scan(self._market, symbols, fundamentals=fundamentals), done, fail
+        )
         self._workers.add(worker)
         worker.signals.succeeded.connect(lambda _r: self._workers.discard(worker))
         worker.signals.failed.connect(lambda _e: self._workers.discard(worker))
@@ -176,12 +206,29 @@ class ScannerDialog(QDialog):
             text += "\n" + "\n".join(result.problems)
         self.status.setText(text)
 
+    def limits(self) -> tuple[float | None, float | None]:
+        """Active P/E maximum and dividend-yield minimum (None = no limit)."""
+        return (self.max_pe.value() or None, self.min_yield.value() or None)
+
+    def _visible_rows(self) -> list[ScanRow]:
+        assert self.scan is not None
+        mode = str(self.filter.currentData())
+        max_pe, min_yield = self.limits()
+        checked = any(r.fundamentals_checked for r in self.scan.rows)
+        return [
+            r
+            for r in self.scan.rows
+            if matches(r, mode) and (not checked or passes_fundamentals(r, max_pe, min_yield))
+        ]
+
     def _fill(self, *_args: object) -> None:
         if self.scan is None:
             return
         loc = QLocale()
-        mode = str(self.filter.currentData())
-        rows = [r for r in self.scan.rows if matches(r, mode)]
+        rows = self._visible_rows()
+        max_pe, min_yield = self.limits()
+        if (max_pe or min_yield) and not any(r.fundamentals_checked for r in self.scan.rows):
+            self.status.setText(strings.SCAN_FUNDAMENTALS_HINT)
 
         def num(value: float | None, decimals: int = 2, sign: bool = False) -> _Item:
             if value is None:
@@ -202,7 +249,8 @@ class ScannerDialog(QDialog):
                 _Item(row.symbol), num(row.close), num(row.change_pct, sign=True),
                 num(row.rsi14, 1), bull, bear, patterns, _Item(row.elliott),
                 num(None if row.support_pct is None else -row.support_pct, 1),
-                num(row.resistance_pct, 1, sign=True),
+                num(row.resistance_pct, 1, sign=True), num(row.pe, 1),
+                num(None if row.dividend_yield is None else row.dividend_yield * 100, 2),
             ]  # fmt: skip
             for c, item in enumerate(cells):
                 self.table.setItem(r, c, item)
@@ -212,8 +260,7 @@ class ScannerDialog(QDialog):
     def visible_result(self) -> ScanResult:
         """The rows the current filter shows (and the scan's problems)."""
         assert self.scan is not None
-        mode = str(self.filter.currentData())
-        return ScanResult([r for r in self.scan.rows if matches(r, mode)], self.scan.problems)
+        return ScanResult(self._visible_rows(), self.scan.problems)
 
     def _ask_and_export(self, kind: str) -> None:
         filters = {"html": "Página web (*.html)", "pdf": "PDF (*.pdf)", "csv": "CSV (*.csv)"}
@@ -231,6 +278,13 @@ class ScannerDialog(QDialog):
         mode = str(self.filter.currentData())
         note = "" if mode == "all" else strings.SCAN_EXPORT_FILTER_NOTE.format(
             name=strings.SCAN_FILTERS[mode])  # fmt: skip
+        max_pe, min_yield = self.limits()
+        if any(r.fundamentals_checked for r in self.scan.rows) and (max_pe or min_yield):
+            parts = [f"PER ≤ {max_pe:g}"] if max_pe else []
+            parts += [f"dividendo ≥ {min_yield:g} %"] if min_yield else []
+            note = (note + " " if note else "") + strings.SCAN_EXPORT_FILTER_NOTE.format(
+                name=", ".join(parts)
+            )
         try:
             if kind == "csv":
                 path.write_text(scan_csv(result), encoding="utf-8-sig")  # BOM: Excel reads UTF-8

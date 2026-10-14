@@ -449,6 +449,23 @@ SCAN_COLUMNS = (
     "Elliott",
     "Soporte %",
     "Resistencia %",
+    "PER",
+    "Div. %",
+)
+SCAN_FUNDAMENTALS = "Incluir fundamentales (PER y dividendo)"
+SCAN_FUNDAMENTALS_TIP = (
+    "Descarga el PER y la rentabilidad por dividendo de cada activo (se guardan un día). "
+    "El escaneo tarda más la primera vez."
+)
+SCAN_MAX_PE = "PER máx.:"
+SCAN_MIN_YIELD = "Div. mín.:"
+SCAN_NO_LIMIT = "sin límite"
+SCAN_FUNDAMENTALS_HINT = (
+    "Los filtros de PER y dividendo necesitan «Incluir fundamentales» y volver a escanear."
+)
+SCAN_FUNDAMENTALS_NOTE = (
+    "PER = precio / beneficio de los últimos 12 meses; con pérdidas o sin dato no pasa el "
+    "filtro de PER. Div. % = dividendo anual / precio. Datos de Yahoo Finance."
 )
 SCAN_NOTE = (
     "Cada fila resume las mismas reglas de las pestañas Análisis, Patrones y Elliott. "

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import UTC, datetime
 
 import pytest
@@ -97,3 +98,26 @@ def test_export_html_csv_pdf(qtbot: QtBot, market: MarketDataService, tmp_path) 
     dialog.export("pdf", target)
     qtbot.waitUntil(lambda: dialog.last_export == target, timeout=30000)
     assert target.read_bytes().startswith(b"%PDF")
+
+
+def test_fundamental_filters(qtbot: QtBot, market: MarketDataService) -> None:
+    dialog = ScannerDialog(market, [])
+    qtbot.addWidget(dialog)
+    cheap = replace(row("CHEAP", 1, 0), fundamentals_checked=True, pe=12.0, dividend_yield=0.04)
+    dear = replace(row("DEAR", 1, 0), fundamentals_checked=True, pe=40.0, dividend_yield=0.0)
+    unknown = replace(row("NONE", 1, 0), fundamentals_checked=True)
+    dialog.show_result(ScanResult([cheap, dear, unknown]))
+    assert dialog.table.rowCount() == 3
+    pe_col = strings.SCAN_COLUMNS.index("PER")
+    dialog.max_pe.setValue(20)
+    assert dialog.table.rowCount() == 1 and dialog.table.item(0, 0).text() == "CHEAP"
+    assert dialog.table.item(0, pe_col + 1).text() in {"4.00", "4,00"}
+    dialog.max_pe.setValue(0)
+    dialog.min_yield.setValue(1)
+    assert dialog.table.rowCount() == 1
+    assert [r.symbol for r in dialog.visible_result().rows] == ["CHEAP"]
+    # Without fundamentals in the scan the limits do not hide rows; a hint explains why.
+    dialog.show_result(ScanResult([row("AAA", 1, 0)]))
+    assert dialog.table.rowCount() == 1
+    dialog.min_yield.setValue(2)
+    assert "Incluir fundamentales" in dialog.status.text()

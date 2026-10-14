@@ -284,7 +284,7 @@ def card(row: ScanRow, scale: int) -> str:
     return f"""
 <article class="card {css}">
   <header>
-    <div><h2>{escape(row.symbol)}</h2><div class="muted small">Cierre del {_date(row.as_of)}</div></div>
+    <div><h2>{escape(row.symbol)}</h2><div class="muted small">Cierre del {_date(row.as_of)}{_fundamentals(row)}</div></div>
     <div class="price"><b>{num(row.close)}</b>
       <span class="chg"><i class="{change_css}">{change_icon}</i> {num(row.change_pct, 2, sign=True)} %</span></div>
   </header>
@@ -297,6 +297,13 @@ def card(row: ScanRow, scale: int) -> str:
   </div>
   <section><h3>Patrones y ondas</h3>{_pattern_chips(row)}</section>
 </article>"""  # noqa: E501
+
+
+def _fundamentals(row: ScanRow) -> str:
+    if not row.fundamentals_checked:
+        return ""
+    yield_pct = None if row.dividend_yield is None else row.dividend_yield * 100
+    return f" · PER {num(row.pe, 1)} · dividendo {num(yield_pct, 2)} %"
 
 
 def _tile(value: int, label: str, names: list[str], css: str = "") -> str:
@@ -534,6 +541,7 @@ def scan_csv(result: ScanResult) -> str:
         "ticker", "fecha", "cierre", "cambio_pct", "rsi14", "senales_alcistas",
         "senales_bajistas", "balance", "detalle_alcistas", "detalle_bajistas", "patrones",
         "elliott", "soporte", "dist_soporte_pct", "resistencia", "dist_resistencia_pct",
+        "per", "rentabilidad_dividendo_pct",
     ])  # fmt: skip
     for row in sorted(result.rows, key=lambda r: r.symbol):
         _css, _icon, sentence = verdict(row)
@@ -542,7 +550,8 @@ def scan_csv(result: ScanResult) -> str:
             _round(row.change_pct), _round(row.rsi14), len(row.bullish), len(row.bearish),
             sentence, "; ".join(row.bullish), "; ".join(row.bearish), "; ".join(row.patterns),
             row.elliott, _round(row.support), _round(row.support_pct), _round(row.resistance),
-            _round(row.resistance_pct),
+            _round(row.resistance_pct), _round(row.pe),
+            _round(None if row.dividend_yield is None else row.dividend_yield * 100),
         ]  # fmt: skip
         writer.writerow([safe_cell(c) for c in cells])
     return buffer.getvalue()

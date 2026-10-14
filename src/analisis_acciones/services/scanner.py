@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 
 import numpy as np
@@ -73,6 +73,10 @@ class ScanRow:
     sma20: tuple[float, ...] = ()
     sma50: tuple[float, ...] = ()
     candles_start: date | None = None
+    #: Filled only when the scan includes fundamentals (``fundamentals=True``).
+    fundamentals_checked: bool = False
+    pe: float | None = None  # trailing P/E
+    dividend_yield: float | None = None  # fraction (0.02 = 2 %)
 
     @property
     def patterns(self) -> tuple[str, ...]:
@@ -157,8 +161,13 @@ def scan_bars(symbol: str, bars: pd.DataFrame) -> ScanRow:
 
 
 def run_scan(market: MarketDataService, symbols: list[str],
-             progress: Callable[[int, int, str], None] | None = None) -> ScanResult:  # fmt: skip
-    """Scan ``symbols`` (cache-first loads). Problems are reported per symbol, never raised."""
+             progress: Callable[[int, int, str], None] | None = None,
+             fundamentals: bool = False) -> ScanResult:  # fmt: skip
+    """Scan ``symbols`` (cache-first loads). Problems are reported per symbol, never raised.
+
+    With ``fundamentals`` each row also gets its P/E and dividend yield (cached daily);
+    a symbol without them keeps the row with empty values and a note in ``problems``.
+    """
     result = ScanResult()
     targets = list(dict.fromkeys(s.strip().upper() for s in symbols if s.strip()))[:MAX_SYMBOLS]
     for done, symbol in enumerate(targets):
@@ -169,10 +178,35 @@ def run_scan(market: MarketDataService, symbols: list[str],
             bars = loaded.series.bars
             if loaded.session_in_progress:
                 bars = bars.iloc[:-1]  # same rule as alerts and analysis: completed bars only
-            result.rows.append(scan_bars(loaded.series.symbol, bars))
+            row = scan_bars(loaded.series.symbol, bars)
+            if fundamentals:
+                row = _with_fundamentals(market, row, result.problems)
+            result.rows.append(row)
         except AppError as exc:
             result.problems.append(f"{symbol}: {exc.user_message}")
         except (ValueError, ArithmeticError, KeyError) as exc:
             logger.exception("Scan of %s failed", symbol)
             result.problems.append(f"{symbol}: no se pudo analizar ({exc})")
     return result
+
+
+def _with_fundamentals(market: MarketDataService, row: ScanRow, problems: list[str]) -> ScanRow:
+    try:
+        data = market.fundamentals(row.symbol).data
+    except AppError as exc:
+        problems.append(f"{row.symbol}: sin datos fundamentales ({exc.user_message})")
+        return replace(row, fundamentals_checked=True)
+    return replace(row, fundamentals_checked=True, pe=data.trailing_pe,
+                   dividend_yield=data.dividend_yield)  # fmt: skip
+
+
+def passes_fundamentals(row: ScanRow, max_pe: float | None, min_yield_pct: float | None) -> bool:
+    """Fundamental filter; a missing value never passes an active limit.
+
+    A negative or missing P/E (losses, no data) fails a P/E limit.
+    """
+    if max_pe is not None and (row.pe is None or not 0 < row.pe <= max_pe):
+        return False
+    if min_yield_pct is not None:
+        return row.dividend_yield is not None and row.dividend_yield * 100 >= min_yield_pct
+    return True

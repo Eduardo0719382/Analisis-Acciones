@@ -172,6 +172,9 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   ratón), patrones en formación o con ruptura reciente, posible cuenta de Elliott y distancia al
   soporte y a la resistencia más cercanos. Se puede filtrar y ordenar por columnas; un doble clic
   abre el activo en el gráfico. Usa solo sesiones diarias cerradas.
+  Con **Incluir fundamentales** añade el PER y la rentabilidad por dividendo (Yahoo, guardados un
+  día) y permite filtrar por **PER máximo** y **dividendo mínimo**; un activo sin el dato (o con
+  PER negativo por pérdidas) no pasa un filtro activo.
   **Exportar** guarda lo que muestra el filtro como:
   - **Informe visual (HTML o PDF):** resumen con casillas (cuántos activos tienen más señales
     alcistas o bajistas y cuántos tienen patrones) y una ficha por activo con una frase clara, un

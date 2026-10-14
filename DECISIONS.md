@@ -715,3 +715,13 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   messages show quantities in the units of the trade's day.
 - **Journal:** the existing note is the reason for the trade; a `review` column stores what
   was learnt, editable afterwards, shown in the report and CSV.
+
+## D-043 — Fundamental filter in the scanner
+
+- Optional ("Incluir fundamentales"), because it adds one provider request per symbol (cached
+  for a day by D-041). Rows keep `fundamentals_checked` so the dialog can tell "no data" from
+  "not requested".
+- A missing value never passes an active limit, and a P/E ≤ 0 (losses) fails a P/E maximum:
+  the filter must not include a company because data is missing. Limits only apply to scans
+  that included fundamentals; otherwise the dialog explains that a re-scan is needed.
+- The daily automatic scan does not fetch fundamentals (it only reports technical changes).
