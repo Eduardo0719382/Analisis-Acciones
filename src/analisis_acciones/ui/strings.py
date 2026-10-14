@@ -469,3 +469,30 @@ DAILY_SCAN_EVENT = "{symbol} · escaneo diario"
 DAILY_SCAN_DONE = "Escaneo diario: {count} novedades en {symbols} activos."
 DAILY_SCAN_NONE = "Escaneo diario: sin novedades respecto a la sesión anterior ({count} activos)."
 DAILY_SCAN_FAILED = "Escaneo diario: no se pudo analizar ningún activo (¿sin conexión?)."
+
+ACTION_PATTERN_BACKTEST = "Backtesting de &patrones…"
+PBT_TITLE = "Backtesting de patrones"
+PBT_RUN = "Simular"
+PBT_MAX_BARS = "Plazo máximo:"
+PBT_LONG_ONLY = "Solo compras (sin ventas cortas)"
+PBT_COMMISSION = "Comisión %:"
+PBT_SLIPPAGE = "Deslizamiento %:"
+PBT_PATTERNS = "Patrones"
+PBT_RUNNING = (
+    "Simulando {count} activos… Cada patrón se comprueba con los datos de su día, puede "
+    "tardar unos segundos por activo."
+)
+PBT_DONE = "{trades} operaciones en {symbols} activos."
+PBT_TAB_SUMMARY = "Resumen visual"
+PBT_TAB_TRADES = "Operaciones"
+PBT_TRADE_COLUMNS = (
+    "Ticker",
+    "Patrón",
+    "Operación",
+    "Entrada",
+    "Precio",
+    "Salida",
+    "Precio",
+    "Motivo",
+    "Resultado %",
+)

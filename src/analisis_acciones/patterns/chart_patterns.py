@@ -501,7 +501,8 @@ def _non_overlapping(candidates: list[ChartPattern]) -> list[ChartPattern]:
     return chosen
 
 
-def find_patterns(bars: pd.DataFrame, pivots: list[Pivot], tol: float) -> list[ChartPattern]:
+def find_patterns(bars: pd.DataFrame, pivots: list[Pivot], tol: float,
+                  limit: int | None = MAX_PATTERNS) -> list[ChartPattern]:  # fmt: skip
     ctx = _Bars(bars)
     # Overlap is only resolved within one pattern type: a double top and the
     # double bottom right after it can both be real.
@@ -521,7 +522,7 @@ def find_patterns(bars: pd.DataFrame, pivots: list[Pivot], tol: float) -> list[C
                 by_name.setdefault(pattern.name, []).append(pattern)
     patterns = [p for group in by_name.values() for p in _non_overlapping(group)]
     patterns.sort(key=lambda p: p.end)
-    return patterns[-MAX_PATTERNS:]
+    return patterns if limit is None else patterns[-limit:]
 
 
 def analyze(bars: pd.DataFrame, threshold: float | None = None) -> PatternResult:
@@ -533,3 +534,9 @@ def analyze(bars: pd.DataFrame, threshold: float | None = None) -> PatternResult
     recent = [p for p in pivots if p.index >= len(bars) - LEVEL_LOOKBACK]
     levels = support_resistance(recent, close, tol) if np.isfinite(close) else []
     return PatternResult(threshold, tol, close, pivots, levels, find_patterns(bars, pivots, tol))
+
+
+def detect(bars: pd.DataFrame, limit: int | None = None) -> list[ChartPattern]:
+    """Patterns only (automatic threshold and tolerance from ``bars`` itself)."""
+    pivots = zigzag(bars["high"], bars["low"], auto_threshold(bars, multiple=2.0))
+    return find_patterns(bars, pivots, price_tolerance(bars), limit)

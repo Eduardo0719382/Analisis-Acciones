@@ -122,6 +122,15 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   ganadoras/perdedoras, % de acierto, caída máxima, factor de beneficio, comparación con
   comprar y mantener, curva de capital y lista de operaciones. Señal al cierre, ejecución en la
   apertura siguiente (sin ventaja de información futura).
+- **Backtesting de patrones:** *Herramientas → Backtesting de patrones…* simula, en varios
+  activos a la vez (hasta 30), qué habría pasado operando cada patrón chartista al confirmarse:
+  entrada en la apertura siguiente, salida en el objetivo del patrón, en su invalidación (stop) o
+  tras un plazo máximo; con comisión y deslizamiento; compras y ventas cortas o solo compras.
+  Cada patrón se vuelve a detectar con los datos que había el día de su ruptura, de modo que la
+  simulación no usa información del futuro. El resultado es un informe visual (resultado medio
+  por patrón, cómo terminaron las operaciones, ventaja frente a entrar cualquier día, tablas por
+  patrón y por activo, avisos de muestra pequeña), que se puede exportar a HTML o PDF, y la lista
+  de operaciones (CSV).
 - **Exportar:** *Archivo → Exportar gráfico como imagen (PNG)*, *Exportar datos (CSV)* (barras
   e indicadores visibles) y *Exportar informe (PDF)* (gráfico, detalles y análisis). En el
   backtesting, *Exportar resultados…* guarda operaciones, resumen y curva de capital en CSV.

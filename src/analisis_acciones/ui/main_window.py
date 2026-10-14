@@ -65,6 +65,7 @@ from analisis_acciones.ui.elliott_panel import ElliottPanel, ElliottView
 from analisis_acciones.ui.indicator_dialog import IndicatorDialog
 from analisis_acciones.ui.market_controller import MarketController
 from analisis_acciones.ui.panels import Panel
+from analisis_acciones.ui.pattern_backtest_dialog import PatternBacktestDialog
 from analisis_acciones.ui.patterns_panel import PatternsPanel, PatternsView
 from analisis_acciones.ui.projection_panel import ProjectionOutcome, ProjectionPanel
 from analisis_acciones.ui.report import build_report_html, write_pdf
@@ -299,6 +300,9 @@ class MainWindow(QMainWindow):
         self.compare_action = QAction(strings.ACTION_COMPARE, self)
         self.compare_action.triggered.connect(self.open_comparison)
         tools_menu.addAction(self.compare_action)
+        self.pattern_backtest_action = QAction(strings.ACTION_PATTERN_BACKTEST, self)
+        self.pattern_backtest_action.triggered.connect(self.open_pattern_backtest)
+        tools_menu.addAction(self.pattern_backtest_action)
         self.scanner_action = QAction(strings.ACTION_SCANNER, self)
         self.scanner_action.setShortcut(QKeySequence("Ctrl+E"))
         self.scanner_action.triggered.connect(self.open_scanner)
@@ -663,6 +667,14 @@ class MainWindow(QMainWindow):
         dialog.show_result(result)
         dialog.show()
         self._scanner_dialog = dialog
+
+    def open_pattern_backtest(self) -> None:
+        if self.market is None:
+            return
+        dialog = PatternBacktestDialog(self.market.service, self._candidate_symbols(), self)
+        dialog.symbol_activated.connect(self.open_symbol)
+        dialog.show()
+        self._pattern_backtest_dialog = dialog
 
     def open_comparison(self) -> None:
         if self.market is None:

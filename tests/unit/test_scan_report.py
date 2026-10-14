@@ -74,3 +74,27 @@ def test_csv_is_formula_safe() -> None:
     assert rows[0][0] == "ticker" and rows[1][0] == "'=HYPERLINK(1)"
     assert rows[1][7] == "Predominan las señales alcistas"
     assert rows[1][10] == "Doble suelo (ruptura reciente); Triángulo simétrico (en formación)"
+
+
+def test_pattern_report_and_csv() -> None:
+    from datetime import date as d
+
+    from analisis_acciones.backtesting.patterns import (
+        PatternBacktestConfig,
+        PatternBacktestResult,
+        PatternTrade,
+    )
+    from analisis_acciones.services.pattern_report import pattern_report_html, pattern_trades_csv
+
+    trade = PatternTrade("<X>", "Doble suelo", 1, d(2024, 1, 2), d(2024, 1, 3), 10.0,
+                         d(2024, 1, 9), 11.0, "target", 5, 9.8, 0.3)  # fmt: skip
+    result = PatternBacktestResult(PatternBacktestConfig(long_only=True), [trade], 4, 2,
+                                   ["ZZZ: sin datos"], ["<X>"])  # fmt: skip
+    html = pattern_report_html(result, datetime(2025, 1, 1))
+    assert "<X>" not in html and "&lt;X&gt;" in html
+    assert "solo compras" in html and "<b>4</b> candidatos" in html
+    assert "+9,80 %" in html and "muestra pequeña" in html and "ZZZ: sin datos" in html
+    empty = PatternBacktestResult(PatternBacktestConfig(), [], 0, 0)
+    assert "No hubo ninguna operación" in pattern_report_html(empty, datetime(2025, 1, 1))
+    rows = list(csv.reader(io.StringIO(pattern_trades_csv(result))))
+    assert rows[1][:3] == ["<X>", "Doble suelo", "compra"] and rows[1][8] == "objetivo"

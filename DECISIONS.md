@@ -561,3 +561,23 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   items, so a temporary error does not cause false "new" items later.
 - Novelties are written to the alert history (`alert_events` with no rule) and use the same
   notification path as alerts, so the user has one place to look.
+
+## D-033 — Backtesting chart patterns across assets
+
+- **No look-ahead, by re-detection.** Pivots and volatility thresholds depend on later data,
+  so a pattern found on the full history may not have been visible at the time. Candidates come
+  from the full history and from growing prefixes (every 40 bars). Each one is accepted only if
+  detection on `bars[:breakout + 1]` finds the same pattern (same name and pivots) breaking out
+  on that same bar. Rejected candidates are counted and reported. On random-walk test data the
+  resulting edge is about 0, as it should be.
+- **Trades:** a signal at the close is filled at the next open. The exit is the measured target
+  (limit), the invalidation level (stop) or the close after N sessions. If both are touched on
+  the same bar, the stop counts first; an open that gaps beyond a level fills at the open. Costs
+  are commission per side plus slippage against each fill. Returns are per trade, as a
+  percentage of the entry value (no compounding and no position sizing), so patterns and
+  assets compare directly. Bearish patterns are short trades unless "solo compras" is chosen;
+  short borrowing costs are not modelled (stated in the report).
+- **"Edge versus chance":** the average trade return minus the average return of entering the
+  same asset on any day, in the same direction and for the same number of sessions. Groups with
+  fewer than 20 trades are flagged as small samples.
+- The report reuses the scanner report's visual language and export path (HTML/PDF/CSV).
