@@ -88,6 +88,8 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
 - **Perfil de volumen:** *Ver → Perfil de volumen* dibuja a la derecha del gráfico cuánto volumen
   se negoció en cada franja de precio durante las últimas 250 barras, con el POC (precio con más
   volumen) y la zona de valor (70 % del volumen).
+  **Plantillas:** en la ventana de indicadores, «Plantilla» carga conjuntos listos
+  (Tendencia, Momento, Volatilidad, Intradía, Ichimoku) o los suyos propios («Guardar como…»).
   La configuración se guarda. Las fórmulas y convenciones están documentadas en
   `src/analisis_acciones/indicators/functions.py` y verificadas contra implementaciones de
   referencia independientes.

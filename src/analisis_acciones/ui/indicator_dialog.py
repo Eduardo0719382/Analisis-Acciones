@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QListWidget,
     QListWidgetItem,
@@ -27,13 +28,17 @@ from PySide6.QtWidgets import (
 )
 
 from analisis_acciones.indicators.registry import SPECS, IndicatorConfig, get_spec, validate_params
+from analisis_acciones.indicators.templates import BUILTIN, builtin_configs
 from analisis_acciones.models.errors import UserError
+from analisis_acciones.services.settings_service import SettingsService
 from analisis_acciones.ui import strings
 
 
 class IndicatorDialog(QDialog):
-    def __init__(self, configs: list[IndicatorConfig], parent: QWidget | None = None) -> None:
+    def __init__(self, configs: list[IndicatorConfig], parent: QWidget | None = None,
+                 templates: SettingsService | None = None) -> None:  # fmt: skip
         super().__init__(parent)
+        self._templates = templates
         self.setWindowTitle(strings.INDICATORS_TITLE)
         self.setMinimumSize(560, 380)
         self._configs: list[IndicatorConfig] = list(configs)
@@ -92,11 +97,85 @@ class IndicatorDialog(QDialog):
         buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
+        if templates is not None:
+            self.template_combo = QComboBox()
+            self.load_template_button = QPushButton(strings.TEMPLATE_LOAD)
+            self.load_template_button.clicked.connect(self.load_template)
+            self.save_template_button = QPushButton(strings.TEMPLATE_SAVE)
+            self.save_template_button.clicked.connect(self._ask_save_template)
+            self.delete_template_button = QPushButton(strings.TEMPLATE_DELETE)
+            self.delete_template_button.clicked.connect(self.delete_template)
+            self.template_combo.currentIndexChanged.connect(self._on_template_selected)
+            template_row = QHBoxLayout()
+            template_row.addWidget(QLabel(strings.TEMPLATE_LABEL))
+            template_row.addWidget(self.template_combo, stretch=1)
+            for button in (self.load_template_button, self.save_template_button,
+                           self.delete_template_button):  # fmt: skip
+                template_row.addWidget(button)
+            layout.addLayout(template_row)
+            self._fill_templates()
         layout.addLayout(add_row)
         layout.addLayout(body, stretch=1)
         layout.addWidget(buttons)
 
         self._refresh_list(0 if self._configs else -1)
+
+    # Templates -----------------------------------------------------------------
+    def _fill_templates(self, select: str | None = None) -> None:
+        assert self._templates is not None
+        self.template_combo.blockSignals(True)
+        self.template_combo.clear()
+        for name in BUILTIN:
+            self.template_combo.addItem(strings.TEMPLATE_BUILTIN.format(name=name), ("b", name))
+        for name in sorted(self._templates.indicator_templates(), key=str.casefold):
+            self.template_combo.addItem(name, ("u", name))
+        if select is not None:
+            self.template_combo.setCurrentIndex(max(self.template_combo.findText(select), 0))
+        self.template_combo.blockSignals(False)
+        self._on_template_selected()
+
+    def _on_template_selected(self, *_args: object) -> None:
+        data = self.template_combo.currentData()
+        self.delete_template_button.setEnabled(bool(data) and data[0] == "u")
+
+    def load_template(self) -> None:
+        data = self.template_combo.currentData()
+        if not data or self._templates is None:
+            return
+        kind, name = data
+        if kind == "b":
+            configs = builtin_configs(name)
+        else:
+            stored = self._templates.indicator_templates().get(name, [])
+            # Fresh ids so the loaded indicators never clash with ones already on the chart.
+            configs = [replace(IndicatorConfig.create(c.indicator_id, dict(c.params)),
+                               visible=c.visible) for c in stored]  # fmt: skip
+        self._configs = configs
+        self._refresh_list(0 if configs else -1)
+
+    def _ask_save_template(self) -> None:
+        name, ok = QInputDialog.getText(self, strings.TEMPLATE_SAVE, strings.TEMPLATE_NAME_PROMPT)
+        if ok:
+            self.save_template(name)
+
+    def save_template(self, name: str) -> bool:
+        if self._templates is None:
+            return False
+        try:
+            clean = self._templates.save_indicator_template(name, self._configs)
+        except UserError as exc:
+            self.error_label.setText(exc.user_message)
+            return False
+        self.error_label.clear()
+        self._fill_templates(select=clean)
+        return True
+
+    def delete_template(self) -> None:
+        data = self.template_combo.currentData()
+        if self._templates is None or not data or data[0] != "u":
+            return
+        self._templates.delete_indicator_template(data[1])
+        self._fill_templates()
 
     # Result --------------------------------------------------------------------
     def configs(self) -> list[IndicatorConfig]:

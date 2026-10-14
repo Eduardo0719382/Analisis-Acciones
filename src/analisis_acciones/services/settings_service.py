@@ -11,7 +11,8 @@ from enum import StrEnum
 from typing import Any
 
 from analisis_acciones.indicators.registry import IndicatorConfig
-from analisis_acciones.models.errors import AppError
+from analisis_acciones.indicators.templates import MAX_TEMPLATES, clean_name
+from analisis_acciones.models.errors import AppError, UserError
 from analisis_acciones.storage.settings_repository import SettingsRepository
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ KEY_LAST_INTERVAL = "market.last_interval"
 KEY_DAILY_SCAN = "scanner.daily_enabled"
 KEY_VOLUME_PROFILE = "chart.volume_profile"
 KEY_SUMMARY_ON_START = "ui.summary_on_start"
+KEY_INDICATOR_TEMPLATES = "chart.indicator_templates"
 KEY_SCAN_SNAPSHOT = "scanner.daily_snapshot"
 
 
@@ -109,6 +111,46 @@ class SettingsService:
 
     def set_indicators(self, configs: list[IndicatorConfig]) -> None:
         self._repo.set(KEY_INDICATORS, [c.to_dict() for c in configs])
+
+    # Indicator templates -----------------------------------------------------------
+    def indicator_templates(self) -> dict[str, list[IndicatorConfig]]:
+        """User templates (name -> configs); invalid stored entries are skipped."""
+        raw = self._repo.get(KEY_INDICATOR_TEMPLATES)
+        if not isinstance(raw, dict):
+            return {}
+        templates: dict[str, list[IndicatorConfig]] = {}
+        for name, items in raw.items():
+            if not isinstance(name, str) or not isinstance(items, list):
+                continue
+            configs = []
+            for item in items:
+                try:
+                    configs.append(IndicatorConfig.from_dict(item))
+                except (AppError, TypeError, ValueError, AttributeError):
+                    logger.warning("Ignoring invalid indicator in template %r", name)
+            templates[name] = configs
+        return templates
+
+    def save_indicator_template(self, name: str, configs: list[IndicatorConfig]) -> str:
+        clean = clean_name(name)
+        templates = self.indicator_templates()
+        if clean not in templates and len(templates) >= MAX_TEMPLATES:
+            raise UserError(
+                "too many templates",
+                user_message=f"Como máximo {MAX_TEMPLATES} plantillas propias.",
+            )
+        templates[clean] = list(configs)
+        self._store_templates(templates)
+        return clean
+
+    def delete_indicator_template(self, name: str) -> None:
+        templates = self.indicator_templates()
+        templates.pop(name, None)
+        self._store_templates(templates)
+
+    def _store_templates(self, templates: dict[str, list[IndicatorConfig]]) -> None:
+        self._repo.set(KEY_INDICATOR_TEMPLATES,
+                       {n: [c.to_dict() for c in cs] for n, cs in templates.items()})  # fmt: skip
 
     # Watchlist -----------------------------------------------------------------
     def current_watchlist(self) -> int | None:

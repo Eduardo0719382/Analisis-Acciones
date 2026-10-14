@@ -776,7 +776,7 @@ class MainWindow(QMainWindow):
         self._backtest_dialog = dialog
 
     def edit_indicators(self) -> None:
-        dialog = IndicatorDialog(self.chart.indicators, self)
+        dialog = IndicatorDialog(self.chart.indicators, self, templates=self._settings)
         if dialog.exec() == IndicatorDialog.DialogCode.Accepted:
             self.apply_indicators(dialog.configs())
 

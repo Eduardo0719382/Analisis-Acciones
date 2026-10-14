@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from PySide6.QtCore import Qt
 from pytestqt.qtbot import QtBot
 
@@ -80,3 +81,40 @@ def test_corrupt_stored_indicators_are_skipped(settings: SettingsService) -> Non
          {"id": "rsi", "params": {"period": -1}}],
     )  # fmt: skip
     assert [c.label for c in settings.indicators()] == ["SMA (10)"]
+
+
+def test_templates_builtin_save_load_delete(qtbot: QtBot, settings: SettingsService) -> None:
+    dialog = IndicatorDialog([IndicatorConfig.create("sma", {"period": 7})], templates=settings)
+    qtbot.addWidget(dialog)
+    combo = dialog.template_combo
+    assert combo.itemText(0) == "Tendencia (predefinida)"
+    assert not dialog.delete_template_button.isEnabled()  # built-ins are read-only
+
+    assert dialog.save_template("  Mi   plantilla ")
+    assert list(settings.indicator_templates()) == ["Mi plantilla"]
+    assert combo.currentText() == "Mi plantilla" and dialog.delete_template_button.isEnabled()
+    assert not dialog.save_template("Tendencia")  # reserved name
+    assert "predefinida" in dialog.error_label.text()
+
+    combo.setCurrentIndex(combo.findText("Intradía (predefinida)"))
+    dialog.load_template()
+    assert [c.indicator_id for c in dialog.configs()] == ["vwap", "ema", "ema", "rsi"]
+
+    combo.setCurrentIndex(combo.findText("Mi plantilla"))
+    dialog.load_template()
+    loaded = dialog.configs()
+    assert [(c.indicator_id, c.params["period"]) for c in loaded] == [("sma", 7)]
+    assert loaded[0].uid != settings.indicator_templates()["Mi plantilla"][0].uid
+
+    dialog.delete_template()
+    assert settings.indicator_templates() == {}
+    assert combo.findText("Mi plantilla") == -1
+
+
+def test_template_storage_skips_invalid(settings: SettingsService) -> None:
+    from analisis_acciones.models.errors import UserError
+
+    settings._repo.set("chart.indicator_templates", {"X": [{"id": "nope"}, {"id": "rsi"}], 5: []})
+    assert [c.indicator_id for c in settings.indicator_templates()["X"]] == ["rsi"]
+    with pytest.raises(UserError):
+        settings.save_indicator_template("x" * 41, [])
