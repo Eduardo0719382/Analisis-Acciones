@@ -33,6 +33,7 @@ KEY_WATCHLIST = "watchlist.current"
 CHART_TYPES = ("candles", "line")
 KEY_LAST_INTERVAL = "market.last_interval"
 KEY_DAILY_SCAN = "scanner.daily_enabled"
+KEY_VOLUME_PROFILE = "chart.volume_profile"
 KEY_SCAN_SNAPSHOT = "scanner.daily_snapshot"
 
 
@@ -117,6 +118,12 @@ class SettingsService:
         self._repo.set(KEY_WATCHLIST, int(list_id))
 
     # Layout ----------------------------------------------------------------
+    def volume_profile(self) -> bool:
+        return self._repo.get(KEY_VOLUME_PROFILE) is True
+
+    def set_volume_profile(self, enabled: bool) -> None:
+        self._repo.set(KEY_VOLUME_PROFILE, bool(enabled))
+
     # Daily scan ----------------------------------------------------------------
     def daily_scan_enabled(self) -> bool:
         return self._repo.get(KEY_DAILY_SCAN) is not False

@@ -294,6 +294,13 @@ def test_indicators_drawn_persisted_and_restored(
     assert chart_state(qtbot, window)["panes"] == 2
     assert chart_state(qtbot, window)["bandFills"] == 0
 
+    # Volume profile from the View menu, remembered in the settings.
+    window.volume_profile_action.setChecked(True)
+    qtbot.waitUntil(lambda: chart_state(qtbot, window)["overlayPrimitives"] == 1, timeout=20000)
+    assert settings.volume_profile() is True
+    window.volume_profile_action.setChecked(False)
+    qtbot.waitUntil(lambda: chart_state(qtbot, window)["overlayPrimitives"] == 0, timeout=20000)
+
     # Ichimoku's cloud is shaded between Senkou A and B.
     window.apply_indicators([IndicatorConfig.create("ichimoku")])
     qtbot.waitUntil(lambda: chart_state(qtbot, window)["bandFills"] == 1, timeout=20000)

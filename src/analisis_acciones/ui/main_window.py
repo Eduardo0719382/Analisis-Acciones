@@ -39,9 +39,11 @@ from analisis_acciones.charts.overlays import (
     levels_overlay,
     patterns_overlay,
     projection_overlay,
+    volume_profile_overlay,
 )
 from analisis_acciones.charts.payload import chart_times, future_times
 from analisis_acciones.data.export import bars_to_csv
+from analisis_acciones.indicators.functions import volume_profile
 from analisis_acciones.indicators.registry import IndicatorConfig
 from analisis_acciones.models.errors import AppError, UserError
 from analisis_acciones.models.market import Interval
@@ -76,6 +78,9 @@ from analisis_acciones.ui.watchlist_panel import WatchlistPanel
 from analisis_acciones.ui.workers import Worker, start_worker
 
 logger = logging.getLogger(__name__)
+
+#: Bars used for the volume profile (about a year of daily bars).
+VOLUME_PROFILE_BARS = 250
 
 DEFAULT_SIZE = (1400, 860)
 DEFAULT_MAIN_SPLIT = [240, 900, 280]
@@ -322,6 +327,15 @@ class MainWindow(QMainWindow):
         self.dark_theme_action.setChecked(self._settings.theme() is Theme.DARK)
         self.dark_theme_action.toggled.connect(self._on_dark_theme_toggled)
         view_menu.addAction(self.dark_theme_action)
+        self.volume_profile_action = QAction(strings.ACTION_VOLUME_PROFILE, self)
+        self.volume_profile_action.setCheckable(True)
+        self.volume_profile_action.setChecked(self._settings.volume_profile())
+        self.volume_profile_action.setToolTip(
+            strings.VOLUME_PROFILE_TIP.format(bars=VOLUME_PROFILE_BARS)
+        )
+        self.volume_profile_action.setStatusTip(self.volume_profile_action.toolTip())
+        self.volume_profile_action.toggled.connect(self._on_volume_profile_toggled)
+        view_menu.addAction(self.volume_profile_action)
         self.reset_layout_action = QAction(strings.ACTION_RESET_LAYOUT, self)
         self.reset_layout_action.triggered.connect(self.reset_layout)
         view_menu.addAction(self.reset_layout_action)
@@ -466,6 +480,22 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(
             strings.LEVEL_ALERTS_CREATED.format(count=len(created), symbol=series.symbol), 8000
         )
+
+    def _on_volume_profile_toggled(self, enabled: bool) -> None:
+        self._settings.set_volume_profile(enabled)
+        self._draw_volume_profile()
+
+    def _draw_volume_profile(self) -> None:
+        series = self.chart.current_series
+        if not self.volume_profile_action.isChecked() or series is None or series.bars.empty:
+            self.chart.set_overlay("profile", [])
+            return
+        bars = series.bars.tail(VOLUME_PROFILE_BARS)
+        profile = volume_profile(bars["high"], bars["low"], bars["volume"], bins=24)
+        tokens = tokens_for(self._settings.theme())
+        items = volume_profile_overlay(profile, tokens.text_muted + "33", tokens.accent + "40",
+                                       tokens.accent + "99", tokens.text_muted)  # fmt: skip
+        self.chart.set_overlay("profile", items)
 
     def _draw_patterns(self, view: object) -> None:
         if not isinstance(view, PatternsView):
@@ -793,6 +823,7 @@ class MainWindow(QMainWindow):
         self.projection_panel.set_series(series)
         self.elliott_panel.set_series(series)
         self.patterns_panel.set_series(series)
+        self._draw_volume_profile()
         self.analysis_panel.analyze(
             series, f"{series.symbol} · {interval_label}", result.session_in_progress
         )

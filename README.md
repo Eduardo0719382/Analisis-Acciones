@@ -77,7 +77,12 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   Ichimoku (nube coloreada: verde si Senkou A está sobre B, roja si no; proyectada 26 barras
   hacia delante y la Chikou 26 hacia atrás) y
   Supertrend (verde/rojo según la dirección). En paneles propios: RSI, MACD, ATR, Estocástico,
-  RSI estocástico, ADX (+DI/-DI) y OBV; edite sus parámetros, ocúltelos o quítelos.
+  RSI estocástico, ADX (+DI/-DI) y OBV; edite sus parámetros, ocúltelos o quítelos. También
+  **VWAP** (en intradía se reinicia cada sesión; en diario usa las últimas N barras) y
+  **Fibonacci automático** (retrocesos del último tramo relevante, detectado con ZigZag).
+- **Perfil de volumen:** *Ver → Perfil de volumen* dibuja a la derecha del gráfico cuánto volumen
+  se negoció en cada franja de precio durante las últimas 250 barras, con el POC (precio con más
+  volumen) y la zona de valor (70 % del volumen).
   La configuración se guarda. Las fórmulas y convenciones están documentadas en
   `src/analisis_acciones/indicators/functions.py` y verificadas contra implementaciones de
   referencia independientes.

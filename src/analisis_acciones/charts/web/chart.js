@@ -15,6 +15,7 @@
     volumeSeries: null,
     indicatorSeries: [],
     bandFills: [],
+    overlayPrimitives: [],
     overlays: {},
     overlaySeries: [],
     overlayLines: [],
@@ -96,6 +97,7 @@
     for (const s of state.overlaySeries) state.chart.removeSeries(s);
     state.overlaySeries = [];
     state.overlayLines = [];
+    state.overlayPrimitives = [];
     state.drawingSeries = [];
     state.drawingLines = [];
     state.drawingMarkers = null;
@@ -153,6 +155,39 @@
             quad(p.x, p.ya, p.yb, xc, yc, yc, p.up);
             quad(xc, yc, yc, q.x, q.ya, q.yb, q.up);
           }
+        }
+      });
+    }
+  }
+
+  // Volume profile: horizontal bars at the right of the price pane (volume per price band).
+  class VolumeProfile {
+    constructor(item) {
+      this.item = item;
+      const self = this;
+      this._view = { zOrder: () => "bottom", renderer: () => ({ draw: (t) => self.draw(t) }) };
+    }
+    attached({ series }) { this.series = series; }
+    detached() { this.series = null; }
+    updateAllViews() {}
+    paneViews() { return [this._view]; }
+    draw(target) {
+      const item = this.item;
+      if (!this.series || !item.bands.length) return;
+      const maxVol = Math.max(...item.bands.map((b) => b.volume)) || 1;
+      target.useBitmapCoordinateSpace(({ context: ctx, bitmapSize, horizontalPixelRatio: hr,
+                                         verticalPixelRatio: vr }) => {
+        const maxWidth = bitmapSize.width * (item.widthShare || 0.22);
+        const right = bitmapSize.width - 4 * hr;
+        for (const band of item.bands) {
+          const yTop = this.series.priceToCoordinate(band.high);
+          const yBottom = this.series.priceToCoordinate(band.low);
+          if (yTop === null || yBottom === null) continue;
+          const top = Math.min(yTop, yBottom) * vr + vr;  // 1px gap between bands
+          const height = Math.max(Math.abs(yBottom - yTop) * vr - 2 * vr, vr);
+          const width = maxWidth * band.volume / maxVol;
+          ctx.fillStyle = band.poc ? item.pocColor : (band.inValue ? item.valueColor : item.color);
+          ctx.fillRect(right - width, top, width, height);
         }
       });
     }
@@ -249,8 +284,10 @@
     if (!state.chart || !state.priceSeries) return;
     for (const s of state.overlaySeries) state.chart.removeSeries(s);
     for (const l of state.overlayLines) state.priceSeries.removePriceLine(l);
+    for (const p of state.overlayPrimitives) state.priceSeries.detachPrimitive(p);
     state.overlaySeries = [];
     state.overlayLines = [];
+    state.overlayPrimitives = [];
     for (const items of Object.values(state.overlays)) {
       for (const item of items) {
         if (item.kind === "line" && item.points.length >= 2) {
@@ -267,6 +304,10 @@
               shape: "circle", size: 0, text: l.text,
             })));
           }
+        } else if (item.kind === "profile") {
+          const primitive = new VolumeProfile(item);
+          state.priceSeries.attachPrimitive(primitive);
+          state.overlayPrimitives.push(primitive);
         } else if (item.kind === "level") {
           state.overlayLines.push(state.priceSeries.createPriceLine({
             price: item.price, color: item.color, lineWidth: 1, lineStyle: item.style || 2,
@@ -594,6 +635,7 @@
         overlayGroups: Object.fromEntries(Object.entries(state.overlays).map(([k, v]) => [k, v.length])),
         overlaySeries: state.overlaySeries.length,
         overlayLines: state.overlayLines.length,
+        overlayPrimitives: state.overlayPrimitives.length,
         drawingLines: state.drawingLines.length,
         drawingSeries: state.drawingSeries.length,
         drawMode: state.drawMode,

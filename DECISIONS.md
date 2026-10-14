@@ -603,3 +603,18 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   Drawings are keyed by session date, so they are disabled on intraday charts.
   Future times (Ichimoku cloud, projection) step through weekday sessions; holidays are not
   modelled.
+
+## D-035 — VWAP, automatic Fibonacci and volume profile
+
+- **VWAP** uses the typical price (H+L+C)/3. On intraday bars it accumulates from each
+  session's first bar, which is the standard definition. On daily and longer bars a session
+  VWAP makes no sense, so it is rolling over N bars. Missing volume makes the value unknown;
+  it is never treated as zero.
+- **Automatic Fibonacci** gives the retracements of the last ZigZag swing, from the
+  second-to-last pivot (100 %) to the last one (0 %, which may still extend). It is computed
+  from the whole series, so it is a display aid and is not used by any rule or backtest.
+- **Volume profile:** each bar's volume is spread uniformly over its high-low range (more
+  faithful than assigning it all to the close) across 24 price bands of the last 250 bars. The
+  value area grows from the point of control (POC) towards the larger neighbouring band until
+  it holds 70 % of the volume. It is drawn by a series primitive at the right of the price
+  pane, with POC/VAH/VAL as price lines, and switched on from the View menu.

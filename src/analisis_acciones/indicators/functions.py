@@ -240,3 +240,105 @@ def supertrend(high: pd.Series, low: pd.Series, close: pd.Series, n: int = 10,
         line[t] = lower[t] if trend[t] == 1 else upper[t]
     direction = np.where(np.isnan(line), np.nan, trend)
     return pd.DataFrame({"value": line, "direction": direction}, index=close.index)
+
+
+# ---------------------------------------------------------------------------
+# VWAP, automatic Fibonacci, volume profile
+# ---------------------------------------------------------------------------
+def _has_time_of_day(index: pd.Index) -> bool:
+    idx = pd.DatetimeIndex(index)
+    return len(idx) > 0 and bool((idx != idx.normalize()).any())
+
+
+def vwap(high: pd.Series, low: pd.Series, close: pd.Series, volume: pd.Series,
+         n: int = 20) -> pd.Series:  # fmt: skip
+    """Volume-weighted average of the typical price (H+L+C)/3.
+
+    Intraday bars: cumulative from each session's first bar (resets daily).
+    Daily and longer bars: rolling over the last ``n`` bars. Bars without
+    volume make the value unknown rather than being treated as zero volume.
+    """
+    _check_period(n)
+    typical = (high + low + close) / 3.0
+    weighted = typical * volume
+    if _has_time_of_day(close.index):
+        day = pd.DatetimeIndex(close.index).normalize()
+        num = weighted.groupby(day).cumsum()
+        den = volume.groupby(day).cumsum()
+    else:
+        num = weighted.rolling(n, min_periods=n).sum()
+        den = volume.rolling(n, min_periods=n).sum()
+    out = num / den.where(den > 0)
+    return out.rename("vwap")
+
+
+FIB_RATIOS = (0.0, 0.236, 0.382, 0.5, 0.618, 0.786, 1.0)
+
+
+def auto_fibonacci(high: pd.Series, low: pd.Series, threshold_pct: float = 0.0) -> pd.DataFrame:
+    """Retracement levels of the latest swing (ZigZag), drawn from the swing's start.
+
+    The swing runs from the second-to-last pivot (100 %) to the last one (0 %),
+    which may still be extending. A threshold of 0 picks it from volatility.
+    This is a display aid built from the whole series, not a signal.
+    """
+    from analisis_acciones.patterns.zigzag import auto_threshold, zigzag  # avoid import cycle
+
+    bars = pd.DataFrame({"high": high, "low": low, "close": (high + low) / 2})
+    threshold = threshold_pct / 100 if threshold_pct > 0 else auto_threshold(bars)
+    pivots = zigzag(high, low, threshold)
+    columns = {f"f{round(r * 1000):04d}": pd.Series(np.nan, index=high.index) for r in FIB_RATIOS}
+    if len(pivots) < 2:
+        return pd.DataFrame(columns)
+    start, end = pivots[-2], pivots[-1]
+    for ratio, key in zip(FIB_RATIOS, columns, strict=True):
+        level = end.price - ratio * (end.price - start.price)
+        columns[key].iloc[start.index :] = level
+    return pd.DataFrame(columns)
+
+
+def volume_profile(high: pd.Series, low: pd.Series, volume: pd.Series, bins: int = 24,
+                   value_area: float = 0.7) -> dict[str, object]:  # fmt: skip
+    """Volume traded per price band. Each bar's volume is spread evenly over its range.
+
+    Returns the bands (low, high, volume), the point of control (band with
+    most volume) and the value area: the bands around it holding ``value_area``
+    of the volume. Bars without volume are ignored.
+    """
+    if bins < 2:
+        raise ValueError("bins must be at least 2")
+    hi = high.to_numpy(dtype=float)
+    lo = low.to_numpy(dtype=float)
+    vol = volume.to_numpy(dtype=float)
+    ok = np.isfinite(hi) & np.isfinite(lo) & np.isfinite(vol) & (vol > 0)
+    hi, lo, vol = hi[ok], lo[ok], vol[ok]
+    if len(vol) == 0:
+        return {"bands": [], "poc": None, "val": None, "vah": None}
+    top, bottom = float(hi.max()), float(lo.min())
+    if top <= bottom:
+        top = bottom * 1.001 + 1e-9
+    edges = np.linspace(bottom, top, bins + 1)
+    totals = np.zeros(bins)
+    for h, low_, v in zip(hi, lo, vol, strict=True):
+        if h <= low_:
+            idx = min(int(np.searchsorted(edges, h, side="right")) - 1, bins - 1)
+            totals[max(idx, 0)] += v
+            continue
+        overlap = np.clip(np.minimum(edges[1:], h) - np.maximum(edges[:-1], low_), 0, None)
+        totals += v * overlap / (h - low_)
+    poc = int(np.argmax(totals))
+    target = value_area * totals.sum()
+    lo_i = hi_i = poc
+    covered = totals[poc]
+    while covered < target and (lo_i > 0 or hi_i < bins - 1):
+        below = totals[lo_i - 1] if lo_i > 0 else -1.0
+        above = totals[hi_i + 1] if hi_i < bins - 1 else -1.0
+        if above >= below:
+            hi_i += 1
+            covered += totals[hi_i]
+        else:
+            lo_i -= 1
+            covered += totals[lo_i]
+    bands = [(float(edges[i]), float(edges[i + 1]), float(totals[i])) for i in range(bins)]
+    return {"bands": bands, "poc": float((edges[poc] + edges[poc + 1]) / 2),
+            "val": float(edges[lo_i]), "vah": float(edges[hi_i + 1])}  # fmt: skip

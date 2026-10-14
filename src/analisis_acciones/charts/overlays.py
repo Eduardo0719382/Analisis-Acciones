@@ -136,3 +136,24 @@ def patterns_overlay(patterns: list[ChartPattern], dates: list[ChartTime],
                           "color": colors["invalid"], "style": DOTTED,
                           "title": "Invalidación"})  # fmt: skip
     return items
+
+
+def volume_profile_overlay(profile: dict[str, Any], color: str, value_color: str,
+                           poc_color: str, line_color: str) -> list[dict[str, Any]]:  # fmt: skip
+    """Bars of the profile plus POC / value-area lines (see ``indicators.functions``)."""
+    bands = profile.get("bands") or []
+    if not bands:
+        return []
+    poc, val, vah = profile["poc"], profile["val"], profile["vah"]
+    items: list[dict[str, Any]] = [{
+        "kind": "profile", "color": color, "valueColor": value_color, "pocColor": poc_color,
+        "bands": [
+            {"low": low, "high": high, "volume": volume, "poc": bool(low <= poc <= high),
+             "inValue": bool(low >= val - 1e-9 and high <= vah + 1e-9)}
+            for low, high, volume in bands
+        ],
+    }]  # fmt: skip
+    for price, title in ((poc, "POC"), (vah, "VA alto"), (val, "VA bajo")):
+        items.append({"kind": "level", "price": price, "color": line_color,
+                      "style": SOLID if title == "POC" else DOTTED, "title": title})  # fmt: skip
+    return items

@@ -277,6 +277,48 @@ SPECS = (
     ),
 )  # fmt: skip
 
+
+FIB_COLORS = ("#8a93a3", "#ef5350", "#f5a623", "#26a69a", "#4c8dff", "#ab47bc", "#8a93a3")
+
+SPECS = (
+    *SPECS,
+    IndicatorSpec(
+        id="vwap",
+        name="VWAP (precio medio ponderado por volumen)",
+        short="VWAP",
+        description=(
+            "Media del precio típico ponderada por el volumen. En gráficos intradía se reinicia "
+            "en cada sesión; en diario/semanal/mensual usa las últimas N barras."
+        ),
+        params=(ParamSpec("period", "Periodo (diario y mayores)", 20, 1, 500),),
+        outputs=(OutputSpec("value", "VWAP", color="#f5a623"),),
+        placement="overlay",
+        compute=lambda b, p: _frame(
+            value=f.vwap(b["high"], b["low"], b["close"], b["volume"], int(p["period"]))
+        ),
+    ),
+    IndicatorSpec(
+        id="auto_fib",
+        name="Fibonacci automático",
+        short="Fibo",
+        description=(
+            "Retrocesos de Fibonacci (0, 23,6, 38,2, 50, 61,8, 78,6 y 100 %) del último tramo "
+            "relevante, detectado con ZigZag. Umbral 0 = automático según la volatilidad. El "
+            "último extremo puede seguir moviéndose."
+        ),
+        params=(
+            ParamSpec("threshold", "Umbral ZigZag %", 0.0, 0.0, 50.0, kind="float", decimals=1),
+        ),
+        outputs=tuple(
+            OutputSpec(f"f{round(r * 1000):04d}", f"{r * 100:g} %".replace(".", ","), color=c)
+            for r, c in zip(f.FIB_RATIOS, FIB_COLORS, strict=True)
+        ),
+        placement="overlay",
+        compute=lambda b, p: f.auto_fibonacci(b["high"], b["low"], float(p["threshold"])),
+    ),
+)
+
+
 REGISTRY: dict[str, IndicatorSpec] = {spec.id: spec for spec in SPECS}
 
 

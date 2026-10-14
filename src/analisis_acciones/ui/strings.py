@@ -501,3 +501,9 @@ DRAW_INTRADAY = (
     "Los dibujos se guardan por fecha de sesión: están disponibles en los gráficos diario, "
     "semanal y mensual."
 )
+
+ACTION_VOLUME_PROFILE = "Perfil de volumen"
+VOLUME_PROFILE_TIP = (
+    "Volumen negociado en cada franja de precio durante las últimas {bars} barras. POC = precio "
+    "con más volumen; VA = zona donde se negoció el 70 % del volumen."
+)

@@ -80,3 +80,19 @@ def test_levels_and_patterns_overlay() -> None:
     assert neckline["points"][0]["value"] == neckline["points"][1]["value"] == 115
     assert target["price"] == 100 and invalidation["price"] == 130
     json.dumps(items + levels, allow_nan=False)
+
+
+def test_volume_profile_overlay() -> None:
+    from analisis_acciones.charts.overlays import volume_profile_overlay
+    from analisis_acciones.indicators.functions import volume_profile
+    from tests.synthetic import synthetic_daily
+
+    bars = synthetic_daily(sessions=250)
+    profile = volume_profile(bars["high"], bars["low"], bars["volume"], bins=10)
+    items = volume_profile_overlay(profile, "#111", "#222", "#333", "#444")
+    bars_item, poc, vah, val = items
+    assert bars_item["kind"] == "profile" and len(bars_item["bands"]) == 10
+    assert sum(b["poc"] for b in bars_item["bands"]) == 1
+    assert [poc["title"], vah["title"], val["title"]] == ["POC", "VA alto", "VA bajo"]
+    json.dumps(items, allow_nan=False)
+    assert volume_profile_overlay({"bands": []}, "#1", "#2", "#3", "#4") == []
