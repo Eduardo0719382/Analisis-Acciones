@@ -1017,3 +1017,12 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   bar where the signs have gone (previous bar signalled, this one not) and the close is still
   above its average. Exits are identical to the first variant, so the comparison between the
   two isolates the re-entry rule; both are compared with the same trend-only reference.
+
+## D-067 — Daily-scan exhaustion notices only where the record supports them
+
+- `ScanRow.exhaustion_reading` keeps the asset's record reading for the current signs. With the
+  option on (default), the daily scan announces exhaustion only when that reading is
+  `READ_USEFUL`, and the notice says so. The scanner column, the tab and the comparison still
+  show every signal: the option only reduces notifications.
+- On by default because a notice the asset's own history does not support is mostly noise;
+  the notice still is a description of the past, never a forecast.

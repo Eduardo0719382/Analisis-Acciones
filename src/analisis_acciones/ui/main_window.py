@@ -366,6 +366,7 @@ class MainWindow(QMainWindow):
         file_menu.addAction(quit_action)
 
         tools_menu = menu_bar.addMenu(strings.MENU_TOOLS)
+        tools_menu.setToolTipsVisible(True)
         # Watchlist analysis
         self.scanner_action = QAction(strings.ACTION_SCANNER, self)
         self.scanner_action.setShortcut(QKeySequence("Ctrl+E"))
@@ -379,6 +380,12 @@ class MainWindow(QMainWindow):
         self.daily_scan_action.setChecked(self._settings.daily_scan_enabled())
         self.daily_scan_action.toggled.connect(self._on_daily_scan_toggled)
         tools_menu.addAction(self.daily_scan_action)
+        self.exhaustion_proven_action = QAction(strings.ACTION_EXHAUSTION_PROVEN, self)
+        self.exhaustion_proven_action.setCheckable(True)
+        self.exhaustion_proven_action.setChecked(self._settings.exhaustion_proven_only())
+        self.exhaustion_proven_action.setToolTip(strings.ACTION_EXHAUSTION_PROVEN_TIP)
+        self.exhaustion_proven_action.toggled.connect(self._settings.set_exhaustion_proven_only)
+        tools_menu.addAction(self.exhaustion_proven_action)
         self.last_daily_scan_action = QAction(strings.ACTION_LAST_DAILY_SCAN, self)
         self.last_daily_scan_action.setEnabled(False)
         self.last_daily_scan_action.triggered.connect(self.open_last_daily_scan)

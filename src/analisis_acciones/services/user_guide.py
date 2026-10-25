@@ -122,7 +122,10 @@ de una bajada), con el número de condiciones que se cumplían.</p>
 <p><b>Umbrales…</b> permite cambiar el nivel del RSI, la distancia en ATR, el volumen, el
 movimiento inusual y cuántas condiciones hacen falta. El historial se recalcula al momento y,
 debajo, se muestra el resultado con los valores por defecto para comparar. Los umbrales se usan
-también en el escáner y en el escaneo diario. Ajustar los umbrales hasta que el pasado «salga
+también en el escáner y en el escaneo diario. Con <i>Herramientas → Avisar de agotamiento solo
+donde anticipó giros</i> (activado por defecto) el escaneo diario solo avisa en los activos donde
+el historial muestra que las señales precedieron giros.
+Ajustar los umbrales hasta que el pasado «salga
 bien» es engañoso: con pocos casos el resultado puede ser casualidad.</p>
 <p><i>Herramientas → Agotamiento en varios activos…</i> hace la misma medición en toda la lista:
 para cada activo, cuántas veces aparecieron las señales, en qué % el precio giró después frente

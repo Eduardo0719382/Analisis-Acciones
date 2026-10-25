@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
 
+from analisis_acciones.analysis.exhaustion import READ_USEFUL
 from analisis_acciones.data.freshness import last_session_close
 from analisis_acciones.services.scanner import BREAKOUT_NOTE, ScanResult, ScanRow
 
@@ -40,39 +41,50 @@ def is_due(now: datetime, snapshot: dict[str, Any] | None) -> bool:
     return str(snapshot["session"]) < session_of(now).isoformat()
 
 
-def notable_items(row: ScanRow) -> dict[str, int]:
-    """Item text -> bias. Patterns keep their state so a breakout is new after 'forming'."""
+def notable_items(row: ScanRow, proven_only: bool = False) -> dict[str, int]:
+    """Item text -> bias. Patterns keep their state so a breakout is new after 'forming'.
+
+    With ``proven_only`` exhaustion signs count only where this asset's record shows they
+    anticipated turns clearly (``READ_USEFUL``).
+    """
     items = {f"Señal alcista: {t}": 1 for t in row.bullish}
     items.update({f"Señal bajista: {t}": -1 for t in row.bearish})
     for note in row.pattern_notes:
         state = "ruptura" if note.state == BREAKOUT_NOTE else "en formación"
         items[f"Patrón {note.name} ({state})"] = note.bias
     # Without the count, so a change from 3 to 4 signs is not reported again.
+    if proven_only and row.exhaustion_reading != READ_USEFUL:
+        return items
+    proven = row.exhaustion_reading == READ_USEFUL
     if row.exhaustion > 0:
-        items["Señales de agotamiento de la subida (ver pestaña Agotamiento)"] = -1
+        why = "en este activo han precedido bajadas; " if proven else ""
+        items[f"Señales de agotamiento de la subida ({why}ver pestaña Agotamiento)"] = -1
     elif row.exhaustion < 0:
-        items["Señales de agotamiento de la bajada (ver pestaña Agotamiento)"] = 1
+        why = "en este activo han precedido rebotes; " if proven else ""
+        items[f"Señales de agotamiento de la bajada ({why}ver pestaña Agotamiento)"] = 1
     return items
 
 
-def find_novelties(previous: dict[str, list[str]], result: ScanResult) -> list[Novelty]:
+def find_novelties(previous: dict[str, list[str]], result: ScanResult,
+                   proven_only: bool = False) -> list[Novelty]:  # fmt: skip
     novelties = []
     for row in result.rows:
         if row.symbol not in previous:
             continue  # first time: baseline only
         known = set(previous[row.symbol])
-        for text, bias in notable_items(row).items():
+        for text, bias in notable_items(row, proven_only).items():
             if text not in known:
                 novelties.append(Novelty(row.symbol, text, bias, row.as_of))
     return novelties
 
 
 def make_snapshot(result: ScanResult, session: date,
-                  previous: dict[str, list[str]] | None = None) -> dict[str, Any]:  # fmt: skip
+                  previous: dict[str, list[str]] | None = None,
+                  proven_only: bool = False) -> dict[str, Any]:  # fmt: skip
     """Snapshot for the next comparison. Symbols that failed this time keep their old items."""
     items = dict(previous or {})
     for row in result.rows:
-        items[row.symbol] = sorted(notable_items(row))
+        items[row.symbol] = sorted(notable_items(row, proven_only))
     return {"session": session.isoformat(), "items": items}
 
 

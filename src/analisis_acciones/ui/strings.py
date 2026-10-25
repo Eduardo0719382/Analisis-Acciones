@@ -469,6 +469,12 @@ LEVEL_ALERTS_UNAVAILABLE = "Las alertas no están disponibles en esta sesión."
 
 ACTION_SCANNER = "&Escáner de la lista…"
 ACTION_EXHAUSTION_COMPARE = "&Agotamiento en varios activos…"
+ACTION_EXHAUSTION_PROVEN = "Avisar de agotamiento solo donde anticipó giros"
+ACTION_EXHAUSTION_PROVEN_TIP = (
+    "El escaneo diario avisa de señales de agotamiento solo en los activos cuyo historial muestra "
+    "que precedieron giros claramente más a menudo que un día normal (10 casos o más, 10 puntos "
+    "de diferencia y p < 0,05). El escáner y la pestaña Agotamiento las siguen mostrando todas."
+)
 EXC_TITLE = "Señales de agotamiento en varios activos"
 EXC_RUN = "Comparar"
 EXC_HORIZON = "A {h} sesiones"

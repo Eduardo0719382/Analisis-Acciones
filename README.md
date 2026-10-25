@@ -155,6 +155,10 @@ blanco porque su motor se detuvo, se recarga automáticamente.
   **Umbrales…** cambia el RSI de sobrecompra/sobreventa, la distancia en ATR, el volumen, el
   movimiento inusual y las condiciones necesarias; el historial se recalcula y se muestra junto
   al de los valores por defecto. Los mismos umbrales usan el escáner y el escaneo diario.
+  Con *Herramientas → Avisar de agotamiento solo donde anticipó giros* (activado por defecto)
+  el escaneo diario solo avisa de estas señales en los activos cuyo historial muestra que
+  precedieron giros claramente más a menudo que un día normal; el escáner y la pestaña las
+  siguen mostrando todas.
 - **Proyección (pestaña del panel derecho):** rangos estadísticos para las próximas N barras,
   dibujados sobre el gráfico (P5, P25, mediana, P75, P95). *Cono de volatilidad*: parte del
   último cierre, sin tendencia supuesta, con la volatilidad de la ventana elegida. *Canal de

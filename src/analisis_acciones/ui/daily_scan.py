@@ -101,7 +101,8 @@ class DailyScanController(QObject):
             return
         snapshot = self._settings.scan_snapshot()
         previous = previous_items(snapshot)
-        novelties = find_novelties(previous, result)
+        proven_only = self._settings.exhaustion_proven_only()
+        novelties = find_novelties(previous, result, proven_only)
         if fundamentals:
             today = self._clock().astimezone(NEW_YORK).date()
             notices, notified = due_notices(fundamentals, today,
@@ -109,7 +110,9 @@ class DailyScanController(QObject):
                                             self._settings.calendar_notified())  # fmt: skip
             self._settings.set_calendar_notified(notified)
             novelties += notices
-        self._settings.set_scan_snapshot(make_snapshot(result, session_of(self._clock()), previous))
+        self._settings.set_scan_snapshot(
+            make_snapshot(result, session_of(self._clock()), previous, proven_only)
+        )
         logger.info("Daily scan: %d symbols, %d novelties", len(result.rows), len(novelties))
         self.finished.emit(result, novelties)
 

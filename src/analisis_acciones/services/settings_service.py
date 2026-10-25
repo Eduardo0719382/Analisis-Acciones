@@ -47,6 +47,7 @@ KEY_CALENDAR_DAYS = "scanner.calendar_notice_days"
 KEY_CALENDAR_NOTIFIED = "scanner.calendar_notified"
 KEY_EXHAUSTION = "analysis.exhaustion_params"
 KEY_EXHAUSTION_MARKERS = "chart.exhaustion_markers"
+KEY_EXHAUSTION_PROVEN = "scanner.exhaustion_proven_only"
 DEFAULT_CALENDAR_DAYS = 3
 MAX_CALENDAR_DAYS = 30
 
@@ -245,6 +246,13 @@ class SettingsService:
 
     def set_exhaustion_params(self, params: ExhaustionParams) -> None:
         self._repo.set(KEY_EXHAUSTION, params.to_dict())
+
+    def exhaustion_proven_only(self) -> bool:
+        """Daily scan: announce exhaustion only where it anticipated turns (default on)."""
+        return self._repo.get(KEY_EXHAUSTION_PROVEN) is not False
+
+    def set_exhaustion_proven_only(self, enabled: bool) -> None:
+        self._repo.set(KEY_EXHAUSTION_PROVEN, bool(enabled))
 
     def exhaustion_markers(self) -> bool:
         return self._repo.get(KEY_EXHAUSTION_MARKERS) is True

@@ -11,6 +11,7 @@ from analisis_acciones.services.daily_scan import (
     session_of,
 )
 from analisis_acciones.services.scanner import BREAKOUT_NOTE, FORMING_NOTE, PatternNote, ScanResult
+from analisis_acciones.services.settings_service import SettingsService
 from tests.unit.test_scan_report import make_row
 
 # Friday 2025-03-07 21:00 UTC = 16:00 New York: the session has not settled yet.
@@ -62,3 +63,36 @@ def test_notable_items_keep_pattern_state() -> None:
     assert items["Patrón Doble suelo (ruptura)"] == 1
     assert items["Patrón Triángulo simétrico (en formación)"] == 0
     assert items["Señal alcista: Tendencia alcista detectada"] == 1
+
+
+def test_exhaustion_announced_only_where_it_anticipated_turns() -> None:
+    from analisis_acciones.analysis.exhaustion import READ_NO_EDGE, READ_USEFUL
+
+    proven = make_row("AAA", exhaustion=4, exhaustion_total=6, exhaustion_reading=READ_USEFUL)
+    unproven = make_row("BBB", exhaustion=-3, exhaustion_total=6, exhaustion_reading=READ_NO_EDGE)
+    assert any("agotamiento de la subida" in t for t in notable_items(proven, proven_only=True))
+    assert any("han precedido bajadas" in t for t in notable_items(proven, proven_only=True))
+    assert not any("agotamiento" in t for t in notable_items(unproven, proven_only=True))
+    assert any("agotamiento de la bajada" in t for t in notable_items(unproven))
+    previous = {"AAA": [], "BBB": []}
+    found = find_novelties(previous, ScanResult([proven, unproven]), proven_only=True)
+    assert [(n.symbol, n.bias) for n in found if "agotamiento" in n.text] == [("AAA", -1)]
+    found_all = find_novelties(previous, ScanResult([proven, unproven]))
+    assert {n.symbol for n in found_all if "agotamiento" in n.text} == {"AAA", "BBB"}
+
+
+def test_scan_row_carries_the_record_reading() -> None:
+    from analisis_acciones.analysis.exhaustion import assess, record_reading
+    from analisis_acciones.services.scanner import scan_bars
+    from tests.unit.test_exhaustion import bars_from, rally
+
+    bars = bars_from(rally())
+    row = scan_bars("RUN", bars)
+    assert row.exhaustion > 0
+    assert row.exhaustion_reading == record_reading(assess(bars).outcomes)
+
+
+def test_setting_defaults_to_proven_only(settings: SettingsService) -> None:
+    assert settings.exhaustion_proven_only()
+    settings.set_exhaustion_proven_only(False)
+    assert not settings.exhaustion_proven_only()

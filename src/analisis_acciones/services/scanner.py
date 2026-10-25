@@ -22,6 +22,7 @@ from analisis_acciones.analysis.exhaustion import DEFAULT_PARAMS as EXH_DEFAULT
 from analisis_acciones.analysis.exhaustion import UP as EXH_UP
 from analisis_acciones.analysis.exhaustion import Params as ExhaustionParams
 from analisis_acciones.analysis.exhaustion import assess as assess_exhaustion
+from analisis_acciones.analysis.exhaustion import record_reading
 from analisis_acciones.analysis.model import Direction
 from analisis_acciones.indicators.functions import rsi, sma
 from analisis_acciones.models.errors import AppError
@@ -84,6 +85,8 @@ class ScanRow:
     #: Exhaustion signs at the last bar: +n (rise showing n signs), -n (fall), 0 none.
     exhaustion: int = 0
     exhaustion_total: int = 0
+    #: Reading of this asset's record for the current signs (``READ_*`` code), "" if none.
+    exhaustion_reading: str = ""
     market_cap: float | None = None  # in the listing currency
     revenue_growth: float | None = None  # fraction, year over year
     profit_margin: float | None = None  # fraction
@@ -155,6 +158,7 @@ def scan_bars(symbol: str, bars: pd.DataFrame,
     return ScanRow(
         exhaustion=exhaustion,
         exhaustion_total=tiredness.available,
+        exhaustion_reading=record_reading(tiredness.outcomes) if exhaustion else "",
         symbol=symbol,
         close=last,
         change_pct=change if np.isfinite(change) else None,
