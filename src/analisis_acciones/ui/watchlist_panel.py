@@ -27,7 +27,13 @@ from PySide6.QtWidgets import (
 from analisis_acciones.models.errors import UserError
 from analisis_acciones.services.market_data_service import WatchRow
 from analisis_acciones.services.settings_service import SettingsService
-from analisis_acciones.services.watchlist_service import WatchlistService
+from analisis_acciones.services.watchlist_service import (
+    ALTCOIN_EXAMPLE,
+    ALTCOIN_LIST_NAME,
+    CRYPTO_EXAMPLE,
+    CRYPTO_LIST_NAME,
+    WatchlistService,
+)
 from analisis_acciones.ui import strings
 from analisis_acciones.ui.market_controller import MarketController
 from analisis_acciones.ui.theme import ThemeTokens, tokens_for
@@ -76,6 +82,8 @@ class WatchlistPanel(QFrame):
         menu.addSeparator()
         self.crypto_action = menu.addAction(strings.WATCHLIST_CRYPTO_EXAMPLE,
                                             self.create_crypto_example)  # fmt: skip
+        self.altcoin_action = menu.addAction(strings.WATCHLIST_ALTCOIN_EXAMPLE,
+                                             self.create_altcoin_example)  # fmt: skip
         self.menu_button.setMenu(menu)
         top = QHBoxLayout()
         top.setContentsMargins(6, 6, 6, 0)
@@ -186,8 +194,14 @@ class WatchlistPanel(QFrame):
         self.reload_lists(select_id=created.id)
 
     def create_crypto_example(self) -> None:
+        self._create_example(CRYPTO_LIST_NAME, CRYPTO_EXAMPLE)
+
+    def create_altcoin_example(self) -> None:
+        self._create_example(ALTCOIN_LIST_NAME, ALTCOIN_EXAMPLE)
+
+    def _create_example(self, name: str, symbols: tuple[str, ...]) -> None:
         try:
-            created = self._lists.create_example()
+            created = self._lists.create_example(name, symbols)
         except UserError as exc:
             self._show_error(exc.user_message)
             return

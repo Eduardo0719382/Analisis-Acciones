@@ -18,6 +18,15 @@ CRYPTO_LIST_NAME = "Criptomonedas"
 #: Large cryptocurrencies quoted against the dollar at Yahoo Finance (tickers only, no data).
 CRYPTO_EXAMPLE = ("BTC-USD", "ETH-USD", "SOL-USD", "XRP-USD", "BNB-USD", "ADA-USD",
                   "DOGE-USD", "AVAX-USD", "LINK-USD", "DOT-USD")  # fmt: skip
+ALTCOIN_LIST_NAME = "Altcoins"
+#: Cryptocurrencies other than Bitcoin. Yahoo adds a number to tickers shared by several coins
+#: (UNI7083-USD = Uniswap). Every ticker is checked against Yahoo in the live tests.
+ALTCOIN_EXAMPLE = (
+    "ETH-USD", "SOL-USD", "XRP-USD", "BNB-USD", "ADA-USD", "AVAX-USD", "LINK-USD", "DOT-USD",
+    "LTC-USD", "BCH-USD", "XLM-USD", "TRX-USD", "ATOM-USD", "NEAR-USD", "ETC-USD", "FIL-USD",
+    "HBAR-USD", "ALGO-USD", "AAVE-USD", "XMR-USD", "ICP-USD", "UNI7083-USD", "SUI20947-USD",
+    "APT21794-USD", "DOGE-USD", "SHIB-USD", "PEPE24478-USD",
+)  # fmt: skip
 
 
 class WatchlistService:

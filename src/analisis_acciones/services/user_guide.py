@@ -61,6 +61,10 @@ de la comparación usa 365 días.</li>
 <li>No hay datos fundamentales (beneficios, PER, dividendos): no son empresas.</li>
 <li>En el menú ⋯ de la lista de seguimiento, <b>Crear lista de criptomonedas de ejemplo</b>
 crea una lista con las principales y abre la comparación de agotamiento entre ellas.</li>
+<li><b>Altcoins:</b> <i>Crear lista de altcoins de ejemplo</i> crea una lista con 27 (ETH, SOL,
+XRP, ADA, LINK, UNI, PEPE…). Cualquier otra se busca por su nombre. Yahoo añade un número a los
+tickers que comparten nombre (<b>UNI7083-USD</b> = Uniswap). Para medirla frente a Bitcoin use
+el par en BTC (<b>ETH-BTC</b>) o <b>BTC-USD</b> como referencia del gráfico.</li>
 <li>Suelen moverse mucho más que una acción; los resultados pasados de cualquier señal no
 garantizan los futuros.</li>
 </ul>""",

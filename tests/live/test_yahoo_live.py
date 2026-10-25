@@ -15,6 +15,7 @@ from analisis_acciones.models.errors import UserError
 from analisis_acciones.models.market import BAR_COLUMNS, Interval
 from analisis_acciones.providers.yahoo import YahooFinanceProvider
 from analisis_acciones.services.market_data_service import MarketDataService
+from analisis_acciones.services.watchlist_service import ALTCOIN_EXAMPLE, CRYPTO_EXAMPLE
 
 pytestmark = pytest.mark.live
 
@@ -133,3 +134,10 @@ def test_crypto_daily_history_includes_weekends(provider: YahooFinanceProvider) 
 def test_crypto_search(provider: YahooFinanceProvider) -> None:
     results = provider.search_symbol("bitcoin")
     assert any(r.asset_type == "CRYPTOCURRENCY" for r in results)
+
+
+@pytest.mark.parametrize("symbol", sorted(set(CRYPTO_EXAMPLE) | set(ALTCOIN_EXAMPLE)))
+def test_example_crypto_tickers_exist(provider: YahooFinanceProvider, symbol: str) -> None:
+    start = date.today() - timedelta(days=20)
+    series = provider.get_historical_data(symbol, Interval.D1, start=start)
+    assert len(series) >= 10, f"{symbol}: {len(series)} bars"

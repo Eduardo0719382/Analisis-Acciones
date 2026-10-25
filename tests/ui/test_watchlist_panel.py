@@ -170,3 +170,19 @@ def test_crypto_example_list_opens_the_exhaustion_comparison(
     panel.create_crypto_example()
     assert [w.name for w in lists.lists()].count(CRYPTO_LIST_NAME) == 1
     assert "BTC-USD" in lists.symbols(target.id)
+
+
+def test_altcoin_example_list(
+    qtbot: QtBot, window: MainWindow, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from analisis_acciones.data.freshness import is_crypto
+    from analisis_acciones.services.watchlist_service import ALTCOIN_EXAMPLE, ALTCOIN_LIST_NAME
+
+    monkeypatch.setattr(window, "open_exhaustion_compare", lambda s=None: None)
+    panel = panel_of(window)
+    panel.example_created.disconnect()
+    panel.create_altcoin_example()
+    assert panel.list_combo.currentText() == ALTCOIN_LIST_NAME
+    assert panel.symbols() == list(ALTCOIN_EXAMPLE)
+    assert "BTC-USD" not in ALTCOIN_EXAMPLE
+    assert all(is_crypto(s) for s in ALTCOIN_EXAMPLE)

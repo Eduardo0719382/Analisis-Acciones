@@ -98,7 +98,11 @@ blanco porque su motor se detuvo, se recarga automáticamente.
   con acciones. No tienen datos fundamentales de empresa. En el menú ⋯ de la lista de
   seguimiento, *Crear lista de criptomonedas de ejemplo* crea la lista «Criptomonedas» (BTC, ETH,
   SOL, XRP, BNB, ADA, DOGE, AVAX, LINK y DOT frente al dólar) y abre la comparación de
-  agotamiento entre ellas. En la cartera simulada se pueden
+  agotamiento entre ellas. *Crear lista de altcoins de ejemplo* hace lo mismo con 27 altcoins
+  (ETH, SOL, XRP, ADA, AVAX, LINK, DOT, LTC, ATOM, NEAR, UNI, SUI, APT, PEPE…). Cualquier otra
+  altcoin se busca por su nombre; Yahoo añade un número a los tickers que comparten nombre
+  (`UNI7083-USD` = Uniswap). Para ver una altcoin frente a Bitcoin, use el par en BTC
+  (`ETH-BTC`) o ponga `BTC-USD` como referencia en *Comparar con*. En la cartera simulada se pueden
   comprar y vender; si la cartera tiene criptomonedas su valor se calcula todos los días
   (las acciones mantienen el cierre del viernes durante el fin de semana).
 - **Intervalo:** 15 minutos, 1 hora, Diario, Semanal o Mensual (los dos últimos se calculan a
