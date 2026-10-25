@@ -718,6 +718,8 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
 
 ## D-043 — Fundamental filter in the scanner
 
+(Extended by D-048.)
+
 - Optional ("Incluir fundamentales"), because it adds one provider request per symbol (cached
   for a day by D-041). Rows keep `fundamentals_checked` so the dialog can tell "no data" from
   "not requested".
@@ -771,3 +773,12 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   past dates are pruned. Payment dates are not announced (nothing to decide on them).
 - Notices go to the alert history as "<ticker> · calendario", with a neutral marker: they
   describe a published date, not a signal.
+
+## D-048 — More fundamental limits in the scanner
+
+- Added minimum market cap (thousands of millions, in the listing currency, no conversion),
+  minimum revenue growth and minimum net margin. All limits live in one
+  `FundamentalLimits` value used by the table, the export note and the tests.
+- Growth and margin limits may be negative ("shrinking less than 5 %"), so "no limit" is the
+  spin box minimum (shown as "sin límite"), not 0.
+- Same rule as D-043: missing data never passes an active limit.

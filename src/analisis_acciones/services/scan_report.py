@@ -302,8 +302,16 @@ def card(row: ScanRow, scale: int) -> str:
 def _fundamentals(row: ScanRow) -> str:
     if not row.fundamentals_checked:
         return ""
-    yield_pct = None if row.dividend_yield is None else row.dividend_yield * 100
-    return f" · PER {num(row.pe, 1)} · dividendo {num(yield_pct, 2)} %"
+
+    def pct(v: float | None) -> float | None:
+        return None if v is None else v * 100
+
+    cap = "—" if row.market_cap is None else num(row.market_cap / 1e9, 1) + " mil M"
+    return (
+        f" · PER {num(row.pe, 1)} · dividendo {num(pct(row.dividend_yield), 2)} %"
+        f" · cap. {cap} · ingresos {num(pct(row.revenue_growth), 1, sign=True)} %"
+        f" · margen {num(pct(row.profit_margin), 1)} %"
+    )
 
 
 def _tile(value: int, label: str, names: list[str], css: str = "") -> str:
@@ -541,7 +549,8 @@ def scan_csv(result: ScanResult) -> str:
         "ticker", "fecha", "cierre", "cambio_pct", "rsi14", "senales_alcistas",
         "senales_bajistas", "balance", "detalle_alcistas", "detalle_bajistas", "patrones",
         "elliott", "soporte", "dist_soporte_pct", "resistencia", "dist_resistencia_pct",
-        "per", "rentabilidad_dividendo_pct",
+        "per", "rentabilidad_dividendo_pct", "capitalizacion", "crecimiento_ingresos_pct",
+        "margen_neto_pct",
     ])  # fmt: skip
     for row in sorted(result.rows, key=lambda r: r.symbol):
         _css, _icon, sentence = verdict(row)
@@ -552,6 +561,9 @@ def scan_csv(result: ScanResult) -> str:
             row.elliott, _round(row.support), _round(row.support_pct), _round(row.resistance),
             _round(row.resistance_pct), _round(row.pe),
             _round(None if row.dividend_yield is None else row.dividend_yield * 100),
+            _round(row.market_cap),
+            _round(None if row.revenue_growth is None else row.revenue_growth * 100),
+            _round(None if row.profit_margin is None else row.profit_margin * 100),
         ]  # fmt: skip
         writer.writerow([safe_cell(c) for c in cells])
     return buffer.getvalue()

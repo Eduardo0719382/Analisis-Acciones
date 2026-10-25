@@ -77,6 +77,9 @@ class ScanRow:
     fundamentals_checked: bool = False
     pe: float | None = None  # trailing P/E
     dividend_yield: float | None = None  # fraction (0.02 = 2 %)
+    market_cap: float | None = None  # in the listing currency
+    revenue_growth: float | None = None  # fraction, year over year
+    profit_margin: float | None = None  # fraction
 
     @property
     def patterns(self) -> tuple[str, ...]:
@@ -197,16 +200,54 @@ def _with_fundamentals(market: MarketDataService, row: ScanRow, problems: list[s
         problems.append(f"{row.symbol}: sin datos fundamentales ({exc.user_message})")
         return replace(row, fundamentals_checked=True)
     return replace(row, fundamentals_checked=True, pe=data.trailing_pe,
-                   dividend_yield=data.dividend_yield)  # fmt: skip
+                   dividend_yield=data.dividend_yield, market_cap=data.market_cap,
+                   revenue_growth=data.revenue_growth,
+                   profit_margin=data.profit_margin)  # fmt: skip
 
 
-def passes_fundamentals(row: ScanRow, max_pe: float | None, min_yield_pct: float | None) -> bool:
+@dataclass(frozen=True)
+class FundamentalLimits:
+    """Active limits of the fundamental filter (None = no limit)."""
+
+    max_pe: float | None = None
+    min_yield_pct: float | None = None
+    min_market_cap_bn: float | None = None  # thousands of millions (mil millones)
+    min_revenue_growth_pct: float | None = None
+    min_profit_margin_pct: float | None = None
+
+    @property
+    def active(self) -> bool:
+        return any(v is not None for v in vars(self).values())
+
+    def describe(self) -> str:
+        parts = []
+        if self.max_pe is not None:
+            parts.append(f"PER ≤ {self.max_pe:g}")
+        if self.min_yield_pct is not None:
+            parts.append(f"dividendo ≥ {self.min_yield_pct:g} %")
+        if self.min_market_cap_bn is not None:
+            parts.append(f"capitalización ≥ {self.min_market_cap_bn:g} mil millones")
+        if self.min_revenue_growth_pct is not None:
+            parts.append(f"crecimiento de ingresos ≥ {self.min_revenue_growth_pct:g} %")
+        if self.min_profit_margin_pct is not None:
+            parts.append(f"margen neto ≥ {self.min_profit_margin_pct:g} %")
+        return ", ".join(parts)
+
+
+def _at_least(value: float | None, limit: float | None, scale: float = 100.0) -> bool:
+    return limit is None or (value is not None and value * scale >= limit)
+
+
+def passes_fundamentals(row: ScanRow, limits: FundamentalLimits) -> bool:
     """Fundamental filter; a missing value never passes an active limit.
 
     A negative or missing P/E (losses, no data) fails a P/E limit.
     """
-    if max_pe is not None and (row.pe is None or not 0 < row.pe <= max_pe):
+    if limits.max_pe is not None and (row.pe is None or not 0 < row.pe <= limits.max_pe):
         return False
-    if min_yield_pct is not None:
-        return row.dividend_yield is not None and row.dividend_yield * 100 >= min_yield_pct
-    return True
+    return (
+        _at_least(row.dividend_yield, limits.min_yield_pct)
+        and _at_least(row.market_cap, limits.min_market_cap_bn, 1e-9)
+        and _at_least(row.revenue_growth, limits.min_revenue_growth_pct)
+        and _at_least(row.profit_margin, limits.min_profit_margin_pct)
+    )

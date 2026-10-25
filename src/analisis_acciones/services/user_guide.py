@@ -128,9 +128,10 @@ en el gráfico.</p>""",
 del programa a toda la lista (hasta 50 activos): señales, patrones, Elliott y distancia a
 soporte y resistencia. Se puede filtrar, ordenar y exportar a un informe visual (HTML o PDF) o a
 CSV.</p>
-<p>Con <b>Incluir fundamentales</b> añade el PER y la rentabilidad por dividendo y permite
-filtrar por <b>PER máximo</b> y <b>dividendo mínimo</b>. Un activo sin el dato no pasa un filtro
-activo.</p>
+<p>Con <b>Incluir fundamentales</b> añade PER, rentabilidad por dividendo, capitalización,
+crecimiento de ingresos y margen neto, y permite filtrar por <b>PER máximo</b>, <b>dividendo
+mínimo</b>, <b>capitalización mínima</b>, <b>crecimiento de ingresos mínimo</b> y <b>margen neto
+mínimo</b>. Un activo sin el dato no pasa un filtro activo.</p>
 <p>El <b>escaneo diario automático</b> (en el mismo menú) revisa la lista una vez al día y avisa
 solo de lo nuevo: patrones que aparecen o se rompen y señales nuevas.</p>
 <p>Junto al escaneo diario llegan los <b>avisos de resultados y dividendos</b>: por defecto 3

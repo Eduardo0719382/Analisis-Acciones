@@ -9,7 +9,13 @@ import pytest
 from analisis_acciones.providers.yahoo import YahooFinanceProvider
 from analisis_acciones.services.market_data_service import MarketDataService
 from analisis_acciones.services.scan_report import scan_csv
-from analisis_acciones.services.scanner import ScanResult, passes_fundamentals, run_scan, scan_bars
+from analisis_acciones.services.scanner import (
+    FundamentalLimits,
+    ScanResult,
+    passes_fundamentals,
+    run_scan,
+    scan_bars,
+)
 from analisis_acciones.storage.database import open_database
 from tests.synthetic import FakeYahooClient, path, synthetic_daily
 
@@ -64,7 +70,9 @@ def test_run_scan_collects_rows_and_problems(market: MarketDataService) -> None:
 def test_scan_with_fundamentals_and_filter() -> None:
     client = FakeYahooClient(synthetic_daily(sessions=400))
     client.known = {"AAA"}
-    client.info_payload = {"regularMarketPrice": 100.0, "trailingPE": 15.0, "dividendRate": 3.0}
+    client.info_payload = {"regularMarketPrice": 100.0, "trailingPE": 15.0, "dividendRate": 3.0,
+                           "marketCap": 2.5e11, "revenueGrowth": 0.08,
+                           "profitMargins": 0.21}  # fmt: skip
     fixed = datetime(2025, 9, 1, 23, 0, tzinfo=UTC)
     market = MarketDataService(YahooFinanceProvider(client), open_database(":memory:"),
                                clock=lambda: fixed)  # fmt: skip
@@ -76,13 +84,24 @@ def test_scan_with_fundamentals_and_filter() -> None:
         market.close()
     assert row.fundamentals_checked and row.pe == 15.0
     assert row.dividend_yield == pytest.approx(0.03)
-    assert passes_fundamentals(row, None, None)
-    assert passes_fundamentals(row, 20, 2.5) and not passes_fundamentals(row, 10, None)
-    assert not passes_fundamentals(row, None, 4)
-    missing = replace(row, pe=None, dividend_yield=None)
-    assert passes_fundamentals(missing, None, None)
-    assert not passes_fundamentals(missing, 20, None) and not passes_fundamentals(missing, None, 1)
-    assert not passes_fundamentals(replace(row, pe=-5.0), 20, None)  # losses
+    assert (row.market_cap, row.revenue_growth, row.profit_margin) == (2.5e11, 0.08, 0.21)
+    L = FundamentalLimits
+    assert passes_fundamentals(row, L()) and not L().active
+    assert passes_fundamentals(row, L(20, 2.5)) and not passes_fundamentals(row, L(10))
+    assert not passes_fundamentals(row, L(min_yield_pct=4))
+    assert passes_fundamentals(row, L(min_market_cap_bn=200, min_revenue_growth_pct=5,
+                                      min_profit_margin_pct=20))  # fmt: skip
+    assert not passes_fundamentals(row, L(min_market_cap_bn=300))
+    assert not passes_fundamentals(row, L(min_revenue_growth_pct=10))
+    assert not passes_fundamentals(row, L(min_profit_margin_pct=25))
+    shrinking = replace(row, revenue_growth=-0.05)
+    assert passes_fundamentals(shrinking, L(min_revenue_growth_pct=-10))  # negative limit
+    missing = replace(row, pe=None, dividend_yield=None, market_cap=None)
+    assert passes_fundamentals(missing, L())
+    assert not passes_fundamentals(missing, L(20)) and not passes_fundamentals(missing, L(None, 1))
+    assert not passes_fundamentals(missing, L(min_market_cap_bn=1))
+    assert not passes_fundamentals(replace(row, pe=-5.0), L(20))  # losses
+    assert L(20, min_profit_margin_pct=-5).describe() == "PER ≤ 20, margen neto ≥ -5 %"
     csv_text = scan_csv(ScanResult([row]))
-    assert "per,rentabilidad_dividendo_pct" in csv_text.splitlines()[0]
-    assert csv_text.splitlines()[1].endswith(",15.0,3.0")
+    assert "per,rentabilidad_dividendo_pct,capitalizacion" in csv_text.splitlines()[0]
+    assert csv_text.splitlines()[1].endswith(",15.0,3.0,250000000000.0,8.0,21.0")

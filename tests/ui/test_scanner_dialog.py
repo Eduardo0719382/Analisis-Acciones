@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 from pytestqt.qtbot import QtBot
@@ -121,3 +122,30 @@ def test_fundamental_filters(qtbot: QtBot, market: MarketDataService) -> None:
     assert dialog.table.rowCount() == 1
     dialog.min_yield.setValue(2)
     assert "Incluir fundamentales" in dialog.status.text()
+
+
+def test_more_fundamental_filters(qtbot: QtBot, market: MarketDataService,
+                                  tmp_path: Path) -> None:  # fmt: skip
+    dialog = ScannerDialog(market, [])
+    qtbot.addWidget(dialog)
+    dialog.open_after_export = False
+    big = replace(row("BIG", 1, 0), fundamentals_checked=True, market_cap=3e12,
+                  revenue_growth=0.06, profit_margin=0.25)  # fmt: skip
+    small = replace(row("SMALL", 1, 0), fundamentals_checked=True, market_cap=2e9,
+                    revenue_growth=-0.03, profit_margin=-0.1)  # fmt: skip
+    dialog.show_result(ScanResult([big, small]))
+    assert not dialog.limits().active  # every spin box starts at "sin límite"
+    cap_col = strings.SCAN_COLUMNS.index("Cap. (mil M)")
+    shown = {dialog.table.item(r, 0).text(): dialog.table.item(r, cap_col).text()
+             for r in range(2)}  # fmt: skip
+    assert shown["BIG"] in {"3,000.0", "3000.0", "3.000,0", "3000,0"}
+    dialog.min_cap.setValue(10)
+    assert [r.symbol for r in dialog.visible_result().rows] == ["BIG"]
+    dialog.min_cap.setValue(0)
+    dialog.min_growth.setValue(-5)
+    assert len(dialog.visible_result().rows) == 2
+    dialog.min_margin.setValue(0)
+    assert [r.symbol for r in dialog.visible_result().rows] == ["BIG"]
+    dialog.export("html", tmp_path / "f.html")
+    page = (tmp_path / "f.html").read_text("utf-8")
+    assert "crecimiento de ingresos ≥ -5 %, margen neto ≥ 0 %" in page

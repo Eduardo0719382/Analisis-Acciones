@@ -33,6 +33,7 @@ from analisis_acciones.services.market_data_service import MarketDataService
 from analisis_acciones.services.scan_report import default_file_stem, scan_csv, scan_report_html
 from analisis_acciones.services.scanner import (
     MAX_SYMBOLS,
+    FundamentalLimits,
     ScanResult,
     ScanRow,
     passes_fundamentals,
@@ -66,6 +67,10 @@ class _Item(QTableWidgetItem):
         return self.text().casefold() < other.text().casefold()
 
 
+def pct(fraction: float | None) -> float | None:
+    return None if fraction is None else fraction * 100
+
+
 def matches(row: ScanRow, mode: str) -> bool:
     if mode == "patterns":
         return bool(row.patterns)
@@ -90,7 +95,7 @@ class ScannerDialog(QDialog):
         self.scan: ScanResult | None = None
         self.last_export: Path | None = None
         self.setWindowTitle(strings.SCAN_TITLE)
-        self.resize(1100, 600)
+        self.resize(1250, 640)
 
         self.symbols = QLineEdit(", ".join(symbols[:MAX_SYMBOLS]))
         self.symbols.setPlaceholderText(strings.SCAN_PLACEHOLDER)
@@ -120,14 +125,37 @@ class ScannerDialog(QDialog):
         self.min_yield.setSingleStep(0.5)
         self.min_yield.setSuffix(" %")
         self.min_yield.setSpecialValueText(strings.SCAN_NO_LIMIT)
-        self.max_pe.valueChanged.connect(self._fill)
-        self.min_yield.valueChanged.connect(self._fill)
-        filters.addWidget(self.with_fundamentals)
-        filters.addWidget(QLabel(strings.SCAN_MAX_PE))
-        filters.addWidget(self.max_pe)
-        filters.addWidget(QLabel(strings.SCAN_MIN_YIELD))
-        filters.addWidget(self.min_yield)
+        self.min_cap = QDoubleSpinBox()
+        self.min_cap.setRange(0, 10_000)
+        self.min_cap.setDecimals(1)
+        self.min_cap.setSuffix(strings.SCAN_CAP_SUFFIX)
+        self.min_cap.setSpecialValueText(strings.SCAN_NO_LIMIT)
+        # Growth and margin may be negative limits; the minimum of the range means "no limit".
+        self.min_growth = QDoubleSpinBox()
+        self.min_growth.setRange(-101, 1000)
+        self.min_growth.setDecimals(1)
+        self.min_growth.setSuffix(" %")
+        self.min_growth.setSpecialValueText(strings.SCAN_NO_LIMIT)
+        self.min_growth.setValue(-101)
+        self.min_margin = QDoubleSpinBox()
+        self.min_margin.setRange(-101, 100)
+        self.min_margin.setDecimals(1)
+        self.min_margin.setSuffix(" %")
+        self.min_margin.setSpecialValueText(strings.SCAN_NO_LIMIT)
+        self.min_margin.setValue(-101)
+        for spin in (self.max_pe, self.min_yield, self.min_cap, self.min_growth, self.min_margin):
+            spin.valueChanged.connect(self._fill)
         filters.addStretch(1)
+        fundamentals_row = QHBoxLayout()
+        fundamentals_row.addWidget(self.with_fundamentals)
+        for label, spin in ((strings.SCAN_MAX_PE, self.max_pe),
+                            (strings.SCAN_MIN_YIELD, self.min_yield),
+                            (strings.SCAN_MIN_CAP, self.min_cap),
+                            (strings.SCAN_MIN_GROWTH, self.min_growth),
+                            (strings.SCAN_MIN_MARGIN, self.min_margin)):  # fmt: skip
+            fundamentals_row.addWidget(QLabel(label))
+            fundamentals_row.addWidget(spin)
+        fundamentals_row.addStretch(1)
         self.export_button = QPushButton(strings.SCAN_EXPORT)
         export_menu = QMenu(self.export_button)
         export_menu.addAction(strings.SCAN_EXPORT_HTML, lambda: self._ask_and_export("html"))
@@ -163,6 +191,7 @@ class ScannerDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addLayout(top)
         layout.addLayout(filters)
+        layout.addLayout(fundamentals_row)
         layout.addWidget(self.table, stretch=1)
         layout.addWidget(self.status)
         layout.addWidget(note)
@@ -206,19 +235,24 @@ class ScannerDialog(QDialog):
             text += "\n" + "\n".join(result.problems)
         self.status.setText(text)
 
-    def limits(self) -> tuple[float | None, float | None]:
-        """Active P/E maximum and dividend-yield minimum (None = no limit)."""
-        return (self.max_pe.value() or None, self.min_yield.value() or None)
+    def limits(self) -> FundamentalLimits:
+        """Active fundamental limits (a spin box at its minimum means no limit)."""
+
+        def limit(spin: QDoubleSpinBox) -> float | None:
+            return None if spin.value() <= spin.minimum() else spin.value()
+
+        return FundamentalLimits(limit(self.max_pe), limit(self.min_yield), limit(self.min_cap),
+                                 limit(self.min_growth), limit(self.min_margin))  # fmt: skip
 
     def _visible_rows(self) -> list[ScanRow]:
         assert self.scan is not None
         mode = str(self.filter.currentData())
-        max_pe, min_yield = self.limits()
+        limits = self.limits()
         checked = any(r.fundamentals_checked for r in self.scan.rows)
         return [
             r
             for r in self.scan.rows
-            if matches(r, mode) and (not checked or passes_fundamentals(r, max_pe, min_yield))
+            if matches(r, mode) and (not checked or passes_fundamentals(r, limits))
         ]
 
     def _fill(self, *_args: object) -> None:
@@ -226,8 +260,7 @@ class ScannerDialog(QDialog):
             return
         loc = QLocale()
         rows = self._visible_rows()
-        max_pe, min_yield = self.limits()
-        if (max_pe or min_yield) and not any(r.fundamentals_checked for r in self.scan.rows):
+        if self.limits().active and not any(r.fundamentals_checked for r in self.scan.rows):
             self.status.setText(strings.SCAN_FUNDAMENTALS_HINT)
 
         def num(value: float | None, decimals: int = 2, sign: bool = False) -> _Item:
@@ -250,7 +283,9 @@ class ScannerDialog(QDialog):
                 num(row.rsi14, 1), bull, bear, patterns, _Item(row.elliott),
                 num(None if row.support_pct is None else -row.support_pct, 1),
                 num(row.resistance_pct, 1, sign=True), num(row.pe, 1),
-                num(None if row.dividend_yield is None else row.dividend_yield * 100, 2),
+                num(pct(row.dividend_yield), 2),
+                num(None if row.market_cap is None else row.market_cap / 1e9, 1),
+                num(pct(row.revenue_growth), 1, sign=True), num(pct(row.profit_margin), 1),
             ]  # fmt: skip
             for c, item in enumerate(cells):
                 self.table.setItem(r, c, item)
@@ -278,12 +313,10 @@ class ScannerDialog(QDialog):
         mode = str(self.filter.currentData())
         note = "" if mode == "all" else strings.SCAN_EXPORT_FILTER_NOTE.format(
             name=strings.SCAN_FILTERS[mode])  # fmt: skip
-        max_pe, min_yield = self.limits()
-        if any(r.fundamentals_checked for r in self.scan.rows) and (max_pe or min_yield):
-            parts = [f"PER ≤ {max_pe:g}"] if max_pe else []
-            parts += [f"dividendo ≥ {min_yield:g} %"] if min_yield else []
+        limits = self.limits()
+        if any(r.fundamentals_checked for r in self.scan.rows) and limits.active:
             note = (note + " " if note else "") + strings.SCAN_EXPORT_FILTER_NOTE.format(
-                name=", ".join(parts)
+                name=limits.describe()
             )
         try:
             if kind == "csv":
