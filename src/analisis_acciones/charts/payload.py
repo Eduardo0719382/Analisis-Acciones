@@ -127,7 +127,7 @@ def future_times(bars: pd.DataFrame, count: int) -> list[ChartTime]:
 def trades_every_day(index: pd.DatetimeIndex) -> bool:
     """Do the recent bars include weekends (an asset quoted every day, such as crypto)?"""
     recent = index[-60:]
-    return len(recent) > 0 and bool((recent.weekday >= 5).sum() >= 2)
+    return len(recent) > 0 and bool((recent.day_of_week >= 5).sum() >= 2)
 
 
 def _future_intraday(index: pd.DatetimeIndex, count: int) -> list[pd.Timestamp]:

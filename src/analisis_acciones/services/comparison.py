@@ -57,7 +57,7 @@ def compare(closes_by_symbol: dict[str, pd.DataFrame], period_days: int | None) 
             user_message="Los activos no tienen suficientes sesiones en común en ese periodo.",
         )
     performance = (closes / closes.iloc[0] - 1.0) * 100.0
-    every_day = (pd.DatetimeIndex(closes.index[-60:]).weekday >= 5).sum() >= 2
+    every_day = (pd.DatetimeIndex(closes.index[-60:]).day_of_week >= 5).sum() >= 2
     per_year = CALENDAR_DAYS if every_day else TRADING_DAYS
     metrics = []
     for symbol, bars in closes_by_symbol.items():

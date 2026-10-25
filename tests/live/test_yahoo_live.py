@@ -126,7 +126,7 @@ def test_crypto_daily_history_includes_weekends(provider: YahooFinanceProvider) 
     bars = series.bars
     print(f"BTC-USD: {len(bars)} bars {series.first_date} .. {series.last_date}")
     assert len(bars) > 1000
-    assert (bars.index[-60:].weekday >= 5).sum() >= 10  # quoted every day
+    assert (bars.index[-60:].day_of_week >= 5).sum() >= 10  # quoted every day
     assert series.last_date is not None and series.last_date > date.today() - timedelta(days=5)
 
 
