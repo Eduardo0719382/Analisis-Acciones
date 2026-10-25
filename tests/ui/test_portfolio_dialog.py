@@ -119,3 +119,32 @@ def test_menu_opens_portfolio(qtbot: QtBot, settings: SettingsService, market: M
     plain = MainWindow(settings, market_service=market)
     qtbot.addWidget(plain)
     assert not plain.portfolio_action.isEnabled()
+
+
+def test_rebalance_tab(qtbot: QtBot, service: PaperPortfolioService) -> None:
+    dialog = PortfolioDialog(service, lambda: "SPY", "TEST")
+    qtbot.addWidget(dialog)
+    qtbot.waitUntil(lambda: dialog.report is not None, timeout=10000)
+    panel = dialog.rebalance
+    assert "Defina primero" in panel.summary.text() or panel.plan is None
+    panel.add_target_row("TEST", 60)
+    panel.add_target_row("SPY")
+    panel.targets.item(1, 1).setText("abc")
+    panel.save_targets()
+    assert "no es un número" in panel.summary.text()
+    panel.targets.item(1, 1).setText("30,5")
+    assert "90,5 %" in panel.total_label.text()
+    panel.save_targets()
+    assert service.targets(dialog.portfolio_id) == {"TEST": 60.0, "SPY": 30.5}
+    qtbot.waitUntil(lambda: panel.plan is not None and len(panel.plan.orders) == 2,
+                    timeout=10000)  # fmt: skip
+    assert panel.apply_button.isEnabled()
+    panel.apply()
+    qtbot.waitUntil(lambda: dialog.report is not None and len(dialog.report.trades) == 2,
+                    timeout=10000)  # fmt: skip
+    weights = {h.symbol: h.weight_pct for h in dialog.report.valuation.holdings}
+    assert weights["TEST"] == pytest.approx(60, abs=0.01)
+    assert weights["SPY"] == pytest.approx(30.5, abs=0.01)
+    assert dialog.report.trades[0].note == "Rebalanceo hacia los pesos objetivo"
+    qtbot.waitUntil(lambda: panel.plan is not None and not panel.plan.orders, timeout=10000)
+    assert "ya está en sus pesos" in panel.summary.text()

@@ -816,3 +816,15 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   sale. With average-cost accounting there are no individual lots, so this is a "position age",
   not a per-lot holding period.
 - Fewer than 10 sales shows an explicit warning: such figures can come from chance.
+
+## D-052 — Rebalancing
+
+- Targets are a percentage of the total value (migration 0013, `paper_targets`); the
+  remainder is the cash target. A held symbol without a target is treated as 0 % and sold.
+  This keeps the rule simple, and the plan table makes it visible before anything is recorded.
+- The plan is pure (`portfolio/rebalance.py`). It uses the valuation prices (last close),
+  sells first, and scales all purchases by the same factor when their cost plus commissions
+  does not fit, keeping 1 cent of margin for rounding. Differences under 0.5 weight points or
+  1 $ are ignored.
+- Nothing is recorded until the user confirms. The orders are then normal paper trades dated
+  today with a fixed note, so the history validation and commissions are applied as usual.

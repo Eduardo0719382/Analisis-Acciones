@@ -55,6 +55,7 @@ from analisis_acciones.services.portfolio_report import (
 from analisis_acciones.services.scan_report import num
 from analisis_acciones.ui import strings
 from analisis_acciones.ui.html_pdf import HtmlPdfWriter
+from analisis_acciones.ui.rebalance_panel import RebalancePanel
 from analisis_acciones.ui.workers import Worker, start_worker
 
 logger = logging.getLogger(__name__)
@@ -263,6 +264,9 @@ class PortfolioDialog(QDialog):
         self.tabs = QTabWidget()
         self.tabs.addTab(self.view, strings.PF_TAB_SUMMARY)
         self.tabs.addTab(trades_page, strings.PF_TAB_TRADES)
+        self.rebalance = RebalancePanel(service, lambda: self.portfolio_id, self._run, self)
+        self.rebalance.applied.connect(self.refresh)
+        self.tabs.addTab(self.rebalance, strings.PF_TAB_REBALANCE)
 
         self.status = QLabel()
         self.status.setObjectName("detailsSource")
@@ -464,6 +468,7 @@ class PortfolioDialog(QDialog):
                 self.trades.setItem(r, c, item)
         self.delete_trade_button.setEnabled(bool(rows))
         self.review_button.setEnabled(bool(rows))
+        self.rebalance.set_report(report)
 
     # Export ------------------------------------------------------------------
     def _ask_and_export(self, kind: str) -> None:

@@ -683,6 +683,42 @@ PF_DISCLAIMER = (
     "gastar más efectivo del disponible. No es asesoramiento financiero."
 )
 PF_ITEM = "{name} · capital inicial {cash}"
+PF_TAB_REBALANCE = "Rebalanceo"
+RB_INTRO = (
+    "Indique qué peso (% del valor total) quiere para cada activo; lo que no asigne queda en "
+    "efectivo. Los activos que tenga sin peso objetivo se venden. El plan usa el último cierre, "
+    "admite fracciones, vende primero y ajusta las compras al efectivo y a las comisiones. Es "
+    "una simulación: no es una recomendación de inversión."
+)
+RB_TARGET_COLUMNS = ("Ticker", "Peso objetivo %")
+RB_ADD_ROW = "Añadir"
+RB_REMOVE_ROW = "Quitar"
+RB_SAVE = "Guardar pesos y calcular"
+RB_TOTAL = "Asignado: {total} % · efectivo objetivo: {cash} %"
+RB_TOTAL_INVALID = "Hay algún peso que no es un número."
+RB_BAD_WEIGHT = "El peso de {symbol} no es un número válido."
+RB_PLAN_TITLE = "Operaciones necesarias"
+RB_PLAN_COLUMNS = (
+    "Activo",
+    "Peso actual",
+    "Objetivo",
+    "Operación",
+    "Cantidad",
+    "Precio ($)",
+    "Importe ($)",
+)
+RB_CALCULATING = "Calculando el plan…"
+RB_NOTHING = "La cartera ya está en sus pesos objetivo (diferencias menores de 0,5 puntos)."
+RB_SUMMARY = (
+    "{count} operaciones · comisiones {commissions} $ · efectivo después {cash} $ "
+    "(objetivo {cash_pct} %)."
+)
+RB_SCALED = "Las compras se han reducido para que quepan en el efectivo con las comisiones."
+RB_APPLY = "Registrar estas operaciones"
+RB_APPLY_CONFIRM = (
+    "Se registrarán {count} operaciones ficticias con fecha de hoy al último cierre. ¿Continuar?"
+)
+RB_APPLYING = "Registrando las operaciones…"
 
 TAB_FUNDAMENTALS = "Fundamentales"
 FUND_EMPTY = "Abra un activo para ver sus datos fundamentales."

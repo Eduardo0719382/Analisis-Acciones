@@ -30,6 +30,7 @@ from analisis_acciones.portfolio.engine import (
     split_factor_after,
     value,
 )
+from analisis_acciones.portfolio.rebalance import RebalancePlan, plan_rebalance
 from analisis_acciones.providers.base import normalize_symbol
 from analisis_acciones.services.market_data_service import MarketDataService
 
@@ -41,6 +42,7 @@ MAX_NAME = 40
 
 
 MAX_TEXT = 500
+REBALANCE_NOTE = "Rebalanceo hacia los pesos objetivo"
 QUANTITY_DECIMALS = 6
 
 
@@ -168,6 +170,7 @@ class PaperPortfolioService:
     def delete(self, portfolio_id: int) -> None:
         with self._db() as db:
             db.execute("DELETE FROM paper_trades WHERE portfolio_id = ?", (portfolio_id,))
+            db.execute("DELETE FROM paper_targets WHERE portfolio_id = ?", (portfolio_id,))
             db.execute("DELETE FROM paper_portfolios WHERE id = ?", (portfolio_id,))
 
     def _portfolio(self, portfolio_id: int) -> Portfolio:
@@ -175,6 +178,65 @@ class PaperPortfolioService:
             if p.id == portfolio_id:
                 return p
         raise InternalError(f"unknown portfolio {portfolio_id}")
+
+    # Target weights and rebalancing --------------------------------------------------
+    def targets(self, portfolio_id: int) -> dict[str, float]:
+        with self._db() as db:
+            rows = db.execute(
+                "SELECT symbol, weight_pct FROM paper_targets WHERE portfolio_id = ? "
+                "ORDER BY symbol",
+                (portfolio_id,),
+            ).fetchall()
+        return {r["symbol"]: float(r["weight_pct"]) for r in rows}
+
+    def set_targets(self, portfolio_id: int, targets: dict[str, float]) -> dict[str, float]:
+        """Replace the target weights (percent of total value; the rest stays in cash)."""
+        clean: dict[str, float] = {}
+        for raw, weight in targets.items():
+            symbol = normalize_symbol(raw)
+            if not 0 < weight <= 100:
+                raise UserError(
+                    f"bad weight {weight}",
+                    user_message=f"El peso de {symbol} debe estar entre 0 y 100 %.",
+                )
+            clean[symbol] = clean.get(symbol, 0.0) + float(weight)
+        if sum(clean.values()) > 100 + 1e-9:
+            raise UserError(
+                "weights > 100", user_message="Los pesos objetivo no pueden sumar más del 100 %."
+            )
+        with self._db() as db:
+            db.execute("DELETE FROM paper_targets WHERE portfolio_id = ?", (portfolio_id,))
+            db.executemany(
+                "INSERT INTO paper_targets (portfolio_id, symbol, weight_pct) VALUES (?, ?, ?)",
+                [(portfolio_id, s, w) for s, w in clean.items()],
+            )
+        return clean
+
+    def rebalance_plan(self, report: PortfolioReport) -> RebalancePlan:
+        """Orders that bring ``report``'s portfolio to its target weights (not recorded)."""
+        targets = self.targets(report.portfolio.id)
+        if not targets:
+            return RebalancePlan(problems=["Defina primero los pesos objetivo."])
+        held = {h.symbol for h in report.valuation.holdings}
+        prices: dict[str, float | None] = {}
+        today = self._clock().date()
+        for symbol in targets:
+            if symbol not in held:
+                try:
+                    prices[symbol] = self.close_on(symbol, today)[0]
+                except AppError as exc:
+                    logger.info("No price for target %s: %s", symbol, exc)
+                    prices[symbol] = None
+        return plan_rebalance(report.valuation, targets, report.portfolio.commission_for, prices)
+
+    def apply_rebalance(self, portfolio_id: int, plan: RebalancePlan) -> list[PaperTrade]:
+        """Record the plan's orders today at the plan's prices (sales first)."""
+        day = self._clock().date()
+        done = []
+        for order in plan.orders:
+            done.append(self.add_trade(portfolio_id, order.symbol, order.side, order.quantity,
+                                       order.price, day, note=REBALANCE_NOTE))  # fmt: skip
+        return done
 
     # Trades ----------------------------------------------------------------------
     def trades(self, portfolio_id: int) -> list[PaperTrade]:

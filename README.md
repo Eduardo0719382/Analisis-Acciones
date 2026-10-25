@@ -236,6 +236,11 @@ blanco porque su motor se detuvo, se recarga automáticamente.
     sobre el resultado neto de las ventas de cada año (se muestra, no se descuenta).
   - **Resultado de cada venta** frente al coste medio (también en la tabla de operaciones y en
     el CSV), resumen por año y un mini gráfico del **valor de cada posición en el tiempo**.
+  - **Rebalanceo** (pestaña de la cartera): se indica el peso objetivo de cada activo (% del
+    valor total; el resto queda en efectivo) y el programa calcula las compras y ventas para
+    llegar a él (vende primero, admite fracciones y ajusta las compras al efectivo y a las
+    comisiones). Los activos sin peso objetivo se venden. «Registrar estas operaciones» las
+    anota como operaciones ficticias de hoy.
   - **Estadísticas del diario** en el informe: % de ventas con ganancia, factor de beneficio,
     ganancia y pérdida medias, tiempo medio mantenida, mejor y peor venta, resultado por activo
     y cuántas operaciones tienen motivo y revisión escritos (con aviso si hay pocas ventas).
