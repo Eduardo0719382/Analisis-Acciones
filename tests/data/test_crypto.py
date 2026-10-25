@@ -140,3 +140,24 @@ def test_crypto_volatility_is_annualised_over_365_days() -> None:
     logs = np.log(bars["close"] / bars["close"].shift(1)).dropna()
     expected = float(logs.std(ddof=1) * math.sqrt(365) * 100)
     assert result.metrics[0].volatility_pct == pytest.approx(expected)
+
+
+def test_portfolio_with_crypto_is_valued_every_day() -> None:
+    from analisis_acciones.portfolio.engine import BUY, PaperTrade, daily_values
+
+    days = pd.date_range("2024-06-01", "2024-06-30", freq="D")  # 2024-06-01 is a Saturday
+    btc = pd.Series(np.linspace(60_000, 66_000, len(days)), index=days)
+    stock_days = pd.bdate_range("2024-06-01", "2024-06-30")
+    spy = pd.Series(np.linspace(500, 520, len(stock_days)), index=stock_days)
+    trades = [
+        PaperTrade("BTC-USD", BUY, 0.1, 60_000, date(2024, 6, 1)),  # bought on a Saturday
+        PaperTrade("SPY", BUY, 2, 500, date(2024, 6, 3)),
+    ]
+    total, per = daily_values(trades, 10_000, {"BTC-USD": btc, "SPY": spy}, date(2024, 6, 30))
+    assert total.index[0] == pd.Timestamp("2024-06-01")
+    assert pd.Timestamp("2024-06-08") in total.index  # weekend values present
+    # SPY keeps Friday's close over the weekend; BTC moves.
+    assert per.loc["2024-06-08", "SPY"] == per.loc["2024-06-07", "SPY"]
+    assert per.loc["2024-06-08", "BTC-USD"] != per.loc["2024-06-07", "BTC-USD"]
+    stocks_only, _ = daily_values(trades[1:], 10_000, {"SPY": spy}, date(2024, 6, 30))
+    assert (pd.DatetimeIndex(stocks_only.index).day_of_week < 5).all()

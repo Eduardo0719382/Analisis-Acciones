@@ -96,8 +96,8 @@ blanco porque su motor se detuvo, se recarga automáticamente.
   semana. Gráfico, indicadores, análisis, agotamiento, proyección, Elliott, patrones, alertas,
   escáner, comparación (volatilidad anualizada con 365 días) y backtesting funcionan igual que
   con acciones. No tienen datos fundamentales de empresa. En la cartera simulada se pueden
-  comprar y vender; su valor diario se calcula en días laborables (una operación de fin de
-  semana cuenta desde el lunes en la curva).
+  comprar y vender; si la cartera tiene criptomonedas su valor se calcula todos los días
+  (las acciones mantienen el cierre del viernes durante el fin de semana).
 - **Intervalo:** 15 minutos, 1 hora, Diario, Semanal o Mensual (los dos últimos se calculan a
   partir de los datos diarios). Intradía: solo horario regular (9:30–16:00 de Nueva York, que es
   la hora que muestra el gráfico); Yahoo ofrece unos 60 días de barras de 15 minutos y unos 2 años

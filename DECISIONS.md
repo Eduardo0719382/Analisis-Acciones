@@ -968,8 +968,9 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   weekend bars (decided from the data, not the symbol).
 - Comparison volatility is annualised with 365 days when the common sessions include weekends.
 - No company fundamentals: a clear message instead of an empty panel.
-- The paper portfolio keeps its weekday valuation calendar: a weekend crypto trade enters the
-  curve on Monday. Accepted for simplicity and documented.
+- The paper portfolio is valued every calendar day when a traded asset has weekend closes
+  (decided from the data); otherwise on business days. Stocks keep Friday's close over the
+  weekend (superseded the first weekday-only version).
 
 ## D-063 — Custom exhaustion thresholds and chart markers
 

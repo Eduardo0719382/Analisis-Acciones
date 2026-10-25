@@ -474,6 +474,12 @@ def equity_curve(
     return daily_values(trades, initial_cash, closes, end, events, withholding_pct, movements)[0]
 
 
+def quoted_every_day(closes: pd.Series) -> bool:
+    """Do the recent closes include weekends (crypto)? Decided from the data only."""
+    recent = pd.DatetimeIndex(closes.index[-60:])
+    return bool((recent.day_of_week >= 5).sum() >= 2)
+
+
 def daily_values(
     trades: list[PaperTrade],
     initial_cash: float,
@@ -483,7 +489,11 @@ def daily_values(
     withholding_pct: float = 0.0,
     movements: list[CashMovement] | tuple[CashMovement, ...] = (),
 ) -> tuple[pd.Series, pd.DataFrame]:
-    """Daily total value and market value per symbol (business days, first trade to ``end``).
+    """Daily total value and market value per symbol (first trade to ``end``).
+
+    Business days, or every calendar day when a traded asset is quoted every day
+    (weekend closes present, e.g. cryptocurrencies); other assets then keep their
+    last close over the weekend.
 
     Each holding is valued at its last close on or before each day; a day where a
     held symbol has no close yet is left out rather than guessed. A symbol not held
@@ -493,8 +503,10 @@ def daily_values(
     if not trades and not movements:
         return pd.Series(dtype=float), pd.DataFrame(dtype=float)
     starts = [t.trade_date for t in trades] + [m.day for m in movements]
-    days = pd.bdate_range(min(starts), end)
     symbols = sorted({t.symbol for t in trades})
+    every_day = any(quoted_every_day(c) for s, c in closes.items() if s in symbols)
+    days = (pd.date_range(min(starts), end, freq="D") if every_day
+            else pd.bdate_range(min(starts), end))  # fmt: skip
     column = {s: i for i, s in enumerate(symbols)}
     prices = np.full((len(days), len(symbols)), np.nan)
     for s, c in closes.items():
