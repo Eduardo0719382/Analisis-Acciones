@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -39,6 +40,7 @@ from analisis_acciones.analysis.exhaustion import (
 )
 from analisis_acciones.models.errors import user_message_for
 from analisis_acciones.services.exhaustion_compare import (
+    EXIT_KEYS,
     MAX_SYMBOLS,
     READING_LABELS,
     ExhaustionComparison,
@@ -81,6 +83,10 @@ def _pct_item(o: Outcome | None) -> _Item:
         return _Item("—")
     base = "—" if o.baseline_against_pct is None else f"{num(o.baseline_against_pct, 0)} %"
     return _Item(f"{num(o.against_pct, 0)} % (normal {base})", o.against_pct)
+
+
+def _ret_item(value: float) -> _Item:
+    return _Item(f"{num(value, 1, sign=True)} %", value)
 
 
 def _p_item(o: Outcome | None) -> _Item:
@@ -143,6 +149,26 @@ class ExhaustionCompareDialog(QDialog):
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.cellDoubleClicked.connect(self._activate)
+        self.exits_table = QTableWidget(0, len(strings.EXC_EXIT_COLUMNS))
+        self.exits_table.setHorizontalHeaderLabels(strings.EXC_EXIT_COLUMNS)
+        self.exits_table.verticalHeader().setVisible(False)
+        self.exits_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.exits_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.exits_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.ResizeToContents
+        )
+        self.exits_table.horizontalHeader().setStretchLastSection(True)
+        self.exits_table.cellDoubleClicked.connect(self._activate_exit)
+        self.exits_summary = QLabel()
+        self.exits_summary.setWordWrap(True)
+        exits_page = QWidget()
+        exits_layout = QVBoxLayout(exits_page)
+        exits_layout.setContentsMargins(0, 0, 0, 0)
+        exits_layout.addWidget(self.exits_summary)
+        exits_layout.addWidget(self.exits_table, stretch=1)
+        record_page = QWidget()
+        record_layout = QVBoxLayout(record_page)
+        record_layout.setContentsMargins(0, 0, 0, 0)
         self.summary = QLabel()
         self.summary.setWordWrap(True)
         self.progress = QProgressBar()
@@ -156,10 +182,14 @@ class ExhaustionCompareDialog(QDialog):
         note.setObjectName("detailsSource")
         note.setWordWrap(True)
 
+        record_layout.addWidget(self.summary)
+        record_layout.addWidget(self.table, stretch=1)
+        self.tabs = QTabWidget()
+        self.tabs.addTab(record_page, strings.EXC_TAB_RECORD)
+        self.tabs.addTab(exits_page, strings.EXC_TAB_EXITS)
         layout = QVBoxLayout(self)
         layout.addLayout(top)
-        layout.addWidget(self.summary)
-        layout.addWidget(self.table, stretch=1)
+        layout.addWidget(self.tabs, stretch=1)
         layout.addWidget(self.progress)
         layout.addWidget(self.status)
         layout.addWidget(note)
@@ -262,6 +292,35 @@ class ExhaustionCompareDialog(QDialog):
             for c, item in enumerate(cells):
                 self.table.setItem(r, c, item)
         self.table.setSortingEnabled(True)
+        self._fill_exits()
+
+    def _fill_exits(self) -> None:
+        assert self.comparison is not None
+        result = self.comparison
+        tested, helped, safer = result.exit_counts("exit")
+        _t, helped_re, safer_re = result.exit_counts("reentry")
+        self.exits_summary.setText(strings.EXC_EXITS_SUMMARY.format(
+            tested=tested, helped=helped, safer=safer, helped_re=helped_re, safer_re=safer_re,
+        ))  # fmt: skip
+        rows = [r for r in result.rows if r.exits is not None]
+        self.exits_table.setSortingEnabled(False)
+        self.exits_table.setRowCount(len(rows))
+        for r, row in enumerate(rows):
+            t = row.exits
+            assert t is not None
+            cells = [_Item(row.symbol), _ret_item(t.buy_and_hold_pct)]
+            for key in EXIT_KEYS:
+                st = t.stats[key]
+                cells += [_ret_item(st.total_return_pct), _ret_item(st.max_drawdown_pct)]
+            cells.append(_Item(strings.EXC_EXIT_NAMES[t.best()]))
+            for c, item in enumerate(cells):
+                self.exits_table.setItem(r, c, item)
+        self.exits_table.setSortingEnabled(True)
+
+    def _activate_exit(self, row: int, _column: int) -> None:
+        item = self.exits_table.item(row, 0)
+        if item is not None:
+            self.symbol_activated.emit(item.text())
 
     def _activate(self, row: int, _column: int) -> None:
         item = self.table.item(row, 0)

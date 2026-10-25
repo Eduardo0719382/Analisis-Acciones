@@ -36,17 +36,29 @@ from analisis_acciones.analysis.exhaustion import (
     assess,
     history,
     record_reading,
+    signal_series,
 )
+from analisis_acciones.backtesting.engine import BacktestConfig, run_backtest
+from analisis_acciones.backtesting.statistics import Statistics, compute_statistics
 from analisis_acciones.data.export import safe_cell
+from analisis_acciones.data.freshness import is_crypto
 from analisis_acciones.models.errors import AppError
 from analisis_acciones.models.market import Interval
 from analisis_acciones.services.market_data_service import MarketDataService
 from analisis_acciones.services.scan_report import STYLE, num
+from analisis_acciones.strategies.registry import exhaustion_variants
 
 logger = logging.getLogger(__name__)
 
 MAX_SYMBOLS = 200
 MAIN_HORIZON = HORIZONS[-1]
+TREND_PERIOD = 50  # the trend definition of the exhaustion signs (close vs its 50 SMA)
+EXIT_KEYS = ("trend", "exit", "reentry")
+EXIT_NAMES = {
+    "trend": "Tendencia (sin salida por agotamiento)",
+    "exit": "Salida por agotamiento",
+    "reentry": "Salida por agotamiento y re-entrada",
+}
 
 #: Short labels of each reading, per direction (rises = exhaustion of up-trends).
 READING_LABELS = {
@@ -69,6 +81,34 @@ class DirectionRecord:
 
 
 @dataclass(frozen=True)
+class ExitTest:
+    """The trend strategy without and with the exhaustion exit, on one asset (same costs)."""
+
+    stats: dict[str, Statistics]  # keys: EXIT_KEYS
+    buy_and_hold_pct: float
+
+    def best(self) -> str:
+        return max(EXIT_KEYS, key=lambda k: self.stats[k].total_return_pct)
+
+    def exit_helped(self, key: str) -> bool:
+        """Did ``key`` end with more money than the plain trend strategy?"""
+        return self.stats[key].total_return_pct > self.stats["trend"].total_return_pct
+
+    def exit_reduced_drawdown(self, key: str) -> bool:
+        return self.stats[key].max_drawdown_pct > self.stats["trend"].max_drawdown_pct
+
+
+def exit_test(symbol: str, bars: pd.DataFrame, params: Params = DEFAULT_PARAMS,
+              config: BacktestConfig | None = None) -> ExitTest:  # fmt: skip
+    """Backtest of the three trend variants (signals at the close, orders at the next open)."""
+    config = config or BacktestConfig(fractional=is_crypto(symbol))
+    variants = exhaustion_variants(bars, TREND_PERIOD, signal_series(bars, params) > 0)
+    stats = {k: compute_statistics(run_backtest(bars, variants[k], config), bars)
+             for k in EXIT_KEYS}  # fmt: skip
+    return ExitTest(stats, stats["trend"].buy_and_hold_pct)
+
+
+@dataclass(frozen=True)
 class AssetExhaustion:
     symbol: str
     now: Assessment  # signs at the last closed bar
@@ -77,6 +117,7 @@ class AssetExhaustion:
     first: date | None
     last: date | None
     bars: int
+    exits: ExitTest | None = None
 
     def record(self, direction: str) -> DirectionRecord:
         return self.rises if direction == UP else self.falls
@@ -89,6 +130,12 @@ class ExhaustionComparison:
     params: Params = DEFAULT_PARAMS
     cancelled: bool = False
 
+    def exit_counts(self, key: str) -> tuple[int, int, int]:
+        """(assets tested, where ``key`` ended with more money, where it fell less)."""
+        tested = [r.exits for r in self.rows if r.exits is not None]
+        return (len(tested), sum(t.exit_helped(key) for t in tested),
+                sum(t.exit_reduced_drawdown(key) for t in tested))  # fmt: skip
+
     def by_reading(self, direction: str) -> dict[str, list[str]]:
         groups: dict[str, list[str]] = {code: [] for code in READING_LABELS}
         for row in self.rows:
@@ -96,9 +143,9 @@ class ExhaustionComparison:
         return groups
 
 
-def analyse_bars(symbol: str, bars: pd.DataFrame,
-                 params: Params = DEFAULT_PARAMS) -> AssetExhaustion:  # fmt: skip
-    """Record of one asset's completed daily bars."""
+def analyse_bars(symbol: str, bars: pd.DataFrame, params: Params = DEFAULT_PARAMS,
+                 exits: bool = True) -> AssetExhaustion:  # fmt: skip
+    """Record of one asset's completed daily bars (and, with ``exits``, the exit backtests)."""
     if len(bars) < MIN_BARS:
         raise ValueError(f"se necesitan al menos {MIN_BARS} sesiones (hay {len(bars)})")
     rises = history(bars, UP, params)
@@ -109,6 +156,7 @@ def analyse_bars(symbol: str, bars: pd.DataFrame,
         DirectionRecord(rises, record_reading(rises)),
         DirectionRecord(falls, record_reading(falls)),
         index[0].date(), index[-1].date(), len(bars),
+        exit_test(symbol, bars, params) if exits else None,
     )  # fmt: skip
 
 
@@ -161,6 +209,9 @@ def comparison_csv(result: ExhaustionComparison) -> str:
             header += [f"{name}_casos_{h}", f"{name}_giro_pct_{h}", f"{name}_normal_pct_{h}",
                        f"{name}_mediana_pct_{h}", f"{name}_p_valor_{h}"]  # fmt: skip
         header.append(f"{name}_lectura")
+    header.append("comprar_y_mantener_pct")
+    for key in EXIT_KEYS:
+        header += [f"{key}_rentabilidad_pct", f"{key}_caida_max_pct", f"{key}_operaciones"]
     writer.writerow(header)
     for row in sorted(result.rows, key=lambda r: r.symbol):
         cells: list[object] = [row.symbol, row.first, row.last, row.bars, now_text(row.now)]
@@ -175,6 +226,14 @@ def comparison_csv(result: ExhaustionComparison) -> str:
                     _plain(o.p_value if o else None, 4),
                 ]  # fmt: skip
             cells.append(READING_LABELS[record.reading][direction])
+        t = row.exits
+        cells.append(_plain(t.buy_and_hold_pct) if t else "")
+        for key in EXIT_KEYS:
+            st = t.stats[key] if t else None
+            if st is None:
+                cells += ["", "", ""]
+            else:
+                cells += [_plain(st.total_return_pct), _plain(st.max_drawdown_pct), st.trades]
         writer.writerow([safe_cell(c) for c in cells])
     return buffer.getvalue()
 
@@ -192,6 +251,8 @@ _EXTRA_STYLE = """
 .bar { height: 7px; border-radius: 0 4px 4px 0; background: var(--flat); min-width: 2px; }
 .bar.down { background: var(--down); } .bar.up { background: var(--up); }
 .read { white-space: nowrap; border-radius: 999px; padding: 2px 8px; background: var(--flat-bg); }
+td b { white-space: nowrap; }
+span.up { color: var(--up); } span.down { color: var(--down); }
 .read.useful { background: var(--up-bg); } .read.continue { background: var(--down-bg); }
 @media screen and (max-width: 760px) { .tiles.two { grid-template-columns: 1fr; } }
 """
@@ -255,6 +316,43 @@ def _table(result: ExhaustionComparison, direction: str) -> str:
     )
 
 
+def _signed(value: float) -> str:
+    css = "up" if value > 0 else "down" if value < 0 else ""
+    return f'<span class="{css}">{num(value, 1, sign=True)} %</span>'
+
+
+def _exits_table(result: ExhaustionComparison) -> str:
+    rows = [r for r in sorted(result.rows, key=lambda r: r.symbol) if r.exits is not None]
+    if not rows:
+        return ""
+    tested, helped, safer = result.exit_counts("exit")
+    _t, helped_re, safer_re = result.exit_counts("reentry")
+    body = []
+    for row in rows:
+        t = row.exits
+        assert t is not None
+        cells = "".join(
+            f"<td class=n>{_signed(t.stats[k].total_return_pct)}<br><span class=muted>caída "
+            f"{num(t.stats[k].max_drawdown_pct, 1)} % · {t.stats[k].trades} op.</span></td>"
+            for k in EXIT_KEYS
+        )
+        best = EXIT_NAMES[t.best()]
+        body.append(f"<tr><td><b>{escape(row.symbol)}</b></td>"
+                    f"<td class=n>{_signed(t.buy_and_hold_pct)}</td>{cells}"
+                    f"<td>{escape(best)}</td></tr>")  # fmt: skip
+    heads = "".join(f"<th>{escape(EXIT_NAMES[k])}</th>" for k in EXIT_KEYS)
+    return f"""<h2 class="section-title newpage">¿Habría compensado salir por agotamiento?</h2>
+<p class="intro">Misma estrategia de tendencia en cada activo (compra cuando el cierre cruza al
+alza su media de {TREND_PERIOD} sesiones y vende cuando la pierde), con comisión del 0,1 % y
+deslizamiento del 0,05 %. Las variantes venden antes, en cuanto la subida muestra señales de
+agotamiento; la de re-entrada vuelve a comprar cuando desaparecen. Salir por agotamiento acabó
+con más dinero en <b>{helped} de {tested}</b> activos y con menos caída máxima en
+<b>{safer}</b>; con re-entrada, más dinero en <b>{helped_re}</b> y menos caída en
+<b>{safer_re}</b>.</p>
+<table><tr><th>Activo</th><th>Comprar y mantener</th>{heads}<th>Mejor de las tres</th></tr>
+{"".join(body)}</table>"""
+
+
 def comparison_html(result: ExhaustionComparison, generated: datetime) -> str:
     p = result.params
     useful_up = result.by_reading(UP)[READ_USEFUL]
@@ -303,6 +401,7 @@ en algún plazo (10 o 20 sesiones) sin que el otro diga lo contrario.</li></ul><
 <h2 class="section-title newpage">Agotamiento de las bajadas (¿subió después?)</h2>
 {_groups(result, DOWN)}
 {_table(result, DOWN)}
+{_exits_table(result)}
 <footer>Análisis de Acciones · Datos: Yahoo Finance (pueden contener retrasos o errores).
 Comparar muchos activos aumenta la probabilidad de encontrar alguno «que funcionó» por
 casualidad. No es asesoramiento financiero.</footer>

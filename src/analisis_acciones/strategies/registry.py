@@ -58,21 +58,32 @@ def exhaustion_exit(bars: pd.DataFrame, p: dict[str, Any]) -> pd.Series:
     return signal_series(bars, params) > 0
 
 
+def exhaustion_variants(bars: pd.DataFrame, period: int,
+                        exhausted: pd.Series) -> dict[str, pd.DataFrame]:  # fmt: skip
+    """Signals of the trend strategy without / with the exhaustion exit / with re-entry.
+
+    ``exhausted``: bars with up-trend exhaustion signs. Keys: ``trend``, ``exit``, ``reentry``.
+    """
+    close = bars["close"]
+    average = f.sma(close, period)
+    base = trend_only(bars, {"period": period})
+    faded = exhausted.shift(1, fill_value=False) & ~exhausted & (close > average)
+    return {
+        "trend": base,
+        "exit": _signals(base["entry"], base["exit"] | exhausted),
+        "reentry": _signals(base["entry"] | faded, base["exit"] | exhausted),
+    }
+
+
 def trend_exhaustion(bars: pd.DataFrame, p: dict[str, Any]) -> pd.DataFrame:
     """``trend_only`` that also exits as soon as the rise shows exhaustion signs."""
-    base = trend_only(bars, p)
-    return _signals(base["entry"], base["exit"] | exhaustion_exit(bars, p))
+    return exhaustion_variants(bars, int(p["period"]), exhaustion_exit(bars, p))["exit"]
 
 
 def trend_exhaustion_reentry(bars: pd.DataFrame, p: dict[str, Any]) -> pd.DataFrame:
     """``trend_exhaustion`` that buys again when the exhaustion signs fade while the close is
     still above its average (instead of waiting for a new cross)."""
-    close = bars["close"]
-    average = f.sma(close, int(p["period"]))
-    exhausted = exhaustion_exit(bars, p)
-    faded = exhausted.shift(1, fill_value=False) & ~exhausted & (close > average)
-    base = trend_only(bars, p)
-    return _signals(base["entry"] | faded, base["exit"] | exhausted)
+    return exhaustion_variants(bars, int(p["period"]), exhaustion_exit(bars, p))["reentry"]
 
 
 @dataclass(frozen=True)

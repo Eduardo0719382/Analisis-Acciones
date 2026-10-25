@@ -205,12 +205,15 @@ blanco porque su motor se detuvo, se recarga automáticamente.
   diferencia sea azar y una lectura («Anticipó bajadas/rebotes», «La subida/bajada siguió», «Sin
   diferencia», «Pocos casos»). Usa los umbrales de la pestaña Agotamiento. Exporta un informe
   visual (HTML o PDF, con barras «tras la señal» frente a «día normal») o un CSV.
+  La pestaña **¿Compensó salir?** ejecuta en cada activo la estrategia de tendencia sin salida
+  por agotamiento, con salida y con salida y re-entrada (mismos costes) y cuenta en cuántos
+  activos salir acabó con más dinero o con menos caída máxima.
 - **Backtesting:** *Herramientas → Backtesting…* (Ctrl+B) sobre el activo e intervalo del
   gráfico. Estrategias: cruce de EMAs y reversión con RSI, con parámetros editables, capital,
   comisión (% y fija) y deslizamiento. Muestra capital final, rentabilidad, operaciones,
   ganadoras/perdedoras, % de acierto, caída máxima, factor de beneficio, comparación con
   comprar y mantener, curva de capital y lista de operaciones. Señal al cierre, ejecución en la
-  apertura siguiente (sin ventaja de información futura). **Tendencia con salida por
+  apertura siguiente (sin ventaja de información futura). En criptomonedas compra fracciones (hasta 8 decimales). **Tendencia con salida por
   agotamiento:** compra cuando el cierre cruza al alza su media (50 por defecto) y vende cuando
   la cruza a la baja o, antes, en cuanto la subida muestra N señales de agotamiento. Se ejecuta
   también la misma estrategia sin esa salida y se dibuja como tercera curva, con la diferencia

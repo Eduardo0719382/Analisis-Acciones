@@ -260,7 +260,8 @@ BT_FAILED = "No se pudo ejecutar el backtest. Consulte el registro."
 BT_TIMING = (
     "Sin ventaja de información futura: las señales se calculan al cierre de cada barra y las "
     "órdenes se ejecutan en la apertura de la barra siguiente. Solo posiciones largas, con todo "
-    "el capital disponible y acciones enteras."
+    "el capital disponible y acciones enteras (en criptomonedas, fracciones de hasta 8 "
+    "decimales)."
 )
 BT_STATS = (
     ("initial", "Capital inicial"),
@@ -484,6 +485,26 @@ EXC_COLUMNS = [
     "Subidas: casos", "Subidas: % que bajó", "Subidas: p (azar)", "Subidas: lectura",
     "Bajadas: casos", "Bajadas: % que subió", "Bajadas: p (azar)", "Bajadas: lectura",
 ]  # fmt: skip
+EXC_TAB_RECORD = "Historial de las señales"
+EXC_TAB_EXITS = "¿Compensó salir?"
+EXC_EXIT_NAMES = {
+    "trend": "Tendencia sin salida",
+    "exit": "Salida por agotamiento",
+    "reentry": "Salida y re-entrada",
+}
+EXC_EXIT_COLUMNS = [
+    "Activo", "Comprar y mantener",
+    "Tendencia: rentab.", "Tendencia: caída máx.",
+    "Salida: rentab.", "Salida: caída máx.",
+    "Re-entrada: rentab.", "Re-entrada: caída máx.",
+    "Mejor de las tres",
+]  # fmt: skip
+EXC_EXITS_SUMMARY = (
+    "Estrategia de tendencia (cierre frente a su media de 50) en cada activo, con comisión 0,1 % "
+    "y deslizamiento 0,05 %. Salir por agotamiento acabó con más dinero en {helped} de {tested} "
+    "activos y con menos caída máxima en {safer}; con re-entrada, más dinero en {helped_re} y "
+    "menos caída en {safer_re}. Resultado pasado, no garantía."
+)
 EXC_SUMMARY_UP = (
     "Agotamiento de las subidas: anticipó bajadas en {useful} de {total} activos ({names}); la "
     "subida siguió más de lo normal en {cont}."

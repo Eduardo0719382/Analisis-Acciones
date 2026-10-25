@@ -109,3 +109,40 @@ def test_window_runs_and_exports(qtbot: QtBot, market: MarketDataService,
     dialog.symbol_activated.connect(seen.append)
     dialog._activate(0, 0)
     assert seen and seen[0] in ("AAA", "BBB")
+
+
+def test_exit_backtests_match_the_single_asset_strategies() -> None:
+    from analisis_acciones.backtesting.engine import BacktestConfig
+    from analisis_acciones.models.market import BarSeries, Interval
+    from analisis_acciones.services.exhaustion_compare import exit_test
+    from analisis_acciones.ui.backtest_dialog import run_strategy
+
+    bars = long_series()
+    test = exit_test("AAA", bars)
+    series = BarSeries("AAA", Interval.D1, bars, "synthetic")
+    params = {"period": 50, "conditions": 3, "rsi_high": 70}
+    config = BacktestConfig()
+    assert test.stats["exit"] == run_strategy(series, "trend_exhaustion", params, config).stats
+    reentry = run_strategy(series, "trend_exhaustion_reentry", params, config)
+    assert test.stats["reentry"] == reentry.stats
+    assert test.stats["trend"] == reentry.reference_stats
+    assert test.best() in ("trend", "exit", "reentry")
+
+
+def test_exit_results_in_window_and_exports(qtbot: QtBot, market: MarketDataService,
+                                            tmp_path: Path) -> None:  # fmt: skip
+    dialog = ExhaustionCompareDialog(market, ["AAA", "BBB"])
+    qtbot.addWidget(dialog)
+    dialog.open_after_export = False
+    dialog.run()
+    qtbot.waitUntil(lambda: dialog.comparison is not None, timeout=20000)
+    assert dialog.exits_table.rowCount() == 2
+    assert "Salir por agotamiento acabó con más dinero en" in dialog.exits_summary.text()
+    comparison = dialog.comparison
+    assert comparison is not None
+    tested, helped, safer = comparison.exit_counts("exit")
+    assert tested == 2 and 0 <= helped <= 2 and 0 <= safer <= 2
+    text = comparison_csv(comparison)
+    assert "reentry_rentabilidad_pct" in text.splitlines()[0]
+    html = comparison_html(comparison, datetime(2026, 1, 1))
+    assert "¿Habría compensado salir por agotamiento?" in html

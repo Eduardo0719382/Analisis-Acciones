@@ -134,7 +134,10 @@ bien» es engañoso: con pocos casos el resultado puede ser casualidad.</p>
 <p><i>Herramientas → Agotamiento en varios activos…</i> hace la misma medición en toda la lista:
 para cada activo, cuántas veces aparecieron las señales, en qué % el precio giró después frente
 a un día normal y si la diferencia puede ser azar, con una lectura en palabras. Se exporta como
-informe visual (HTML/PDF) o CSV. Al comparar muchos activos, alguno parecerá que «funciona» por
+informe visual (HTML/PDF) o CSV. La pestaña <b>¿Compensó salir?</b> prueba en cada activo la
+estrategia de tendencia sin salida, con salida por agotamiento y con re-entrada, y cuenta dónde
+salir acabó con más dinero o con menos caída. Al comparar muchos activos, alguno parecerá que
+«funciona» por
 pura suerte.</p>
 <h3>Proyección</h3>
 <p>Rangos estadísticos para las próximas barras (cono de volatilidad o canal de regresión) con

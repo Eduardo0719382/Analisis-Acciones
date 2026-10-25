@@ -1026,3 +1026,14 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   show every signal: the option only reduces notifications.
 - On by default because a notice the asset's own history does not support is mostly noise;
   the notice still is a description of the past, never a forecast.
+
+## D-068 — Exit backtests across assets; fractional crypto backtests
+
+- `exhaustion_variants` builds the three trend variants (no exit, exhaustion exit, exit with
+  re-entry) from one exhaustion series; the single-asset strategies and the multi-asset window
+  use it, and a test checks both give identical statistics.
+- The multi-asset window runs the three variants with the default costs on every asset and the
+  stored thresholds, and reports how many assets ended with more money or a smaller drawdown.
+- The backtest engine bought whole shares only, so a coin priced above the capital (BTC)
+  never traded. `BacktestConfig.fractional` buys fractions down to 1e-8 and is set for
+  crypto symbols; stocks keep whole shares so earlier results do not change.

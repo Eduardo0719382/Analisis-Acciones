@@ -33,8 +33,10 @@ from PySide6.QtWidgets import (
 from analisis_acciones.backtesting.engine import BacktestConfig, BacktestResult, run_backtest
 from analisis_acciones.backtesting.statistics import Statistics, compute_statistics
 from analisis_acciones.data.export import backtest_summary_csv, backtest_trades_csv, equity_csv
+from analisis_acciones.data.freshness import is_crypto
 from analisis_acciones.models.errors import AppError, user_message_for
 from analisis_acciones.models.market import BarSeries
+from analisis_acciones.services.portfolio_report import qty
 from analisis_acciones.strategies.registry import (
     STRATEGIES,
     STRATEGY_REGISTRY,
@@ -222,7 +224,8 @@ class BacktestDialog(QDialog):
     def run(self) -> None:
         self.error.setText("")
         config = BacktestConfig(self.capital.value(), self.commission.value(),
-                                self.fixed.value(), self.slippage.value())  # fmt: skip
+                                self.fixed.value(), self.slippage.value(),
+                                fractional=is_crypto(self._series.symbol))  # fmt: skip
         strategy_id, params, series = str(self.strategy.currentData()), self._params(), self._series
         self.run_button.setEnabled(False)
 
@@ -338,7 +341,7 @@ class BacktestDialog(QDialog):
                 f"{trade.entry_date:%d/%m/%Y}", money(trade.entry_price),
                 f"{trade.exit_date:%d/%m/%Y}" if trade.exit_date else strings.BT_OPEN,
                 money(trade.exit_price) if trade.exit_price is not None else money(last_close),
-                str(trade.shares), money(pnl),
+                qty(trade.shares), money(pnl),
             ]  # fmt: skip
             for c, text in enumerate(cells):
                 self.trades.setItem(r, c, QTableWidgetItem(text))

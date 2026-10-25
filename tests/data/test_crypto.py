@@ -161,3 +161,20 @@ def test_portfolio_with_crypto_is_valued_every_day() -> None:
     assert per.loc["2024-06-08", "BTC-USD"] != per.loc["2024-06-07", "BTC-USD"]
     stocks_only, _ = daily_values(trades[1:], 10_000, {"SPY": spy}, date(2024, 6, 30))
     assert (pd.DatetimeIndex(stocks_only.index).day_of_week < 5).all()
+
+
+def test_backtest_buys_fractions_of_an_expensive_coin() -> None:
+    from analisis_acciones.backtesting.engine import BacktestConfig, run_backtest
+
+    bars = crypto_daily(days=30)
+    bars[["open", "high", "low", "close", "adj_close"]] *= 600  # about 60 000 per coin
+    signals = pd.DataFrame({"entry": False, "exit": False}, index=bars.index)
+    signals.iloc[2, 0] = True
+    whole = run_backtest(bars, signals, BacktestConfig(10_000))
+    assert whole.open_trade is None and whole.notes  # cannot buy one whole coin
+    frac = run_backtest(bars, signals, BacktestConfig(10_000, fractional=True))
+    assert frac.open_trade is not None
+    shares = frac.open_trade.shares
+    assert 0 < shares < 1 and round(shares, 8) == shares
+    spent = shares * frac.open_trade.entry_price + frac.open_trade.entry_commission
+    assert 9_990 < spent <= 10_000

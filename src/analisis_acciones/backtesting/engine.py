@@ -21,6 +21,8 @@ import pandas as pd
 
 from analisis_acciones.models.errors import UserError
 
+FRACTION = 100_000_000  # smallest fraction bought when fractional (1e-8)
+
 
 @dataclass(frozen=True)
 class BacktestConfig:
@@ -28,6 +30,8 @@ class BacktestConfig:
     commission_pct: float = 0.1  # percent of traded value
     commission_fixed: float = 0.0  # per order, in account currency
     slippage_pct: float = 0.05  # percent
+    #: Buy fractions (8 decimals, as crypto exchanges do) instead of whole shares.
+    fractional: bool = False
 
     def validate(self) -> None:
         if not self.initial_capital > 0:
@@ -42,7 +46,7 @@ class BacktestConfig:
 class Trade:
     entry_date: date
     entry_price: float
-    shares: int
+    shares: float  # whole shares unless the config is fractional
     entry_commission: float
     exit_date: date | None = None
     exit_price: float | None = None
@@ -105,7 +109,9 @@ def run_backtest(
         # 1) Execute the order decided at the previous close, at this bar's open.
         if pending == "buy" and position is None:
             price = float(opens[i] * (1 + slip))
-            shares = math.floor((cash - config.commission_fixed) / (price * (1 + comm)))
+            affordable = (cash - config.commission_fixed) / (price * (1 + comm))
+            shares: float = (math.floor(affordable * FRACTION) / FRACTION if config.fractional
+                             else math.floor(affordable))  # fmt: skip
             if shares > 0:
                 commission = float(price * shares * comm + config.commission_fixed)
                 cash -= price * shares + commission
