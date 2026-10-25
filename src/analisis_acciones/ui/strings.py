@@ -33,6 +33,23 @@ ACTION_RESET_LAYOUT = "&Restablecer diseño"
 ACTION_DISCLAIMER = "&Aviso legal"
 ACTION_ABOUT = "A&cerca de"
 ACTION_GUIDE = "&Guía de uso"
+ACTION_SOFTWARE_GRAPHICS = "Gráficos compatibles (sin aceleración)"
+SOFTWARE_GRAPHICS_TIP = (
+    "Dibuja los gráficos sin la tarjeta gráfica. Úselo si el programa se cierra solo o los "
+    "gráficos aparecen en blanco. Se aplica al reiniciar el programa."
+)
+SOFTWARE_GRAPHICS_RESTART = "El modo de gráficos se aplicará la próxima vez que abra el programa."
+UNCLEAN_EXIT_TITLE = "El programa se cerró de forma inesperada"
+UNCLEAN_EXIT_TEXT = (
+    "La última vez el programa no se cerró correctamente. Sus datos están a salvo (se guardan "
+    "al momento).\n\nSi vuelve a ocurrir, los detalles técnicos están en la carpeta de "
+    "registros:\n{log}\n(archivos analisis_acciones.log y crash.log)."
+)
+UNCLEAN_EXIT_SOFTWARE = (
+    "Como ha ocurrido varias veces seguidas, se ha activado «Ver → Gráficos compatibles (sin "
+    "aceleración)», que evita los fallos de algunas tarjetas gráficas. Puede desactivarlo en "
+    "el mismo menú."
+)
 GUIDE_TITLE = "Guía de uso"
 
 ABOUT_TEXT = (
@@ -118,6 +135,11 @@ CHART_LOAD_ERROR = (
     "No se pudo iniciar el motor del gráfico. Consulte el registro para más detalles."
 )
 CHART_NO_DATA = "No hay datos para mostrar."
+CHART_RECOVERING = "El motor del gráfico se detuvo; recargándolo…"
+CHART_RENDER_FAILED = (
+    "El motor del gráfico ha fallado varias veces. Active «Ver → Gráficos compatibles (sin "
+    "aceleración)» y reinicie el programa."
+)
 CHART_TYPE_TOOLTIP = "Tipo de gráfico"
 CHART_TYPE_LABELS = {"candles": "Velas", "line": "Línea"}
 LEGEND_OPEN = "A"

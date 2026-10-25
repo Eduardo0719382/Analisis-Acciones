@@ -186,3 +186,45 @@
   chart joined consecutive valued points across those gaps.
 - **Solution:** a single series with a colour per point (green up, red down). There are no gaps;
   the vertical jumps at trend changes are the indicator's real behaviour.
+
+## P-018 — The program sometimes closed by itself (user report)
+
+- **Symptom (reported):** the program sometimes closes without a message. There was no log from
+  the user's PC, so the cause could not be confirmed directly.
+- **Investigation:**
+  - A stress script (`open_symbol`, interval changes, scanner, day summary, portfolio and
+    dialogs closed while their workers run, theme and volume-profile toggles, forced daily scans)
+    drove the real main window for 11 × 800 steps plus 1 × 300: no Python error and no native
+    crash.
+  - Every worker callback checks that its widget still exists, and callbacks run on the GUI
+    thread (checked).
+  - During the stress runs Chromium's GPU process repeatedly logged `SharedImageManager::
+    ProduceMemory … non-existent mailbox` while web views were created and destroyed. On Windows
+    a failing GPU process makes Chromium exit the whole application ("GPU process isn't usable").
+    This is the most likely cause of exits without a message.
+  - Contributing risks found in the code:
+    - Tool windows (scanner, portfolio, summary, comparisons, backtests) were hidden, not
+      destroyed, when closed. Each kept its web engine page and memory for the rest of the
+      session.
+    - The error dialog could be opened from a non-GUI thread, which Qt aborts on. A repeating
+      error could also stack dialogs, each with a nested event loop.
+    - Under `pythonw.exe` `sys.stdout`/`sys.stderr` are None.
+    - A dead chart renderer left a permanent error message.
+- **Changes:**
+  - `app/crash_guard.py`:
+    - `faulthandler` writes native-crash stacks to `logs/crash.log`.
+    - Exceptions in threads, and "unraisable" ones, are logged.
+    - The standard streams are null devices under pythonw.
+    - A session marker detects unexpected exits. The next start explains what happened and
+      where the logs are. After 2 in a row it switches web views to software rendering
+      (`--disable-gpu`), also available in *Ver → Gráficos compatibles (sin aceleración)*.
+  - The error dialog is shown only from the GUI thread, one at a time, at most every 10 s.
+  - Tool windows are deleted when closed (`WA_DeleteOnClose`).
+  - Renderer failure: the chart reloads its page and replays data, overlays and drawings, up to
+    3 times in 10 minutes. After that it suggests compatible graphics. Tested by killing the
+    real renderer process.
+- **Status:** mitigated. If it still happens, `crash.log` and `analisis_acciones.log` in the
+  logs folder will show where.
+- **Test-suite note:** one full test run during this work ended with a native crash dump. 9
+  further full runs and 25 targeted runs did not reproduce it. This matches the known
+  teardown crash P-015 (test-only).

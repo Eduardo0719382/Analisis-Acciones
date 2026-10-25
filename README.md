@@ -57,6 +57,13 @@ Los datos (base de datos SQLite y registros) se guardan en el directorio de dato
 usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la variable
 `ANALISIS_ACCIONES_HOME` (véase `.env.example`).
 
+**Si el programa se cierra solo:** al volver a abrirlo avisa de que la sesión anterior terminó
+de forma inesperada e indica la carpeta de registros (`logs\analisis_acciones.log` y
+`logs\crash.log` dentro del directorio de datos). Si ocurre dos veces seguidas activa solo
+*Ver → Gráficos compatibles (sin aceleración)*, que evita los fallos de algunas tarjetas
+gráficas; también puede activarlo a mano (se aplica al reiniciar). Si el gráfico se queda en
+blanco porque su motor se detuvo, se recarga automáticamente.
+
 ## Uso
 
 - **Guía de uso** (*Ayuda → Guía de uso*, F1): explica dentro del programa cada parte, cómo

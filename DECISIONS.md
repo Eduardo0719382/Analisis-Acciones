@@ -782,3 +782,14 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
 - Growth and margin limits may be negative ("shrinking less than 5 %"), so "no limit" is the
   spin box minimum (shown as "sin límite"), not 0.
 - Same rule as D-043: missing data never passes an active limit.
+
+## D-049 — Crash resilience
+
+- Native crashes cannot be caught in Python, so the strategy is: avoid known triggers,
+  recover what can be recovered, and leave evidence (see P-018).
+- Software rendering is not the default: GPU compositing is smoother on most PCs. It switches on
+  automatically only after two consecutive unexpected exits, and can be toggled in *Ver*. It is
+  stored as a flag file in the data directory because it must be known before the
+  `QApplication` (and Chromium) start, before the database is opened.
+- The renderer recovery replays the last data, overlay and drawing scripts instead of asking
+  every panel to redraw. The chart widget is the single place that knows what the page shows.

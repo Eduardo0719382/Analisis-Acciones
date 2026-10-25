@@ -12,6 +12,12 @@ from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
 from analisis_acciones import __version__
 from analisis_acciones.alerts.service import AlertService
+from analisis_acciones.app.crash_guard import (
+    SessionGuard,
+    apply_software_rendering,
+    ensure_std_streams,
+    install_diagnostics,
+)
 from analisis_acciones.app.error_handler import install_excepthook
 from analisis_acciones.app.logging_setup import configure_logging
 from analisis_acciones.app.paths import APP_NAME, AppPaths
@@ -60,6 +66,7 @@ def _start_smoke_test(app: QApplication, window: MainWindow) -> None:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    ensure_std_streams()
     args = list(argv) if argv is not None else sys.argv[1:]
     smoke_test = SMOKE_TEST_FLAG in args
     paths = AppPaths.default()
@@ -70,9 +77,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     log_file = configure_logging(paths.logs)
+    crash_log = install_diagnostics(paths.logs)
     logger.info("Starting %s %s (data dir: %s)", APP_NAME, __version__, paths.root)
-
+    guard = SessionGuard(paths.root)
+    start = guard.begin()
+    if start.previous_unclean:
+        logger.warning(
+            "Previous session ended unexpectedly (%d in a row); see %s",
+            start.consecutive_unclean,
+            crash_log,
+        )
     existing = QApplication.instance()
+    if start.software_rendering and existing is None:
+        logger.info("Using software rendering for web views")
+        apply_software_rendering()
+
     app = (
         existing
         if isinstance(existing, QApplication)
@@ -96,6 +115,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             strings.ERROR_TITLE,
             f"{strings.STARTUP_ERROR}\n\n{user_message_for(exc)}\n\nRegistro: {log_file}",
         )
+        guard.end()
         return 1
 
     window: MainWindow | None = None
@@ -121,6 +141,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             alert_service=alerts,
             drawing_service=DrawingService(conn),
             portfolio_service=PaperPortfolioService(portfolio_conn, market),
+            session_guard=guard,
         )
         window.show()
         if smoke_test:
@@ -131,6 +152,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             window.start_alert_schedule()
             window.start_daily_scan()
             window.show_day_summary_on_start()
+            # Bound to the window: cancelled automatically if the window is destroyed first.
+            notice_window = window
+            QTimer.singleShot(
+                1500,
+                notice_window,
+                lambda: notice_window.show_unclean_exit_notice(start, crash_log),
+            )
         code = app.exec()
         restart = window.restart_requested
     finally:
@@ -155,6 +183,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         else:
             market_conn.close()
         conn.close()
+        guard.end()
         logger.info("Shutdown complete")
 
     if restart:

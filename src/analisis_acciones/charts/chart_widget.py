@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import asdict
 from importlib import resources
 from pathlib import Path
 from typing import Any
 
 import shiboken6
-from PySide6.QtCore import QLocale, QObject, Qt, QUrl, Signal, Slot
+from PySide6.QtCore import QLocale, QObject, Qt, QTimer, QUrl, Signal, Slot
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -33,6 +34,10 @@ logger = logging.getLogger(__name__)
 
 CHART_TYPES = ("candles", "line")
 FALLBACK_LOCALE = "es-ES"
+# Renderer failures: reload the page up to MAX_RECOVERIES times within RECOVERY_WINDOW_S.
+MAX_RECOVERIES = 3
+RECOVERY_WINDOW_S = 600.0
+RECOVERY_DELAY_MS = 500
 
 
 def chart_page_path() -> Path:
@@ -135,6 +140,10 @@ class ChartWidget(QWidget):
         self._title = ""
         self._render_seq = 0
         self._workers: set[Worker] = set()
+        #: Latest overlay/drawing scripts, replayed after the page is reloaded.
+        self._state_scripts: dict[str, str] = {}
+        self._recovering = False
+        self._crash_times: list[float] = []
 
         self.message = QLabel(strings.EMPTY_CHART)
         self.message.setObjectName("panelEmpty")
@@ -181,15 +190,36 @@ class ChartWidget(QWidget):
             return
         self._loaded = True
         self._configure()
+        if self._recovering:
+            self._recovering = False
+            self._pending.clear()  # superseded by the full replay below
+            self._run(self._call("setChartType", self._chart_type))
+            if self.current_series is not None:
+                self._render(keep_range=False, replay_state=True)
+                self._stack.setCurrentIndex(1)
+            logger.info("Chart page recovered after a renderer failure")
         for script in self._pending:
             self.view.page().runJavaScript(script)
         self._pending.clear()
         self.ready.emit()
 
     def _on_render_crash(self, status: object, code: int) -> None:
+        """The page's renderer process died: reload it and redraw (a few times at most)."""
         logger.error("Chart renderer terminated (status=%s, code=%s)", status, code)
         self._loaded = False
-        self.show_message(strings.CHART_LOAD_ERROR, error=True)
+        now = time.monotonic()
+        self._crash_times = [t for t in self._crash_times if now - t < RECOVERY_WINDOW_S]
+        self._crash_times.append(now)
+        if len(self._crash_times) > MAX_RECOVERIES:
+            self.show_message(strings.CHART_RENDER_FAILED, error=True)
+            return
+        self.show_message(strings.CHART_RECOVERING)
+        self._recovering = True
+        QTimer.singleShot(RECOVERY_DELAY_MS, self._reload_page)
+
+    def _reload_page(self) -> None:
+        if shiboken6.isValid(self):
+            self.view.load(QUrl.fromLocalFile(str(chart_page_path())))
 
     def _run(self, script: str) -> None:
         if self._loaded:
@@ -249,7 +279,7 @@ class ChartWidget(QWidget):
         if self.current_series is not None and self._theme is not None:
             self._render(keep_range=True)
 
-    def _render(self, *, keep_range: bool) -> None:
+    def _render(self, *, keep_range: bool, replay_state: bool = False) -> None:
         """Build the page payload in a worker thread; only the latest request is applied.
 
         Computing indicators and serialising ~10k bars takes long enough
@@ -275,6 +305,9 @@ class ChartWidget(QWidget):
                 return  # superseded by a newer request
             script, failed = result
             self._run(script)
+            if replay_state:
+                for state_script in self._state_scripts.values():
+                    self._run(state_script)
             self.rendered.emit()
             if failed:
                 self.indicators_failed.emit(failed)
@@ -296,12 +329,16 @@ class ChartWidget(QWidget):
     # Overlays ----------------------------------------------------------------
     def set_overlay(self, group: str, items: list[dict[str, Any]]) -> None:
         """Replace one named group of overlay items (projection, Elliott, ...)."""
-        self._run(f"window.chartApp && window.chartApp.setOverlay({json.dumps(group)}, "
+        script = (f"window.chartApp && window.chartApp.setOverlay({json.dumps(group)}, "
                   f"{json.dumps(items, allow_nan=False)});")  # fmt: skip
+        self._state_scripts[f"overlay:{group}"] = script
+        self._run(script)
 
     # Drawings ----------------------------------------------------------------
     def set_drawings(self, drawings: list[Drawing]) -> None:
-        self._run(self._call("setDrawings", [d.to_payload() for d in drawings]))
+        script = self._call("setDrawings", [d.to_payload() for d in drawings])
+        self._state_scripts["drawings"] = script
+        self._run(script)
 
     def set_draw_mode(self, mode: str | None) -> None:
         hints = {"first": strings.DRAW_HINTS.get(mode or "", ("", ""))[0],

@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
 
 from analisis_acciones import __version__
 from analisis_acciones.alerts.service import AlertEvent, AlertService
+from analisis_acciones.app.crash_guard import SessionGuard, SessionStart
 from analisis_acciones.charts.chart_widget import ChartWidget
 from analisis_acciones.charts.overlays import (
     elliott_overlay,
@@ -116,9 +117,11 @@ class MainWindow(QMainWindow):
         alert_service: AlertService | None = None,
         drawing_service: DrawingService | None = None,
         portfolio_service: PaperPortfolioService | None = None,
+        session_guard: SessionGuard | None = None,
     ) -> None:
         super().__init__(parent)
         self._settings = settings
+        self._session_guard = session_guard
         self._update_service = update_service
         self.market = MarketController(market_service, self) if market_service else None
         self._watchlists = watchlist_service
@@ -383,6 +386,15 @@ class MainWindow(QMainWindow):
         self.benchmark_choose_action.triggered.connect(self.choose_benchmark)
         view_menu.addAction(self.benchmark_choose_action)
         self._update_benchmark_label()
+        self.software_graphics_action = QAction(strings.ACTION_SOFTWARE_GRAPHICS, self)
+        self.software_graphics_action.setCheckable(True)
+        self.software_graphics_action.setToolTip(strings.SOFTWARE_GRAPHICS_TIP)
+        self.software_graphics_action.setStatusTip(strings.SOFTWARE_GRAPHICS_TIP)
+        self.software_graphics_action.setEnabled(self._session_guard is not None)
+        if self._session_guard is not None:
+            self.software_graphics_action.setChecked(self._session_guard.software_rendering)
+        self.software_graphics_action.toggled.connect(self._on_software_graphics_toggled)
+        view_menu.addAction(self.software_graphics_action)
         self.reset_layout_action = QAction(strings.ACTION_RESET_LAYOUT, self)
         self.reset_layout_action.triggered.connect(self.reset_layout)
         view_menu.addAction(self.reset_layout_action)
@@ -409,6 +421,22 @@ class MainWindow(QMainWindow):
         about_action = QAction(strings.ACTION_ABOUT, self)
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
+
+    def _on_software_graphics_toggled(self, enabled: bool) -> None:
+        if self._session_guard is None:
+            return
+        self._session_guard.set_software_rendering(enabled)
+        logger.info("Software rendering %s (applies after restart)", "on" if enabled else "off")
+        self.statusBar().showMessage(strings.SOFTWARE_GRAPHICS_RESTART, 15000)
+
+    def show_unclean_exit_notice(self, start: SessionStart, crash_log: Path) -> None:
+        """Explain, once per start, that the previous session ended unexpectedly."""
+        if not start.previous_unclean:
+            return
+        text = strings.UNCLEAN_EXIT_TEXT.format(log=crash_log.parent)
+        if start.switched_to_software:
+            text += "\n\n" + strings.UNCLEAN_EXIT_SOFTWARE
+        QMessageBox.information(self, strings.UNCLEAN_EXIT_TITLE, text)
 
     def open_guide(self) -> None:
         if self._guide_dialog is None or not shiboken6.isValid(self._guide_dialog):
@@ -800,6 +828,7 @@ class MainWindow(QMainWindow):
         dialog = ScannerDialog(self.market.service, symbols, self)
         dialog.symbol_activated.connect(self.open_symbol)
         dialog.show()
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self._scanner_dialog = dialog
         if symbols:
             dialog.run()
@@ -869,6 +898,7 @@ class MainWindow(QMainWindow):
         dialog.symbol_activated.connect(self.open_symbol)
         dialog.show_result(result)
         dialog.show()
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self._scanner_dialog = dialog
 
     def open_day_summary(self) -> None:
@@ -886,6 +916,7 @@ class MainWindow(QMainWindow):
         dialog.symbol_activated.connect(self.open_symbol)
         dialog.show()
         dialog.refresh()
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self._summary_dialog = dialog
 
     def show_day_summary_on_start(self) -> None:
@@ -905,6 +936,7 @@ class MainWindow(QMainWindow):
                                  "" if symbol.startswith("CSV:") else symbol, self)  # fmt: skip
         dialog.symbol_activated.connect(self.open_symbol)
         dialog.show()
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self._portfolio_dialog = dialog
 
     def open_pattern_backtest(self) -> None:
@@ -913,6 +945,7 @@ class MainWindow(QMainWindow):
         dialog = PatternBacktestDialog(self.market.service, self._candidate_symbols(), self)
         dialog.symbol_activated.connect(self.open_symbol)
         dialog.show()
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self._pattern_backtest_dialog = dialog
 
     def open_comparison(self) -> None:
@@ -922,6 +955,7 @@ class MainWindow(QMainWindow):
         dialog = ComparisonDialog(self.market.service, tokens_for(self._settings.theme()),
                                   symbols, self)  # fmt: skip
         dialog.show()
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self._comparison_dialog = dialog
 
     def open_backtest(self) -> None:
@@ -934,6 +968,7 @@ class MainWindow(QMainWindow):
         dialog = BacktestDialog(series, f"{series.symbol} · {interval}",
                                 tokens_for(self._settings.theme()), self)  # fmt: skip
         dialog.show()
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self._backtest_dialog = dialog
 
     def edit_indicators(self) -> None:
