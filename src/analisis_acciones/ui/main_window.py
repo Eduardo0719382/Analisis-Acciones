@@ -40,6 +40,7 @@ from analisis_acciones.app.crash_guard import SessionGuard, SessionStart
 from analisis_acciones.charts.chart_widget import ChartWidget
 from analisis_acciones.charts.overlays import (
     elliott_overlay,
+    exhaustion_overlay,
     levels_overlay,
     patterns_overlay,
     projection_overlay,
@@ -287,7 +288,8 @@ class MainWindow(QMainWindow):
         self.right_tabs.addTab(self.patterns_panel, strings.TAB_PATTERNS)
         self.fundamentals_panel = FundamentalsPanel(self.market.service if self.market else None)
         self.right_tabs.addTab(self.fundamentals_panel, strings.TAB_FUNDAMENTALS)
-        self.exhaustion_panel = ExhaustionPanel()
+        self.exhaustion_panel = ExhaustionPanel(self._settings)
+        self.exhaustion_panel.markers_ready.connect(self._draw_exhaustion)
         self.right_tabs.insertTab(self.right_tabs.indexOf(self.analysis_panel) + 1,
                                   self.exhaustion_panel, strings.TAB_EXHAUSTION)  # fmt: skip
         self.right_tabs.currentChanged.connect(self._on_right_tab_changed)
@@ -857,6 +859,16 @@ class MainWindow(QMainWindow):
                                        tokens.accent + "99", tokens.text_muted)  # fmt: skip
         self.chart.set_overlay("profile", items)
 
+    def _draw_exhaustion(self, view: object) -> None:
+        if not isinstance(view, tuple):
+            self.chart.set_overlay("exhaustion", [])
+            return
+        index, signals = view
+        tokens = tokens_for(self._settings.theme())
+        items = exhaustion_overlay(signals, chart_times(index),
+                                   {"up": tokens.up, "down": tokens.down})  # fmt: skip
+        self.chart.set_overlay("exhaustion", items)
+
     def _draw_patterns(self, view: object) -> None:
         if not isinstance(view, PatternsView):
             self.chart.set_overlay("levels", [])
@@ -1007,7 +1019,9 @@ class MainWindow(QMainWindow):
         if self.market is None:
             return
         symbols = self._candidate_symbols()
-        dialog = ScannerDialog(self.market.service, symbols, self)
+        dialog = ScannerDialog(
+            self.market.service, symbols, self, self._settings.exhaustion_params()
+        )
         dialog.symbol_activated.connect(self.open_symbol)
         dialog.show()
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
@@ -1076,7 +1090,12 @@ class MainWindow(QMainWindow):
         if self.market is None or self.daily_scan is None or self.daily_scan.last_result is None:
             return
         result = self.daily_scan.last_result
-        dialog = ScannerDialog(self.market.service, [r.symbol for r in result.rows], self)
+        dialog = ScannerDialog(
+            self.market.service,
+            [r.symbol for r in result.rows],
+            self,
+            self._settings.exhaustion_params(),
+        )
         dialog.symbol_activated.connect(self.open_symbol)
         dialog.show_result(result)
         dialog.show()

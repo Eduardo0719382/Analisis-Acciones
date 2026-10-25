@@ -146,7 +146,12 @@ blanco porque su motor se detuvo, se recarga automáticamente.
   frente a un día cualquiera de la misma tendencia, con una prueba estadística que indica si la
   diferencia puede deberse al azar. No dice cuándo terminará una tendencia ni es una
   recomendación. El escáner tiene la columna y el filtro «Agotamiento», y el escaneo diario
-  avisa cuando aparecen estas señales en un activo de la lista.
+  avisa cuando aparecen estas señales en un activo de la lista. *Marcar en el gráfico las veces
+  anteriores* dibuja una flecha donde empezaron las señales en el pasado (▼ encima: fin posible
+  de una subida; ▲ debajo: de una bajada; el número es cuántas condiciones se cumplían).
+  **Umbrales…** cambia el RSI de sobrecompra/sobreventa, la distancia en ATR, el volumen, el
+  movimiento inusual y las condiciones necesarias; el historial se recalcula y se muestra junto
+  al de los valores por defecto. Los mismos umbrales usan el escáner y el escaneo diario.
 - **Proyección (pestaña del panel derecho):** rangos estadísticos para las próximas N barras,
   dibujados sobre el gráfico (P5, P25, mediana, P75, P95). *Cono de volatilidad*: parte del
   último cierre, sin tendencia supuesta, con la volatilidad de la ventana elegida. *Canal de

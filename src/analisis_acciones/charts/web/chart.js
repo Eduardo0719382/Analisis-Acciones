@@ -23,6 +23,7 @@
     drawingSeries: [],
     drawingLines: [],
     drawingMarkers: null,
+    overlayMarkers: null,
     drawMode: null,
     drawPoints: [],
     drawHints: {},
@@ -101,6 +102,7 @@
     state.drawingSeries = [];
     state.drawingLines = [];
     state.drawingMarkers = null;
+    state.overlayMarkers = null;
     state.priceSeries = null;
     state.volumeSeries = null;
     state.indicatorSeries = [];
@@ -288,9 +290,18 @@
     state.overlaySeries = [];
     state.overlayLines = [];
     state.overlayPrimitives = [];
+    const markers = [];
     for (const items of Object.values(state.overlays)) {
       for (const item of items) {
-        if (item.kind === "line" && item.points.length >= 2) {
+        if (item.kind === "markers") {
+          // Signals on the price bars (exhaustion dates): one shape per bar.
+          for (const m of item.markers) {
+            markers.push({
+              time: m.time, position: m.position || "aboveBar", color: m.color || item.color,
+              shape: m.shape || "circle", text: m.text || "",
+            });
+          }
+        } else if (item.kind === "line" && item.points.length >= 2) {
           const s = state.chart.addSeries(LWC.LineSeries, {
             color: item.color, lineWidth: item.width || 1, lineStyle: item.style || 0,
             priceLineVisible: false, lastValueVisible: !!item.lastValue,
@@ -316,6 +327,11 @@
         }
       }
     }
+    markers.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
+    if (markers.length && !state.overlayMarkers) {
+      state.overlayMarkers = LWC.createSeriesMarkers(state.priceSeries, []);
+    }
+    if (state.overlayMarkers) state.overlayMarkers.setMarkers(markers);
   }
 
   // When an overlay reaches past the last bar and the user is looking at the

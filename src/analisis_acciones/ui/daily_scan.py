@@ -70,9 +70,10 @@ class DailyScanController(QObject):
         self.running = True
         market = self._market
         with_calendar = self._settings.calendar_notice_days() > 0
+        params = self._settings.exhaustion_params()
 
         def job() -> tuple[ScanResult, dict[str, Fundamentals]]:
-            result = run_scan(market, symbols)
+            result = run_scan(market, symbols, exhaustion_params=params)
             return result, fetch_fundamentals(market, symbols) if with_calendar else {}
 
         def done(loaded: tuple[ScanResult, dict[str, Fundamentals]]) -> None:

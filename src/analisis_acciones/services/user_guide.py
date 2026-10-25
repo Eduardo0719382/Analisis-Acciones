@@ -114,6 +114,14 @@ banda de Bollinger, movimiento demasiado rápido) y muestra qué pasó antes en 
 misma situación, comparado con un día cualquiera y diciendo si la diferencia puede ser azar.
 Una tendencia puede seguir mucho tiempo «agotada»: no es una señal de compra ni de venta. El
 escaneo diario avisa cuando aparecen estas señales.</p>
+<p><b>Marcar en el gráfico las veces anteriores</b> dibuja una flecha donde empezaron las señales
+en el pasado: ▼ roja encima de la vela (posible fin de una subida) o ▲ azul debajo (posible fin
+de una bajada), con el número de condiciones que se cumplían.</p>
+<p><b>Umbrales…</b> permite cambiar el nivel del RSI, la distancia en ATR, el volumen, el
+movimiento inusual y cuántas condiciones hacen falta. El historial se recalcula al momento y,
+debajo, se muestra el resultado con los valores por defecto para comparar. Los umbrales se usan
+también en el escáner y en el escaneo diario. Ajustar los umbrales hasta que el pasado «salga
+bien» es engañoso: con pocos casos el resultado puede ser casualidad.</p>
 <h3>Proyección</h3>
 <p>Rangos estadísticos para las próximas barras (cono de volatilidad o canal de regresión) con
 percentiles P5–P95. Incluye una <b>calibración histórica</b>: cuántas veces el precio real acabó

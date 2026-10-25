@@ -18,7 +18,9 @@ import numpy as np
 import pandas as pd
 
 from analisis_acciones.analysis.engine import analyze as analyze_signals
+from analisis_acciones.analysis.exhaustion import DEFAULT_PARAMS as EXH_DEFAULT
 from analisis_acciones.analysis.exhaustion import UP as EXH_UP
+from analisis_acciones.analysis.exhaustion import Params as ExhaustionParams
 from analisis_acciones.analysis.exhaustion import assess as assess_exhaustion
 from analisis_acciones.analysis.model import Direction
 from analisis_acciones.indicators.functions import rsi, sma
@@ -98,7 +100,8 @@ class ScanResult:
     cancelled: bool = False
 
 
-def scan_bars(symbol: str, bars: pd.DataFrame) -> ScanRow:
+def scan_bars(symbol: str, bars: pd.DataFrame,
+              exhaustion_params: ExhaustionParams = EXH_DEFAULT) -> ScanRow:  # fmt: skip
     """Scan one symbol's completed daily bars."""
     if len(bars) < MIN_BARS:
         raise ValueError(f"se necesitan al menos {MIN_BARS} sesiones (hay {len(bars)})")
@@ -145,7 +148,7 @@ def scan_bars(symbol: str, bars: pd.DataFrame) -> ScanRow:
         for o, h, lo, c, v in zip(tail["open"], tail["high"], tail["low"], tail["close"],
                                   tail["volume"], strict=True)
     )  # fmt: skip
-    tiredness = assess_exhaustion(bars)
+    tiredness = assess_exhaustion(bars, exhaustion_params)
     exhaustion = 0
     if tiredness.signalled:
         exhaustion = tiredness.met if tiredness.direction == EXH_UP else -tiredness.met
@@ -178,7 +181,8 @@ def scan_bars(symbol: str, bars: pd.DataFrame) -> ScanRow:
 def run_scan(market: MarketDataService, symbols: list[str],
              progress: Callable[[int, int, str], None] | None = None,
              fundamentals: bool = False,
-             cancelled: Callable[[], bool] | None = None) -> ScanResult:  # fmt: skip
+             cancelled: Callable[[], bool] | None = None,
+             exhaustion_params: ExhaustionParams = EXH_DEFAULT) -> ScanResult:  # fmt: skip
     """Scan ``symbols`` (cache-first loads). Problems are reported per symbol, never raised.
 
     With ``fundamentals`` each row also gets its P/E and dividend yield (cached daily);
@@ -196,7 +200,7 @@ def run_scan(market: MarketDataService, symbols: list[str],
             bars = loaded.series.bars
             if loaded.session_in_progress:
                 bars = bars.iloc[:-1]  # same rule as alerts and analysis: completed bars only
-            row = scan_bars(loaded.series.symbol, bars)
+            row = scan_bars(loaded.series.symbol, bars, exhaustion_params)
             if fundamentals:
                 row = _with_fundamentals(market, row, result.problems)
             result.rows.append(row)

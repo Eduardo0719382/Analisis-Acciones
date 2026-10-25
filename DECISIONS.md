@@ -970,3 +970,16 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
 - No company fundamentals: a clear message instead of an empty panel.
 - The paper portfolio keeps its weekday valuation calendar: a weekend crypto trade enters the
   curve on Monday. Accepted for simplicity and documented.
+
+## D-063 — Custom exhaustion thresholds and chart markers
+
+- `exhaustion.Params` holds the RSI levels, ATR multiple, volume ratio, unusual-move limit and
+  the number of conditions needed, each with fixed limits. Stored settings are external data:
+  any invalid value restores all defaults. The divergence condition keeps its 5-point margin
+  relative to the chosen RSI level.
+- The tab, the scanner and the daily scan use the same stored thresholds, so a signal in one
+  place means the same thing in the others.
+- With custom thresholds the tab also shows the record with the default ones, because tuning
+  until the past "looks good" is overfitting; the guide says so.
+- Chart markers show where each run of signals started (not every bar of the run), computed
+  with only the data available at each bar; the bar still forming is never marked.

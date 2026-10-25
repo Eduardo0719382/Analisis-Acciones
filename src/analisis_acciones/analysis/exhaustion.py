@@ -19,12 +19,18 @@ Up-trend exhaustion (possible end of a rise) — prerequisite: close above its
    mean 20-bar return of the previous 500 bars.
 
 Down-trend exhaustion (possible end of a fall) mirrors every rule.
+
+The numbers above are the defaults; ``Params`` lets the user change the RSI
+levels, the ATR multiple, the volume ratio, the unusual-move limit and the
+number of conditions needed (the divergence keeps its 5-point margin relative
+to the RSI level).
 """
 
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, fields
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -39,24 +45,75 @@ SMALL_SAMPLE = 10
 SIGNIFICANCE = 0.05
 Z_WINDOW = 500
 
-CONDITION_NAMES = {
-    UP: (
-        "RSI en sobrecompra (≥ 70)",
-        "Divergencia bajista del RSI",
-        "Precio muy alejado de su media de 50",
-        "Volumen que se apaga en la subida",
-        "Cierre por encima de la banda de Bollinger",
-        "Subida inusualmente rápida",
-    ),
-    DOWN: (
-        "RSI en sobreventa (≤ 30)",
+
+@dataclass(frozen=True)
+class Params:
+    """Thresholds of the six conditions and how many must be met."""
+
+    rsi_high: float = 70.0  # overbought RSI level (up-trend)
+    rsi_low: float = 30.0  # oversold RSI level (down-trend)
+    atr_multiple: float = 3.0  # distance from the 50 SMA, in ATR(14)
+    volume_ratio: float = 0.8  # 10-bar volume below this share of the 50-bar volume
+    z_limit: float = 2.0  # 20-bar move, in standard deviations of the usual one
+    threshold: int = 3  # conditions needed to call it "signs of exhaustion"
+
+    def __post_init__(self) -> None:
+        for f in fields(self):
+            low, high = LIMITS[f.name]
+            value = getattr(self, f.name)
+            if not isinstance(value, int | float) or not low <= value <= high:
+                raise ValueError(f"{f.name}={value!r} outside {low}..{high}")
+        if self.rsi_low >= self.rsi_high:
+            raise ValueError("rsi_low must be below rsi_high")
+
+    def to_dict(self) -> dict[str, float]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, raw: Any) -> Params:
+        """Stored settings (external data): anything invalid falls back to the defaults."""
+        if not isinstance(raw, dict):
+            return cls()
+        values: dict[str, Any] = {}
+        for f in fields(cls):
+            v = raw.get(f.name)
+            if isinstance(v, int | float) and not isinstance(v, bool) and math.isfinite(v):
+                values[f.name] = int(v) if f.name == "threshold" else float(v)
+        try:
+            return cls(**values)
+        except (TypeError, ValueError):
+            return cls()
+
+
+LIMITS: dict[str, tuple[float, float]] = {
+    "rsi_high": (55.0, 95.0),
+    "rsi_low": (5.0, 45.0),
+    "atr_multiple": (0.5, 10.0),
+    "volume_ratio": (0.1, 1.0),
+    "z_limit": (0.5, 5.0),
+    "threshold": (1, 6),
+}
+DEFAULT_PARAMS = Params()
+
+
+def condition_names(direction: str, params: Params = DEFAULT_PARAMS) -> tuple[str, ...]:
+    if direction == UP:
+        return (
+            f"RSI en sobrecompra (≥ {_fmt(params.rsi_high, 0)})",
+            "Divergencia bajista del RSI",
+            "Precio muy alejado de su media de 50",
+            "Volumen que se apaga en la subida",
+            "Cierre por encima de la banda de Bollinger",
+            "Subida inusualmente rápida",
+        )
+    return (
+        f"RSI en sobreventa (≤ {_fmt(params.rsi_low, 0)})",
         "Divergencia alcista del RSI",
         "Precio muy alejado por debajo de su media de 50",
         "Volumen que se apaga en la bajada",
         "Cierre por debajo de la banda de Bollinger",
         "Bajada inusualmente rápida",
-    ),
-}
+    )
 
 
 @dataclass(frozen=True)
@@ -106,6 +163,7 @@ class Assessment:
     outcomes: list[Outcome] = field(default_factory=list)
     as_of: pd.Timestamp | None = None
     reason: str = ""  # why there is no assessment
+    threshold: int = THRESHOLD
 
     @property
     def met(self) -> int:
@@ -117,7 +175,7 @@ class Assessment:
 
     @property
     def signalled(self) -> bool:
-        return self.direction is not None and self.met >= THRESHOLD
+        return self.direction is not None and self.met >= self.threshold
 
     @property
     def small_sample(self) -> bool:
@@ -170,30 +228,30 @@ def _trends(f: _Frame) -> tuple[pd.Series, pd.Series]:
     return (f.close > f.sma50) & rising, (f.close < f.sma50) & falling
 
 
-def _condition_table(f: _Frame, direction: str) -> pd.DataFrame:
+def _condition_table(f: _Frame, direction: str, params: Params = DEFAULT_PARAMS) -> pd.DataFrame:
     """Boolean table: one column per condition, one row per bar (NaN = not evaluable)."""
     up = direction == UP
     close, r = f.close, f.rsi
     if up:
-        extreme = r.rolling(5).max() >= 70
+        extreme = r.rolling(5).max() >= params.rsi_high
         at_extreme = close >= close.rolling(20).max()
         prev = r.shift(1).rolling(20).max()
-        divergence = at_extreme & (prev >= 65) & (r <= prev - 5)
-        stretched = (close - f.sma50) / f.atr > 3
+        divergence = at_extreme & (prev >= params.rsi_high - 5) & (r <= prev - 5)
+        stretched = (close - f.sma50) / f.atr > params.atr_multiple
         band = close > f.upper
-        fast = f.zret > 2
+        fast = f.zret > params.z_limit
         moved = close > close.shift(10)
     else:
-        extreme = r.rolling(5).min() <= 30
+        extreme = r.rolling(5).min() <= params.rsi_low
         at_extreme = close <= close.rolling(20).min()
         prev = r.shift(1).rolling(20).min()
-        divergence = at_extreme & (prev <= 35) & (r >= prev + 5)
-        stretched = (f.sma50 - close) / f.atr > 3
+        divergence = at_extreme & (prev <= params.rsi_low + 5) & (r >= prev + 5)
+        stretched = (f.sma50 - close) / f.atr > params.atr_multiple
         band = close < f.lower
-        fast = f.zret < -2
+        fast = f.zret < -params.z_limit
         moved = close < close.shift(10)
     if f.vol10 is not None and f.vol50 is not None:
-        fading = ((f.vol10 < 0.8 * f.vol50) & moved).astype(float)
+        fading = ((f.vol10 < params.volume_ratio * f.vol50) & moved).astype(float)
     else:
         fading = pd.Series(np.nan, index=close.index)
     table = pd.DataFrame(
@@ -238,10 +296,11 @@ def _details(f: _Frame, direction: str, i: int) -> list[str]:
     ]
 
 
-def _outcomes(f: _Frame, trend: pd.Series, score: pd.Series, direction: str) -> list[Outcome]:
+def _outcomes(f: _Frame, trend: pd.Series, score: pd.Series, direction: str,
+              threshold: int = THRESHOLD) -> list[Outcome]:  # fmt: skip
     close = f.close.to_numpy(dtype=float)
     in_trend = trend.to_numpy(dtype=bool)
-    events_mask = (score >= THRESHOLD).to_numpy() & in_trend
+    events_mask = (score >= threshold).to_numpy() & in_trend
     n = len(close)
     out = []
     for horizon in HORIZONS:
@@ -269,10 +328,11 @@ def _outcomes(f: _Frame, trend: pd.Series, score: pd.Series, direction: str) -> 
     return out
 
 
-def assess(bars: pd.DataFrame) -> Assessment:
+def assess(bars: pd.DataFrame, params: Params = DEFAULT_PARAMS) -> Assessment:
     """Exhaustion signs at the last bar of ``bars`` (completed bars only)."""
     if len(bars) < MIN_BARS:
-        return Assessment(None, reason=f"Se necesitan al menos {MIN_BARS} sesiones.")
+        return Assessment(None, reason=f"Se necesitan al menos {MIN_BARS} sesiones.",
+                          threshold=params.threshold)  # fmt: skip
     f = _frame(bars)
     up_trend, down_trend = _trends(f)
     last = len(bars) - 1
@@ -286,29 +346,35 @@ def assess(bars: pd.DataFrame) -> Assessment:
             as_of=pd.Timestamp(bars.index[-1]),
             reason="Sin tendencia clara: el precio no está a la vez por encima (o por debajo) "
             "de su media de 50 sesiones y con la media subiendo (o bajando).",
+            threshold=params.threshold,
         )
-    table = _condition_table(f, direction)
+    table = _condition_table(f, direction, params)
     row = table.iloc[last]
     details = _details(f, direction, last)
     conditions = [
         Condition(name, None if np.isnan(row.iloc[k]) else bool(row.iloc[k]), details[k])
-        for k, name in enumerate(CONDITION_NAMES[direction])
+        for k, name in enumerate(condition_names(direction, params))
     ]
     score = table.fillna(0).sum(axis=1)
     return Assessment(
         direction,
         conditions,
-        _outcomes(f, trend, score, direction),
+        _outcomes(f, trend, score, direction, params.threshold),
         pd.Timestamp(bars.index[-1]),
+        threshold=params.threshold,
     )
 
 
-def signal_series(bars: pd.DataFrame) -> pd.Series:
-    """For every bar: +3..+6 up-trend exhaustion score, -3..-6 down-trend, 0 otherwise."""
+def signal_series(bars: pd.DataFrame, params: Params = DEFAULT_PARAMS) -> pd.Series:
+    """For every bar: +n up-trend exhaustion score, -n down-trend (n ≥ threshold), else 0.
+
+    Each value uses only the data up to that bar.
+    """
     if len(bars) < MIN_BARS:
         return pd.Series(0, index=bars.index)
     f = _frame(bars)
     up_trend, down_trend = _trends(f)
-    up = _condition_table(f, UP).fillna(0).sum(axis=1).where(up_trend, 0)
-    down = _condition_table(f, DOWN).fillna(0).sum(axis=1).where(down_trend, 0)
-    return (up.where(up >= THRESHOLD, 0) - down.where(down >= THRESHOLD, 0)).astype(int)
+    up = _condition_table(f, UP, params).fillna(0).sum(axis=1).where(up_trend, 0)
+    down = _condition_table(f, DOWN, params).fillna(0).sum(axis=1).where(down_trend, 0)
+    t = params.threshold
+    return (up.where(up >= t, 0) - down.where(down >= t, 0)).astype(int)

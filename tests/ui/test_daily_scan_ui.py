@@ -39,7 +39,7 @@ class FakeScans:
         self.results: list[ScanResult] = []
         self.calls: list[list[str]] = []
 
-    def __call__(self, _market: object, symbols: list[str]) -> ScanResult:
+    def __call__(self, _market: object, symbols: list[str], **_kwargs: object) -> ScanResult:
         self.calls.append(list(symbols))
         return self.results.pop(0)
 

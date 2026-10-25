@@ -843,6 +843,30 @@ EXH_READ_NO_EDGE = (
 EXH_READ_MIXED = (
     "Resultados contradictorios según el plazo: el historial no permite sacar una conclusión."
 )
+EXH_BRIEF = "A {h} sesiones: {move} en {against} de {events} casos ({pct} %)."
+EXH_DEFAULT_COMPARE = "Con los umbrales por defecto ({n} o más señales):"
+EXH_CUSTOM = (
+    "Umbrales personalizados: RSI {hi} / {lo}, {atr} ATR de la media, volumen bajo el {vol} %, "
+    "movimiento de {z} desviaciones, {n} señales necesarias."
+)
+EXH_MARKERS = "Marcar en el gráfico las veces anteriores"
+EXH_MARKERS_TIP = (
+    "▼ encima de la vela: comienzo de señales de agotamiento de una subida. ▲ debajo: de una "
+    "bajada. El número es cuántas condiciones se cumplían."
+)
+EXH_PARAMS_BUTTON = "Umbrales…"
+EXH_PARAMS_TITLE = "Umbrales del agotamiento"
+EXH_PARAMS_INTRO = (
+    "Cambie los valores para ver cómo cambia el historial de este activo. Se usan también en el "
+    "escáner y en el escaneo diario. Valores más exigentes dan menos casos (y menos fiables)."
+)
+EXH_P_RSI_HIGH = "RSI de sobrecompra (subidas)"
+EXH_P_RSI_LOW = "RSI de sobreventa (bajadas)"
+EXH_P_ATR = "Distancia a la media de 50 (en ATR)"
+EXH_P_VOLUME = "Volumen de 10 sesiones por debajo de (× el de 50)"
+EXH_P_Z = "Movimiento inusual (desviaciones típicas)"
+EXH_P_THRESHOLD = "Condiciones necesarias (de 6)"
+EXH_PARAMS_DEFAULTS = "Valores por defecto"
 EXH_NOTE = (
     "Casos sin solapar, calculados solo con los datos que había en cada fecha. Es una "
     "descripción del pasado, no una predicción ni una recomendación de compra o venta."

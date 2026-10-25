@@ -30,6 +30,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from analisis_acciones.analysis.exhaustion import DEFAULT_PARAMS as EXH_DEFAULT
+from analisis_acciones.analysis.exhaustion import Params as ExhaustionParams
 from analisis_acciones.models.errors import user_message_for
 from analisis_acciones.services.market_data_service import MarketDataService
 from analisis_acciones.services.scan_report import default_file_stem, scan_csv, scan_report_html
@@ -108,9 +110,11 @@ class ScannerDialog(QDialog):
     symbol_activated = Signal(str)
 
     def __init__(self, market: MarketDataService, symbols: list[str],
-                 parent: QWidget | None = None) -> None:  # fmt: skip
+                 parent: QWidget | None = None,
+                 exhaustion_params: ExhaustionParams = EXH_DEFAULT) -> None:  # fmt: skip
         super().__init__(parent)
         self._market = market
+        self._exhaustion_params = exhaustion_params
         self._workers: set[Worker] = set()
         self.scan: ScanResult | None = None
         self.last_export: Path | None = None
@@ -266,9 +270,11 @@ class ScannerDialog(QDialog):
 
         fundamentals = self.with_fundamentals.isChecked()
         market = self._market
+        params = self._exhaustion_params
         worker = start_worker(
-            lambda: run_scan(market, symbols, progress, fundamentals, cancel.is_set), done, fail
-        )
+            lambda: run_scan(market, symbols, progress, fundamentals, cancel.is_set, params),
+            done, fail,
+        )  # fmt: skip
         self._workers.add(worker)
         worker.signals.succeeded.connect(lambda _r: self._workers.discard(worker))
         worker.signals.failed.connect(lambda _e: self._workers.discard(worker))

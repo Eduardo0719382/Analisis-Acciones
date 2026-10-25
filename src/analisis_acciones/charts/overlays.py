@@ -157,3 +157,26 @@ def volume_profile_overlay(profile: dict[str, Any], color: str, value_color: str
         items.append({"kind": "level", "price": price, "color": line_color,
                       "style": SOLID if title == "POC" else DOTTED, "title": title})  # fmt: skip
     return items
+
+
+def exhaustion_overlay(signals: list[int], dates: list[ChartTime],
+                       colors: dict[str, str]) -> list[dict[str, Any]]:  # fmt: skip
+    """One marker where each run of exhaustion signals starts (``signal_series`` values).
+
+    Up-trend exhaustion (positive score) is drawn above the bar pointing down, down-trend
+    exhaustion below the bar pointing up; the text is the number of conditions met.
+    ``colors`` keys: ``up`` and ``down``.
+    """
+    markers = []
+    previous = 0
+    for value, time in zip(signals, dates, strict=True):
+        if value and (previous == 0 or (value > 0) != (previous > 0)):
+            rising = value > 0
+            markers.append({
+                "time": time, "text": str(abs(value)),
+                "position": "aboveBar" if rising else "belowBar",
+                "shape": "arrowDown" if rising else "arrowUp",
+                "color": colors["down"] if rising else colors["up"],
+            })  # fmt: skip
+        previous = value
+    return [{"kind": "markers", "markers": markers}] if markers else []

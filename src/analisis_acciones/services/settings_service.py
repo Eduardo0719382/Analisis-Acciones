@@ -10,6 +10,7 @@ import logging
 from enum import StrEnum
 from typing import Any
 
+from analisis_acciones.analysis.exhaustion import Params as ExhaustionParams
 from analisis_acciones.indicators.registry import IndicatorConfig
 from analisis_acciones.indicators.templates import MAX_TEMPLATES, clean_name
 from analisis_acciones.models.errors import AppError, UserError
@@ -44,6 +45,8 @@ KEY_SCAN_SNAPSHOT = "scanner.daily_snapshot"
 KEY_PORTFOLIO_BENCHMARKS = "portfolio.benchmarks"
 KEY_CALENDAR_DAYS = "scanner.calendar_notice_days"
 KEY_CALENDAR_NOTIFIED = "scanner.calendar_notified"
+KEY_EXHAUSTION = "analysis.exhaustion_params"
+KEY_EXHAUSTION_MARKERS = "chart.exhaustion_markers"
 DEFAULT_CALENDAR_DAYS = 3
 MAX_CALENDAR_DAYS = 30
 
@@ -234,6 +237,20 @@ class SettingsService:
 
     def set_calendar_notified(self, keys: list[str]) -> None:
         self._repo.set(KEY_CALENDAR_NOTIFIED, list(keys))
+
+    # Exhaustion thresholds ------------------------------------------------------
+    def exhaustion_params(self) -> ExhaustionParams:
+        """Thresholds of the exhaustion signs (invalid stored values fall back to defaults)."""
+        return ExhaustionParams.from_dict(self._repo.get(KEY_EXHAUSTION))
+
+    def set_exhaustion_params(self, params: ExhaustionParams) -> None:
+        self._repo.set(KEY_EXHAUSTION, params.to_dict())
+
+    def exhaustion_markers(self) -> bool:
+        return self._repo.get(KEY_EXHAUSTION_MARKERS) is True
+
+    def set_exhaustion_markers(self, enabled: bool) -> None:
+        self._repo.set(KEY_EXHAUSTION_MARKERS, bool(enabled))
 
     def layout(self) -> dict[str, Any]:
         """Opaque UI layout state (window geometry, splitter sizes, ...)."""
