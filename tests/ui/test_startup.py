@@ -15,6 +15,7 @@ from pytestqt.qtbot import QtBot
 from analisis_acciones.app import main as main_module
 from analisis_acciones.app.crash_guard import MARKER_NAME, SOFTWARE_FLAG_NAME
 from analisis_acciones.app.paths import HOME_ENV_VAR, AppPaths
+from analisis_acciones.services.backup import PREVIOUS_SUFFIX, create_backup, schedule_restore
 from analisis_acciones.services.settings_service import SettingsService
 from analisis_acciones.storage.database import open_database
 from analisis_acciones.storage.settings_repository import SettingsRepository
@@ -83,3 +84,22 @@ def test_corrupt_database_reports_error(
     monkeypatch.setattr(main_module.QMessageBox, "critical", lambda *args: shown.append(args[2]))
     assert main_module.main([]) == 1
     assert shown and "No se pudo iniciar" in shown[0]
+
+
+def test_staged_backup_is_restored_at_start(
+    qtbot: QtBot, home: AppPaths, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        main_module.DisclaimerDialog, "exec", lambda self: QDialog.DialogCode.Accepted
+    )
+    home.ensure()
+    source = open_database(tmp_path / "otro_pc.sqlite3")
+    SettingsService(SettingsRepository(source)).set_last_opened("MSFT", "1d")
+    copy = tmp_path / "copia.sqlite3"
+    create_backup(source, copy)
+    source.close()
+    open_database(home.database).close()  # current data, to be replaced
+    schedule_restore(copy, home.root)
+    assert main_module.main([]) == 0
+    assert _settings_after_run(home).last_symbol() == "MSFT"
+    assert (home.root / ("analisis_acciones.sqlite3" + PREVIOUS_SUFFIX)).exists()

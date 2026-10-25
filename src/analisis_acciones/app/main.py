@@ -23,6 +23,7 @@ from analisis_acciones.app.logging_setup import configure_logging
 from analisis_acciones.app.paths import APP_NAME, AppPaths
 from analisis_acciones.models.errors import AppError, user_message_for
 from analisis_acciones.providers.yahoo import YahooFinanceProvider
+from analisis_acciones.services.backup import apply_pending_restore
 from analisis_acciones.services.drawing_service import DrawingService
 from analisis_acciones.services.market_data_service import MarketDataService
 from analisis_acciones.services.paper_portfolio import PaperPortfolioService
@@ -87,6 +88,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             start.consecutive_unclean,
             crash_log,
         )
+    restored = False
+    try:
+        restored = apply_pending_restore(paths.database)
+    except OSError as exc:
+        logger.error("Could not apply the staged backup: %s", exc)
     existing = QApplication.instance()
     if start.software_rendering and existing is None:
         logger.info("Using software rendering for web views")
@@ -142,6 +148,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             drawing_service=DrawingService(conn),
             portfolio_service=PaperPortfolioService(portfolio_conn, market),
             session_guard=guard,
+            backup_conn=conn,
+            data_root=paths.root,
         )
         window.show()
         if smoke_test:
@@ -152,6 +160,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             window.start_alert_schedule()
             window.start_daily_scan()
             window.show_day_summary_on_start()
+            if restored:
+                window.statusBar().showMessage(strings.BACKUP_RESTORED, 30000)
             # Bound to the window: cancelled automatically if the window is destroyed first.
             notice_window = window
             QTimer.singleShot(

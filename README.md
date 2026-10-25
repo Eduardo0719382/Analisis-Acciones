@@ -57,6 +57,13 @@ Los datos (base de datos SQLite y registros) se guardan en el directorio de dato
 usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la variable
 `ANALISIS_ACCIONES_HOME` (véase `.env.example`).
 
+**Pasar todo a otro PC (copia de seguridad):** *Archivo → Crear copia de seguridad…* guarda en
+un único archivo `.sqlite3` las listas, alertas, dibujos, carteras simuladas, configuración y
+datos de mercado guardados. En el otro PC, *Archivo → Restaurar copia de seguridad…* comprueba
+el archivo (integridad, que sea de este programa y no de una versión más nueva), muestra qué
+contiene y lo aplica al reiniciar; los datos que había se guardan aparte
+(`analisis_acciones.sqlite3.antes-de-restaurar`).
+
 **Si el programa se cierra solo:** al volver a abrirlo avisa de que la sesión anterior terminó
 de forma inesperada e indica la carpeta de registros (`logs\analisis_acciones.log` y
 `logs\crash.log` dentro del directorio de datos). Si ocurre dos veces seguidas activa solo

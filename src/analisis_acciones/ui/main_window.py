@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+import sqlite3
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -51,6 +52,13 @@ from analisis_acciones.indicators.registry import IndicatorConfig
 from analisis_acciones.models.errors import AppError, UserError, user_message_for
 from analisis_acciones.models.market import Interval
 from analisis_acciones.providers.base import normalize_symbol
+from analisis_acciones.services.backup import (
+    BackupInfo,
+    create_backup,
+    default_backup_name,
+    inspect_backup,
+    schedule_restore,
+)
 from analisis_acciones.services.comparison import benchmark_line
 from analisis_acciones.services.daily_scan import Novelty
 from analisis_acciones.services.drawing_service import DrawingService
@@ -118,10 +126,14 @@ class MainWindow(QMainWindow):
         drawing_service: DrawingService | None = None,
         portfolio_service: PaperPortfolioService | None = None,
         session_guard: SessionGuard | None = None,
+        backup_conn: sqlite3.Connection | None = None,
+        data_root: Path | None = None,
     ) -> None:
         super().__init__(parent)
         self._settings = settings
         self._session_guard = session_guard
+        self._backup_conn = backup_conn
+        self._data_root = data_root
         self._update_service = update_service
         self.market = MarketController(market_service, self) if market_service else None
         self._watchlists = watchlist_service
@@ -321,6 +333,14 @@ class MainWindow(QMainWindow):
         for action in (self.export_image_action, self.export_csv_action, self.export_pdf_action):
             file_menu.addAction(action)
         file_menu.addSeparator()
+        self.backup_action = QAction(strings.ACTION_BACKUP, self)
+        self.backup_action.triggered.connect(lambda: self.create_backup())
+        self.restore_action = QAction(strings.ACTION_RESTORE, self)
+        self.restore_action.triggered.connect(lambda: self.restore_backup())
+        for action in (self.backup_action, self.restore_action):
+            action.setEnabled(self._backup_conn is not None and self._data_root is not None)
+            file_menu.addAction(action)
+        file_menu.addSeparator()
         quit_action = QAction(strings.ACTION_QUIT, self)
         quit_action.setShortcut(QKeySequence.StandardKey.Quit)
         quit_action.triggered.connect(self.close)
@@ -421,6 +441,69 @@ class MainWindow(QMainWindow):
         about_action = QAction(strings.ACTION_ABOUT, self)
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
+
+    # Backup ------------------------------------------------------------------
+    def create_backup(self, path: Path | None = None) -> BackupInfo | None:
+        if self._backup_conn is None:
+            return None
+        if path is None:
+            suggested = str(Path.home() / default_backup_name(datetime.now()))
+            chosen, _ = QFileDialog.getSaveFileName(self, strings.ACTION_BACKUP.rstrip("…"),
+                                                    suggested, strings.BACKUP_FILTER)  # fmt: skip
+            if not chosen:
+                return None
+            path = Path(chosen)
+        self.setCursor(Qt.CursorShape.BusyCursor)
+        try:
+            info = create_backup(self._backup_conn, path)
+        except UserError as exc:
+            QMessageBox.warning(self, strings.ERROR_TITLE, exc.user_message)
+            return None
+        finally:
+            self.unsetCursor()
+        self.statusBar().showMessage(strings.BACKUP_SAVED.format(path=path), 15000)
+        return info
+
+    def restore_backup(self, path: Path | None = None, confirm: bool = True) -> bool:
+        """Stage a backup to replace all data at the next start (asks to restart now)."""
+        if self._data_root is None:
+            return False
+        if path is None:
+            title = strings.ACTION_RESTORE.rstrip("…")
+            chosen, _ = QFileDialog.getOpenFileName(self, title, str(Path.home()),
+                                                    strings.BACKUP_FILTER)  # fmt: skip
+            if not chosen:
+                return False
+            path = Path(chosen)
+        try:
+            info = inspect_backup(path)
+        except UserError as exc:
+            QMessageBox.warning(self, strings.ERROR_TITLE, exc.user_message)
+            return False
+        question = strings.RESTORE_CONFIRM.format(
+            watchlists=info.watchlists, symbols=info.symbols, alerts=info.alerts,
+            portfolios=info.portfolios, trades=info.trades,
+        )  # fmt: skip
+        if (
+            confirm
+            and QMessageBox.question(self, strings.ACTION_RESTORE.rstrip("…"), question)
+            != QMessageBox.StandardButton.Yes
+        ):
+            return False
+        try:
+            schedule_restore(path, self._data_root)
+        except UserError as exc:
+            QMessageBox.warning(self, strings.ERROR_TITLE, exc.user_message)
+            return False
+        if not confirm:
+            return True
+        if (
+            QMessageBox.question(self, strings.ACTION_RESTORE.rstrip("…"), strings.RESTORE_RESTART)
+            == QMessageBox.StandardButton.Yes
+        ):
+            self.restart_requested = True
+            self.close()
+        return True
 
     def _on_software_graphics_toggled(self, enabled: bool) -> None:
         if self._session_guard is None:

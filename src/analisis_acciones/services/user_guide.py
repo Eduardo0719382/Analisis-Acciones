@@ -180,6 +180,9 @@ rentabilidad, volatilidad y caída máxima.</li>
 <li><i>Archivo → Importar CSV…</i>: sus propios datos (columnas fecha, apertura, máximo, mínimo,
 cierre y volumen opcional; también en español con coma decimal).</li>
 <li><i>Archivo → Exportar…</i>: imagen del gráfico (PNG), datos (CSV) o informe (PDF).</li>
+<li><i>Archivo → Crear copia de seguridad…</i> guarda todo (listas, alertas, carteras,
+configuración) en un archivo; en otro PC, <i>Archivo → Restaurar copia de seguridad…</i> lo
+carga al reiniciar.</li>
 <li><i>Ayuda → Buscar actualizaciones…</i> comprueba si hay una versión nueva.</li>
 </ul>""",
     ),

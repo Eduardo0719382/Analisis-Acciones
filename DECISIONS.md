@@ -793,3 +793,17 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   `QApplication` (and Chromium) start, before the database is opened.
 - The renderer recovery replays the last data, overlay and drawing scripts instead of asking
   every panel to redraw. The chart widget is the single place that knows what the page shows.
+
+## D-050 — Backup and restore
+
+- A backup is the whole SQLite database copied with SQLite's online backup API, which gives a
+  consistent snapshot while other connections (workers) are open. One file is easier to move
+  between PCs than an export format, and nothing (imported CSV series, drawings, journal) is
+  left out.
+- A file to restore is untrusted data. It is opened read-only, must start with the SQLite header
+  and pass `PRAGMA quick_check`, must contain this program's tables, and must not be from a
+  newer schema version. Then it is staged in the data directory.
+- The swap happens at the next start, before any connection exists, so no open connection
+  sees the file change. The staged file is validated again. The current database (with its WAL
+  files) is kept as `*.antes-de-restaurar`, and migrations then bring the restored copy up to
+  date.
