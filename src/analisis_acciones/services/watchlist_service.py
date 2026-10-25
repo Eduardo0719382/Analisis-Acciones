@@ -14,6 +14,10 @@ from analisis_acciones.storage.watchlist_repository import Watchlist, WatchlistR
 DEFAULT_LIST_NAME = "Favoritos"
 MAX_NAME_LENGTH = 40
 MAX_ITEMS = 200
+CRYPTO_LIST_NAME = "Criptomonedas"
+#: Large cryptocurrencies quoted against the dollar at Yahoo Finance (tickers only, no data).
+CRYPTO_EXAMPLE = ("BTC-USD", "ETH-USD", "SOL-USD", "XRP-USD", "BNB-USD", "ADA-USD",
+                  "DOGE-USD", "AVAX-USD", "LINK-USD", "DOT-USD")  # fmt: skip
 
 
 class WatchlistService:
@@ -48,6 +52,15 @@ class WatchlistService:
 
     def create(self, name: str) -> Watchlist:
         return self._repo.create(self._valid_name(name))
+
+    def create_example(self, name: str = CRYPTO_LIST_NAME,
+                       symbols: tuple[str, ...] = CRYPTO_EXAMPLE) -> Watchlist:  # fmt: skip
+        """A list with ``symbols``; if one with that name exists, the missing ones are added."""
+        existing = next((w for w in self._repo.lists() if w.name == name), None)
+        target = existing if existing is not None else self.create(name)
+        for symbol in symbols:
+            self.add(target.id, symbol)  # already present: no change
+        return target
 
     def rename(self, list_id: int, name: str) -> None:
         self._require(list_id)

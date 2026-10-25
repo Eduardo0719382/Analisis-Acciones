@@ -249,6 +249,7 @@ class MainWindow(QMainWindow):
         if self._watchlists is not None:
             panel = WatchlistPanel(self._watchlists, self.market, self._settings)
             panel.symbol_activated.connect(self.open_symbol)
+            panel.example_created.connect(self.open_exhaustion_compare)
             panel.current_symbol_provider = lambda: (
                 self.current_result.series.symbol if self.current_result else None
             )
@@ -371,7 +372,7 @@ class MainWindow(QMainWindow):
         self.scanner_action.triggered.connect(self.open_scanner)
         tools_menu.addAction(self.scanner_action)
         self.exhaustion_compare_action = QAction(strings.ACTION_EXHAUSTION_COMPARE, self)
-        self.exhaustion_compare_action.triggered.connect(self.open_exhaustion_compare)
+        self.exhaustion_compare_action.triggered.connect(lambda: self.open_exhaustion_compare())
         tools_menu.addAction(self.exhaustion_compare_action)
         self.daily_scan_action = QAction(strings.ACTION_DAILY_SCAN, self)
         self.daily_scan_action.setCheckable(True)
@@ -1033,10 +1034,10 @@ class MainWindow(QMainWindow):
         if symbols:
             dialog.run()
 
-    def open_exhaustion_compare(self) -> None:
+    def open_exhaustion_compare(self, symbols: list[str] | None = None) -> None:
         if self.market is None:
             return
-        symbols = self._candidate_symbols()
+        symbols = list(symbols) if symbols else self._candidate_symbols()
         dialog = ExhaustionCompareDialog(self.market.service, symbols,
                                          self._settings.exhaustion_params(), self)  # fmt: skip
         dialog.symbol_activated.connect(self.open_symbol)

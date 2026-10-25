@@ -148,3 +148,25 @@ def test_multiple_lists_and_selection_persist(
     assert restored.symbols() == ["AAA"]
     restored.delete_list(confirm=False)  # last list cannot be deleted
     assert "única lista" in restored.status_label.text()
+
+
+def test_crypto_example_list_opens_the_exhaustion_comparison(
+    qtbot: QtBot, window: MainWindow, lists: WatchlistService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from analisis_acciones.services.watchlist_service import CRYPTO_EXAMPLE, CRYPTO_LIST_NAME
+
+    opened: list[list[str]] = []
+    monkeypatch.setattr(window, "open_exhaustion_compare", lambda s=None: opened.append(s))
+    panel = panel_of(window)
+    panel.example_created.disconnect()
+    panel.example_created.connect(window.open_exhaustion_compare)
+    panel.create_crypto_example()
+    assert panel.list_combo.currentText() == CRYPTO_LIST_NAME
+    assert panel.symbols() == list(CRYPTO_EXAMPLE)
+    assert opened == [list(CRYPTO_EXAMPLE)]
+    # Running it again keeps a single list and adds only what is missing.
+    target = next(w for w in lists.lists() if w.name == CRYPTO_LIST_NAME)
+    lists.remove(target.id, "BTC-USD")
+    panel.create_crypto_example()
+    assert [w.name for w in lists.lists()].count(CRYPTO_LIST_NAME) == 1
+    assert "BTC-USD" in lists.symbols(target.id)

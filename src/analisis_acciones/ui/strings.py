@@ -179,6 +179,7 @@ DIALOG_CANCEL = "Cancelar"
 
 WATCHLIST_MENU = "Opciones de la lista"
 WATCHLIST_NEW = "Nueva lista…"
+WATCHLIST_CRYPTO_EXAMPLE = "Crear lista de criptomonedas de ejemplo"
 WATCHLIST_RENAME = "Renombrar lista…"
 WATCHLIST_DELETE = "Eliminar lista"
 WATCHLIST_DELETE_CONFIRM = "¿Eliminar la lista «{name}» y todos sus activos?"

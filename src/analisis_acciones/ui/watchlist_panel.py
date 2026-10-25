@@ -40,6 +40,8 @@ COL_SYMBOL, COL_LAST, COL_CHANGE = range(3)
 class WatchlistPanel(QFrame):
     #: The user picked a symbol to open.
     symbol_activated = Signal(str)
+    #: The example cryptocurrency list was created (its symbols).
+    example_created = Signal(list)
 
     def __init__(
         self,
@@ -71,6 +73,9 @@ class WatchlistPanel(QFrame):
         self.new_action = menu.addAction(strings.WATCHLIST_NEW, self.create_list)
         self.rename_action = menu.addAction(strings.WATCHLIST_RENAME, self.rename_list)
         self.delete_action = menu.addAction(strings.WATCHLIST_DELETE, self.delete_list)
+        menu.addSeparator()
+        self.crypto_action = menu.addAction(strings.WATCHLIST_CRYPTO_EXAMPLE,
+                                            self.create_crypto_example)  # fmt: skip
         self.menu_button.setMenu(menu)
         top = QHBoxLayout()
         top.setContentsMargins(6, 6, 6, 0)
@@ -179,6 +184,15 @@ class WatchlistPanel(QFrame):
             self._show_error(exc.user_message)
             return
         self.reload_lists(select_id=created.id)
+
+    def create_crypto_example(self) -> None:
+        try:
+            created = self._lists.create_example()
+        except UserError as exc:
+            self._show_error(exc.user_message)
+            return
+        self.reload_lists(select_id=created.id)
+        self.example_created.emit(self._lists.symbols(created.id))
 
     def rename_list(self, name: str | None = None) -> None:
         list_id = self.current_list_id()

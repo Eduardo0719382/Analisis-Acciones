@@ -95,7 +95,10 @@ blanco porque su motor se detuvo, se recarga automáticamente.
   considera sin cerrar) y las velas intradía se muestran en hora UTC, sin cortes de fin de
   semana. Gráfico, indicadores, análisis, agotamiento, proyección, Elliott, patrones, alertas,
   escáner, comparación (volatilidad anualizada con 365 días) y backtesting funcionan igual que
-  con acciones. No tienen datos fundamentales de empresa. En la cartera simulada se pueden
+  con acciones. No tienen datos fundamentales de empresa. En el menú ⋯ de la lista de
+  seguimiento, *Crear lista de criptomonedas de ejemplo* crea la lista «Criptomonedas» (BTC, ETH,
+  SOL, XRP, BNB, ADA, DOGE, AVAX, LINK y DOT frente al dólar) y abre la comparación de
+  agotamiento entre ellas. En la cartera simulada se pueden
   comprar y vender; si la cartera tiene criptomonedas su valor se calcula todos los días
   (las acciones mantienen el cierre del viernes durante el fin de semana).
 - **Intervalo:** 15 minutos, 1 hora, Diario, Semanal o Mensual (los dos últimos se calculan a
