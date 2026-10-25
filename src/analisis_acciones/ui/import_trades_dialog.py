@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 from analisis_acciones.data.trades_import import TradesFile
 from analisis_acciones.portfolio.engine import BUY
 from analisis_acciones.services.paper_portfolio import ImportPreview, Portfolio
-from analisis_acciones.services.portfolio_report import local_price, qty
+from analisis_acciones.services.portfolio_report import MOVEMENT_LABELS, local_price, qty
 from analisis_acciones.services.scan_report import num
 from analisis_acciones.ui import strings
 
@@ -42,6 +42,10 @@ class ImportTradesDialog(QDialog):
         problems = [*parsed.errors, *preview.problems]
 
         lines = [strings.IMP_COUNT.format(count=len(preview.trades), errors=len(problems))]
+        if preview.movements:
+            lines.append(strings.IMP_CASH_ROWS.format(count=len(preview.movements)))
+        if preview.disables_auto_dividends:
+            lines.append(strings.IMP_DIVIDENDS_OFF)
         if preview.cash_needed is not None:
             lines.append(strings.IMP_CASH.format(needed=num(preview.cash_needed),
                                                  name=portfolio.name,
@@ -52,7 +56,9 @@ class ImportTradesDialog(QDialog):
         summary = QLabel("\n".join(lines))
         summary.setWordWrap(True)
 
-        table = QTableWidget(min(len(preview.trades), PREVIEW_ROWS), len(strings.IMP_COLUMNS))
+        shown_moves = preview.movements[: max(PREVIEW_ROWS - len(preview.trades), 0)]
+        rows = min(len(preview.trades), PREVIEW_ROWS) + len(shown_moves)
+        table = QTableWidget(rows, len(strings.IMP_COLUMNS))
         table.setHorizontalHeaderLabels(strings.IMP_COLUMNS)
         table.verticalHeader().setVisible(False)
         table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -62,6 +68,12 @@ class ImportTradesDialog(QDialog):
             cells = [f"{t.trade_date:%d/%m/%Y}", t.symbol,
                      strings.PF_BUY if t.side == BUY else strings.PF_SELL, qty(t.quantity),
                      local_price(t), num(t.commission), t.note]  # fmt: skip
+            for c, text in enumerate(cells):
+                table.setItem(r, c, QTableWidgetItem(text))
+        offset = min(len(preview.trades), PREVIEW_ROWS)
+        for r, m in enumerate(shown_moves, start=offset):
+            cells = [f"{m.day:%d/%m/%Y}", m.symbol or "—", MOVEMENT_LABELS.get(m.kind, m.kind),
+                     "", f"{num(m.amount)} {m.currency}", "", m.note]  # fmt: skip
             for c, text in enumerate(cells):
                 table.setItem(r, c, QTableWidgetItem(text))
         self.table = table
@@ -96,7 +108,7 @@ class ImportTradesDialog(QDialog):
         )
         ok = buttons.button(QDialogButtonBox.StandardButton.Ok)
         ok.setText(strings.IMP_IMPORT)
-        ok.setEnabled(bool(preview.trades))
+        ok.setEnabled(bool(preview.trades or preview.movements))
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
 

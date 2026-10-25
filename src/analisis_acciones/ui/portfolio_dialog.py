@@ -445,7 +445,8 @@ class PortfolioDialog(QDialog):
                     new = (dialog.new_name.text(), dialog.new_cash.value())
                 self.finish_import(preview, new)
 
-        self._run(lambda: self._service.prepare_import(current.id, parsed.trades), done)
+        self._run(lambda: self._service.prepare_import(current.id, parsed.trades, parsed.cash),
+                  done)  # fmt: skip
 
     def finish_import(self, preview: ImportPreview, new: tuple[str, float] | None) -> bool:
         try:

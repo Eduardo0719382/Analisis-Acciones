@@ -918,3 +918,20 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   walks (tests and screenshots) the reading correctly says the signs do not beat chance.
 - Notified through the daily scan as a new item without the count, so a 3→4 change is not
   re-announced.
+
+## D-059 — Cash movements and time-weighted return
+
+- `paper_cash` (migration 0016) records deposits, withdrawals and, as reported by a broker,
+  cash dividends, interest and fees. Amounts are positive with a kind, in a currency with the
+  exchange rate of the day. Inflows apply before the day's trades (a deposit can pay for that
+  day's purchase), outflows after them, and an outflow larger than the cash is refused like a
+  purchase.
+- With deposits/withdrawals the simple "value / initial cash" is wrong. The report shows:
+  - the result over the money put in (initial + deposits − withdrawals);
+  - the **time-weighted return**: daily (value − flow) / previous value, chained;
+  - the references on their price alone for return comparisons (tiles, yearly table);
+  - on the value chart, the references receiving the same money on the same days, plus a
+    step line of the capital put in.
+- The drawdown alert uses the time-weighted curve so that a withdrawal is not a "fall".
+- Importing a broker file with dividends switches off the automatic dividends of that
+  portfolio (the preview says so) so they are never counted twice.

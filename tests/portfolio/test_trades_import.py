@@ -110,3 +110,44 @@ def test_import_needs_enough_cash(service: PaperPortfolioService) -> None:
         "fecha;ticker;operacion;cantidad;precio\n2030-01-01;TEST;compra;1;1\n"
     )
     assert "fecha futura" in service.prepare_import(small.id, future.trades).problems[0]
+
+
+BROKER = """Fecha;Operación;Ticker;Cantidad;Precio;Comisión;Importe;Nota
+02/01/2024;Ingreso;;;;;5.000,00;transferencia
+15/01/2024;Compra;TEST;10;100;1;;
+15/02/2024;Dividendo;TEST;;;;12,50;dividendo trimestral
+29/02/2024;Intereses;;;;;3,10;
+01/03/2024;Comisión de custodia;;;;;2,00;
+05/03/2024;Retirada;;;;;100;
+06/03/2024;Dividendo;;;;;5;sin ticker
+"""
+
+
+def test_broker_cash_rows_are_read() -> None:
+    parsed = parse_trades_text(BROKER)
+    assert [t.symbol for t in parsed.trades] == ["TEST"]
+    kinds = [(c.kind, c.amount, c.symbol) for c in parsed.cash]
+    assert kinds == [("deposit", 5000.0, ""), ("cash_dividend", 12.5, "TEST"),
+                     ("interest", 3.1, ""), ("fee", 2.0, ""),
+                     ("withdrawal", 100.0, "")]  # fmt: skip
+    assert parsed.errors == ["Línea 8: el dividendo no tiene un ticker válido."]
+    no_amount = parse_trades_text("fecha;operacion;importe\n2024-01-02;ingreso;\n")
+    assert "falta el importe" in no_amount.errors[0]
+
+
+def test_import_with_cash_rows_turns_off_automatic_dividends(
+    service: PaperPortfolioService,
+) -> None:
+    (p,) = service.portfolios()
+    assert p.apply_dividends
+    parsed = parse_trades_text(BROKER)
+    preview = service.prepare_import(p.id, parsed.trades, parsed.cash)
+    assert len(preview.movements) == 5 and preview.disables_auto_dividends
+    assert preview.cash_needed_alone == pytest.approx(0)  # the deposit pays for everything
+    assert service.import_trades(p.id, preview) == 6
+    assert not service.portfolios()[0].apply_dividends
+    report = service.report(p.id)
+    v = report.valuation
+    assert v.contributions == pytest.approx(4900) and v.dividends == pytest.approx(12.5)
+    assert v.interest == pytest.approx(3.1) and v.other_fees == pytest.approx(2)
+    assert v.cash == pytest.approx(10_000 + 5000 - 1001 + 12.5 + 3.1 - 2 - 100)

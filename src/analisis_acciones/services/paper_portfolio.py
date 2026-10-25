@@ -12,7 +12,7 @@ from datetime import UTC, date, datetime
 
 import pandas as pd
 
-from analisis_acciones.data.trades_import import ImportedTrade
+from analisis_acciones.data.trades_import import ImportedCash, ImportedTrade
 from analisis_acciones.models.errors import AppError, InternalError, UserError
 from analisis_acciones.models.market import Interval
 from analisis_acciones.portfolio.alerts import AlertThresholds, conditions
@@ -91,7 +91,10 @@ class ImportPreview:
     cash_needed: float | None  # initial cash the history needs (None: history impossible)
     problems: list[str]
     fx_notes: list[str] = field(default_factory=list)
-    cash_needed_alone: float | None = None  # same, for the imported trades only
+    cash_needed_alone: float | None = None  # same, for the imported rows only
+    movements: list[CashMovement] = field(default_factory=list)
+    # Broker dividends in the file: the automatic dividends will be switched off.
+    disables_auto_dividends: bool = False
 
 
 @dataclass(frozen=True)
@@ -540,10 +543,10 @@ class PaperPortfolioService:
         return replace(trade, id=int(cursor.lastrowid or 0))
 
     # Import from a broker's CSV -------------------------------------------------------
-    def prepare_import(self, portfolio_id: int,
-                       rows: list[ImportedTrade]) -> ImportPreview:  # fmt: skip
-        """Turn parsed rows into trades (currency and exchange rate of each date) and work
-        out the cash the portfolio would need. Nothing is stored."""
+    def prepare_import(self, portfolio_id: int, rows: list[ImportedTrade],
+                       cash_rows: list[ImportedCash] | None = None) -> ImportPreview:  # fmt: skip
+        """Turn parsed rows into trades and cash movements (currency and exchange rate of each
+        date) and work out the cash the portfolio would need. Nothing is stored."""
         fx = FxConverter(self._market)
         today = self._clock().date()
         trades: list[PaperTrade] = []
@@ -562,38 +565,59 @@ class PaperPortfolioService:
             trades.append(PaperTrade(symbol, row.side, row.quantity, row.price, row.day,
                                      round(row.commission, 2), row.note, currency=currency,
                                      fx_rate=rate))  # fmt: skip
+        moves: list[CashMovement] = []
+        for c in cash_rows or []:
+            try:
+                currency = c.currency or (fx.currency_of(c.symbol) if c.symbol else "USD")
+                moves.append(self.make_movement(c.kind, c.amount, c.day, c.symbol, c.note,
+                                                currency))  # fmt: skip
+            except UserError as exc:
+                problems.append(f"Línea {c.line}: {exc.user_message}")
         existing = self.trades(portfolio_id)
         start = max((t.id or 0 for t in existing), default=0) + 1
         numbered = [replace(t, id=start + i) for i, t in enumerate(trades)]  # keep file order
+        existing_moves = self.movements(portfolio_id)
+        first_move = max((m.id or 0 for m in existing_moves), default=0) + 1
+        numbered_moves = [replace(m, id=first_move + i) for i, m in enumerate(moves)]
         portfolio = self._portfolio(portfolio_id)
+        broker_dividends = any(m.kind == CASH_DIVIDEND for m in moves)
+        # Dividends reported by the broker replace the automatic ones (never both).
+        auto_dividends = portfolio.apply_dividends and not broker_dividends
         combined = [*existing, *numbered]
+        all_moves = [*existing_moves, *numbered_moves]
         bars, bar_problems = self._bars({t.symbol for t in combined}, fx)
         splits = {s: b["splits"] for s, b in bars.items()}
-        adjusted = adjust_for_splits(in_dollars(combined), splits)
-        events = self._events(combined, bars, portfolio.apply_dividends)
         withholding = portfolio.dividend_withholding_pct
 
-        def need(history: list[PaperTrade]) -> float | None:
-            try:
-                return cash_needed(adjust_for_splits(in_dollars(history), splits),
-                                   self._events(history, bars, portfolio.apply_dividends),
-                                   withholding)  # fmt: skip
-            except UserError:
-                return None
+        def need(history: list[PaperTrade], cash: list[CashMovement]) -> float:
+            return cash_needed(adjust_for_splits(in_dollars(history), splits),
+                               self._events(history, bars, auto_dividends), withholding,
+                               cash)  # fmt: skip
 
-        alone = need(numbered)
         try:
-            needed = cash_needed(adjusted, events, withholding)
+            alone: float | None = need(numbered, numbered_moves)
+        except UserError:
+            alone = None
+        disable = portfolio.apply_dividends and broker_dividends
+        try:
+            needed = need(combined, all_moves)
         except UserError as exc:  # e.g. selling shares never bought
-            return ImportPreview(numbered, None, [*problems, exc.user_message], fx.notes, alone)
-        return ImportPreview(numbered, needed, [*problems, *bar_problems], fx.notes, alone)
+            return ImportPreview(numbered, None, [*problems, exc.user_message], fx.notes, alone,
+                                 numbered_moves, disable)  # fmt: skip
+        return ImportPreview(numbered, needed, [*problems, *bar_problems], fx.notes, alone,
+                             numbered_moves, disable)  # fmt: skip
 
     def import_trades(self, portfolio_id: int, preview: ImportPreview) -> int:
-        """Store the previewed trades in one transaction, after validating the whole history."""
-        if not preview.trades:
+        """Store the previewed trades and cash movements in one transaction, after validating
+        the whole history. Returns how many rows were stored."""
+        if not preview.trades and not preview.movements:
             return 0
         portfolio = self._portfolio(portfolio_id)
-        self._check(portfolio, [*self.trades(portfolio_id), *preview.trades])
+        broker_dividends = any(m.kind == CASH_DIVIDEND for m in preview.movements)
+        if broker_dividends:
+            portfolio = replace(portfolio, apply_dividends=False)
+        self._check(portfolio, [*self.trades(portfolio_id), *preview.trades],
+                    [*self.movements(portfolio_id), *preview.movements])  # fmt: skip
         now = self._clock().isoformat()
         with self._db() as db, transaction(db):
             db.executemany(
@@ -604,8 +628,18 @@ class PaperPortfolioService:
                   t.trade_date.isoformat(), t.note, now, t.currency, t.fx_rate)
                  for t in preview.trades],
             )  # fmt: skip
-        logger.info("Imported %d trades into portfolio %d", len(preview.trades), portfolio_id)
-        return len(preview.trades)
+            db.executemany(
+                "INSERT INTO paper_cash (portfolio_id, day, kind, amount, currency, fx_rate, "
+                "symbol, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [(portfolio_id, m.day.isoformat(), m.kind, m.amount, m.currency, m.fx_rate,
+                  m.symbol, m.note, now) for m in preview.movements],
+            )  # fmt: skip
+            if broker_dividends:
+                db.execute("UPDATE paper_portfolios SET apply_dividends = 0 WHERE id = ?",
+                           (portfolio_id,))  # fmt: skip
+        count = len(preview.trades) + len(preview.movements)
+        logger.info("Imported %d rows into portfolio %d", count, portfolio_id)
+        return count
 
     def delete_trade(self, portfolio_id: int, trade_id: int) -> None:
         """Delete a trade unless the remaining history becomes impossible."""

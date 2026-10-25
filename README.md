@@ -244,6 +244,14 @@ blanco porque su motor se detuvo, se recarga automáticamente.
     filas descartadas con su motivo y el capital inicial mínimo necesario; se puede añadir a la
     cartera actual o crear una nueva. Las fechas `MM/DD/AAAA` (estilo EE. UU.) se rechazan para
     no confundir día y mes. Luego se analizan con el diario, las estadísticas y el informe.
+    También lee **movimientos de efectivo** (columna operación: *dividendo*, *intereses*,
+    *comisión*, *ingreso/depósito*, *retirada*; importe en la columna *importe* o cantidad ×
+    precio). Si el archivo trae dividendos, se desactivan los dividendos calculados
+    automáticamente para no contarlos dos veces.
+  - **Efectivo (pestaña):** aportaciones y retiradas de dinero, y dividendos, intereses y
+    gastos que comunique el broker. Las aportaciones y retiradas no cuentan como ganancia: con
+    ellas el informe muestra la **rentabilidad ponderada en el tiempo**, el capital aportado
+    en la curva y las referencias reciben el mismo dinero en las mismas fechas.
   - **Varias divisas:** la cartera se lleva en dólares. Los activos que cotizan en otra divisa
     (p. ej. `SAP.DE` en euros o `VOD.L` en peniques) se anotan con su precio en esa divisa y se
     convierten con el tipo de cambio de Yahoo (`EURUSD=X`, `GBPUSD=X`…) del día de la

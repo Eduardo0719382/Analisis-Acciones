@@ -736,6 +736,13 @@ IMP_CASH = (
     "Capital inicial mínimo para que el historial sea posible: {needed} $ (la cartera «{name}» "
     "tiene {cash} $)."
 )
+IMP_CASH_ROWS = (
+    "{count} movimientos de efectivo (dividendos, intereses, comisiones, aportaciones o retiradas)."
+)
+IMP_DIVIDENDS_OFF = (
+    "El archivo trae los dividendos cobrados: se desactivarán los dividendos calculados "
+    "automáticamente en esta cartera para no contarlos dos veces."
+)
 IMP_NO_COMMISSION = "El archivo no tiene columna de comisión: se importan con comisión 0."
 IMP_COLUMNS = ("Fecha", "Ticker", "Operación", "Cantidad", "Precio", "Comisión ($)", "Nota")
 IMP_ERRORS = "Filas descartadas y avisos:"
