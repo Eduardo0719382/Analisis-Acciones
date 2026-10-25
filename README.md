@@ -192,7 +192,12 @@ blanco porque su motor se detuvo, se recarga automáticamente.
   comisión (% y fija) y deslizamiento. Muestra capital final, rentabilidad, operaciones,
   ganadoras/perdedoras, % de acierto, caída máxima, factor de beneficio, comparación con
   comprar y mantener, curva de capital y lista de operaciones. Señal al cierre, ejecución en la
-  apertura siguiente (sin ventaja de información futura).
+  apertura siguiente (sin ventaja de información futura). **Tendencia con salida por
+  agotamiento:** compra cuando el cierre cruza al alza su media (50 por defecto) y vende cuando
+  la cruza a la baja o, antes, en cuanto la subida muestra N señales de agotamiento. Se ejecuta
+  también la misma estrategia sin esa salida y se dibuja como tercera curva, con la diferencia
+  de rentabilidad y de caída máxima: así se ve qué habría pasado por salir al agotarse la subida
+  (tras una salida por agotamiento solo se vuelve a entrar con un nuevo cruce al alza).
 - **Backtesting de patrones:** *Herramientas → Backtesting de patrones…* simula, en varios
   activos a la vez (hasta 30), qué habría pasado operando cada patrón chartista al confirmarse:
   entrada en la apertura siguiente, salida en el objetivo del patrón, en su invalidación (stop) o

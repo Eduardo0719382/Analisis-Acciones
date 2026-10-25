@@ -8,6 +8,8 @@ from typing import Any
 
 import pandas as pd
 
+from analisis_acciones.analysis.exhaustion import Params as ExhaustionParams
+from analisis_acciones.analysis.exhaustion import signal_series
 from analisis_acciones.indicators import functions as f
 from analisis_acciones.indicators.registry import ParamSpec
 from analisis_acciones.models.errors import UserError
@@ -43,6 +45,25 @@ def rsi_reversion(bars: pd.DataFrame, p: dict[str, Any]) -> pd.DataFrame:
     return _signals(crosses_above(rsi, float(p["low"])), crosses_above(rsi, float(p["high"])))
 
 
+def trend_only(bars: pd.DataFrame, p: dict[str, Any]) -> pd.DataFrame:
+    """Close crosses above / below its simple moving average."""
+    close = bars["close"]
+    average = f.sma(close, int(p["period"]))
+    return _signals(crosses_above(close, average), crosses_below(close, average))
+
+
+def exhaustion_exit(bars: pd.DataFrame, p: dict[str, Any]) -> pd.Series:
+    """Bars where the up-trend shows exhaustion signs (only data up to each bar is used)."""
+    params = ExhaustionParams(rsi_high=float(p["rsi_high"]), threshold=int(p["conditions"]))
+    return signal_series(bars, params) > 0
+
+
+def trend_exhaustion(bars: pd.DataFrame, p: dict[str, Any]) -> pd.DataFrame:
+    """``trend_only`` that also exits as soon as the rise shows exhaustion signs."""
+    base = trend_only(bars, p)
+    return _signals(base["entry"], base["exit"] | exhaustion_exit(bars, p))
+
+
 @dataclass(frozen=True)
 class StrategySpec:
     id: str
@@ -51,6 +72,9 @@ class StrategySpec:
     exit_rule: str
     params: tuple[ParamSpec, ...]
     signals: Callable[[pd.DataFrame, dict[str, Any]], pd.DataFrame]
+    #: The same strategy without the rule under test, run alongside for comparison.
+    reference: Callable[[pd.DataFrame, dict[str, Any]], pd.DataFrame] | None = None
+    reference_name: str = ""
 
     def defaults(self) -> dict[str, int | float]:
         return {p.key: p.default for p in self.params}
@@ -83,6 +107,21 @@ STRATEGIES: tuple[StrategySpec, ...] = (
             ParamSpec("high", "Nivel de salida", 70, 1, 99),
         ),
         signals=rsi_reversion,
+    ),
+    StrategySpec(
+        id="trend_exhaustion",
+        name="Tendencia con salida por agotamiento",
+        entry_rule="Entrada: el cierre cruza al alza su media de {period}",
+        exit_rule="Salida: el cierre cruza a la baja su media de {period}, o antes si la subida "
+        "muestra {conditions} o más señales de agotamiento (RSI de sobrecompra {rsi_high})",
+        params=(
+            ParamSpec("period", "Media simple", 50, 5, 400),
+            ParamSpec("conditions", "Señales de agotamiento", 3, 1, 6),
+            ParamSpec("rsi_high", "RSI de sobrecompra", 70, 55, 95),
+        ),
+        signals=trend_exhaustion,
+        reference=trend_only,
+        reference_name="Misma tendencia sin salida por agotamiento",
     ),
 )
 STRATEGY_REGISTRY = {s.id: s for s in STRATEGIES}

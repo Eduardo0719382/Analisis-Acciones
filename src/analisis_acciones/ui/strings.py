@@ -276,6 +276,10 @@ BT_STATS = (
 )
 BT_TRADE_COLUMNS = ["Entrada", "Precio", "Salida", "Precio", "Acciones", "Resultado"]
 BT_EQUITY = "Estrategia"
+BT_REFERENCE = (
+    "{name}: rentabilidad {ret}, {trades} operaciones, caída máxima {drawdown}. Diferencia de "
+    "la estrategia: {diff} de rentabilidad y {dd_diff} de caída máxima (positivo = menor caída)."
+)
 BT_BUY_HOLD = "Comprar y mantener"
 BT_OPEN = "abierta"
 BT_OPEN_NOTE = (

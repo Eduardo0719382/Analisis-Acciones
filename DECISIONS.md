@@ -983,3 +983,17 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   until the past "looks good" is overfitting; the guide says so.
 - Chart markers show where each run of signals started (not every bar of the run), computed
   with only the data available at each bar; the bar still forming is never marked.
+
+## D-064 — Backtest with an exhaustion exit
+
+- Strategy "Tendencia con salida por agotamiento": enter when the close crosses above its SMA,
+  exit when it crosses below or, earlier, when up-trend exhaustion appears (signal computed with
+  data up to that bar, executed at the next open like every strategy).
+- After an exhaustion exit the strategy re-enters only on a new cross above the average. The
+  alternative (re-enter when the signs fade) would be a second rule mixed into the test; the
+  goal is to isolate the effect of the exit.
+- The same trend strategy without the exit is always run alongside (`StrategySpec.reference`)
+  and shown as a third curve and a note with the return and drawdown differences, so the effect
+  of the exit is measured, not assumed. The CSV summary includes the reference figures.
+- The strategy exposes the number of conditions and the RSI level; the other thresholds keep
+  their defaults so a run is reproducible from what the dialog shows.

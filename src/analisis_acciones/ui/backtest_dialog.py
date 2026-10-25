@@ -9,6 +9,7 @@ from pathlib import Path
 import pandas as pd
 import shiboken6
 from PySide6.QtCore import QLocale
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -52,6 +53,9 @@ class BacktestOutcome:
     result: BacktestResult
     stats: Statistics
     buy_and_hold: pd.Series
+    #: The same strategy without the rule under test (e.g. the exhaustion exit), if any.
+    reference: BacktestResult | None = None
+    reference_stats: Statistics | None = None
 
 
 def run_strategy(series: BarSeries, strategy_id: str, params: dict[str, float],
@@ -63,7 +67,16 @@ def run_strategy(series: BarSeries, strategy_id: str, params: dict[str, float],
     stats = compute_statistics(result, bars)
     # Reference: invested at the first open, no costs.
     buy_and_hold = bars["close"] / float(bars["open"].iloc[0]) * config.initial_capital
-    return BacktestOutcome(result, stats, buy_and_hold)
+    if spec.reference is None:
+        return BacktestOutcome(result, stats, buy_and_hold)
+    reference = run_backtest(bars, spec.reference(bars, clean), config)
+    return BacktestOutcome(result, stats, buy_and_hold, reference,
+                           compute_statistics(reference, bars))  # fmt: skip
+
+
+def reference_color(tokens: ThemeTokens) -> str:
+    """First colour of the validated reference palette, light or dark step."""
+    return "#d95926" if QColor(tokens.background).lightness() < 128 else "#eb6834"
 
 
 class BacktestDialog(QDialog):
@@ -253,6 +266,12 @@ class BacktestDialog(QDialog):
             "commission_pct": cfg.commission_pct, "commission_fixed": cfg.commission_fixed,
             "slippage_pct": cfg.slippage_pct,
         }  # fmt: skip
+        if outcome.reference_stats is not None:
+            context["reference"] = spec.reference_name
+            context["reference_return_pct"] = round(outcome.reference_stats.total_return_pct, 4)
+            context["reference_max_drawdown_pct"] = round(
+                outcome.reference_stats.max_drawdown_pct, 4
+            )
         last_close = float(self._series.bars["close"].iloc[-1])
         files = {
             Path(f"{stem}_operaciones.csv"): backtest_trades_csv(outcome.result, last_close),
@@ -300,10 +319,14 @@ class BacktestDialog(QDialog):
             self.stat_labels[key].setText(text)
 
         t = self._tokens
-        self.chart.set_series([
+        lines = [
             (strings.BT_EQUITY, outcome.result.equity, t.accent),
             (strings.BT_BUY_HOLD, outcome.buy_and_hold, t.text_muted),
-        ])  # fmt: skip
+        ]
+        spec = STRATEGY_REGISTRY[str(self.strategy.currentData())]
+        if outcome.reference is not None:
+            lines.append((spec.reference_name, outcome.reference.equity, reference_color(t)))
+        self.chart.set_series(lines)
 
         trades = list(outcome.result.trades)
         rows = trades + ([outcome.result.open_trade] if outcome.result.open_trade else [])
@@ -324,4 +347,12 @@ class BacktestDialog(QDialog):
             notes.append(strings.BT_OPEN_NOTE)
         if s.profit_factor is None and s.trades:
             notes.append(strings.BT_PF_UNDEFINED)
+        ref = outcome.reference_stats
+        if ref is not None:
+            diff = s.total_return_pct - ref.total_return_pct
+            notes.append(strings.BT_REFERENCE.format(
+                name=spec.reference_name, ret=pct(ref.total_return_pct), trades=ref.trades,
+                drawdown=pct(ref.max_drawdown_pct), diff=pct(diff),
+                dd_diff=pct(s.max_drawdown_pct - ref.max_drawdown_pct),
+            ))  # fmt: skip
         self.notes.setText("\n".join(notes))

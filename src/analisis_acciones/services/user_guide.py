@@ -178,8 +178,14 @@ avisar).</p>""",
         "Backtesting",
         """
 <p><i>Herramientas → Backtesting…</i> (<kbd>Ctrl</kbd>+<kbd>B</kbd>) prueba una estrategia
-(cruce de medias o RSI) sobre el pasado del activo, con comisión y deslizamiento. La señal se
-calcula al cierre y se ejecuta en la apertura siguiente, sin usar información del futuro.</p>
+(cruce de medias, RSI o tendencia con salida por agotamiento) sobre el pasado del activo,
+con comisión y deslizamiento. La señal se calcula al cierre y se ejecuta en la apertura siguiente,
+sin usar información del futuro.</p>
+<p><b>Tendencia con salida por agotamiento</b> compra cuando el precio cruza al alza su media y
+vende cuando la pierde o, antes, cuando la subida muestra señales de agotamiento. La curva
+naranja es la misma estrategia sin esa salida: comparar las dos muestra si salir al agotarse la
+subida habría ganado o perdido dinero en ese activo (a menudo reduce la caída máxima pero
+también deja fuera parte de la subida).</p>
 <p><i>Herramientas → Backtesting de patrones…</i> hace lo mismo con los patrones chartistas en
 varios activos a la vez.</p>
 <p class="warnbox">Un buen resultado pasado no garantiza resultados futuros. Desconfíe de
