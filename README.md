@@ -89,6 +89,15 @@ blanco porque su motor se detuvo, se recarga automáticamente.
 - **Buscar:** escriba un ticker (p. ej. `AAPL`) o el nombre de una empresa en el cuadro de
   búsqueda. Use ↑/↓ y Enter, o haga clic en un resultado. Con el cuadro vacío se muestran
   los símbolos recientes.
+- **Criptomonedas:** busque por nombre («bitcoin») o escriba el par de Yahoo Finance, moneda y
+  divisa de cotización separadas por un guion: `BTC-USD`, `ETH-EUR`, `SOL-USD`. Cotizan todos
+  los días a todas horas: la vela diaria va de 00:00 a 00:00 UTC (la del día en curso se
+  considera sin cerrar) y las velas intradía se muestran en hora UTC, sin cortes de fin de
+  semana. Gráfico, indicadores, análisis, agotamiento, proyección, Elliott, patrones, alertas,
+  escáner, comparación (volatilidad anualizada con 365 días) y backtesting funcionan igual que
+  con acciones. No tienen datos fundamentales de empresa. En la cartera simulada se pueden
+  comprar y vender; su valor diario se calcula en días laborables (una operación de fin de
+  semana cuenta desde el lunes en la curva).
 - **Intervalo:** 15 minutos, 1 hora, Diario, Semanal o Mensual (los dos últimos se calculan a
   partir de los datos diarios). Intradía: solo horario regular (9:30–16:00 de Nueva York, que es
   la hora que muestra el gráfico); Yahoo ofrece unos 60 días de barras de 15 minutos y unos 2 años

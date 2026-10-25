@@ -2,7 +2,8 @@
 
 APP_TITLE = "Análisis de Acciones"
 
-SEARCH_PLACEHOLDER = "Buscar ticker o empresa…"
+SEARCH_PLACEHOLDER = "Buscar ticker, empresa o cripto (BTC-USD)…"
+SEARCH_CRYPTO = "criptomoneda"
 SEARCH_NO_RESULTS = "Sin resultados"
 SEARCH_SEARCHING = "Buscando…"
 SEARCH_RECENT = "Recientes"
@@ -337,7 +338,8 @@ CMP_COLUMNS = ["Activo", "Rentabilidad", "Volatilidad anual", "Caída máxima", 
 CMP_RANGE = "Periodo común: {start} → {end} ({sessions} sesiones)."
 CMP_NOTE = (
     "Rendimiento normalizado a 0 % en la primera sesión común, con cierres diarios. Volatilidad: "
-    "desviación típica anualizada de los rendimientos logarítmicos diarios (×√252)."
+    "desviación típica anualizada de los rendimientos logarítmicos diarios (×√252; ×√365 en "
+    "criptomonedas, que cotizan todos los días)."
 )
 
 TAB_PROJECTION = "Proyección"

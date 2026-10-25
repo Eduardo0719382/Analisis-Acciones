@@ -66,6 +66,8 @@ class SearchBox(QLineEdit):
             detail = " · ".join(
                 p for p in (result.name, result.exchange) if p and p != result.symbol
             )
+            if result.asset_type == "CRYPTOCURRENCY":
+                detail = f"{detail} · {strings.SEARCH_CRYPTO}" if detail else strings.SEARCH_CRYPTO
             item = QListWidgetItem(f"{result.symbol}    {detail}" if detail else result.symbol)
             item.setData(_SYMBOL_ROLE, result.symbol)
             item.setData(_NAME_ROLE, result.name)

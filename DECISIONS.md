@@ -954,3 +954,19 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   for the less frequent windows. Ctrl+Q is set explicitly because the "Quit" standard key has
   no binding on Windows. Ctrl+1…9 select the right-panel tabs.
 - A test checks that no two actions share a shortcut.
+
+## D-062 — Cryptocurrencies
+
+- Supported through Yahoo Finance pairs (`BTC-USD`). A symbol is treated as crypto by its form
+  alone (base, dash, known quote currency such as USD/EUR/USDT/BTC), so it works offline and
+  for symbols typed by hand; share classes such as `BRK-B` never match.
+- Yahoo closes a crypto daily bar at 00:00 UTC, so the bar of the current UTC day is "in
+  progress" (excluded where only closed bars count). The cache is refreshed after each UTC
+  midnight and otherwise at most hourly, because the market never closes. Intraday bars
+  (UTC wall time) end one interval after they start, with no 16:00 cap.
+- Projected times on the chart step through every calendar day/hour when the series has
+  weekend bars (decided from the data, not the symbol).
+- Comparison volatility is annualised with 365 days when the common sessions include weekends.
+- No company fundamentals: a clear message instead of an empty panel.
+- The paper portfolio keeps its weekday valuation calendar: a weekend crypto trade enters the
+  curve on Monday. Accepted for simplicity and documented.

@@ -96,23 +96,38 @@ def future_times(bars: pd.DataFrame, count: int) -> list[ChartTime]:
 
     Daily series step over weekends (holidays are not modelled); weekly and
     monthly series step by the typical gap between their last bars; intraday
-    series step through the 9:30–16:00 session on weekdays.
+    series step through the 9:30–16:00 session on weekdays. Series that trade
+    round the clock every day (cryptocurrencies: weekend bars present) step
+    through every calendar day / hour.
     """
     if count <= 0 or bars.empty:
         return []
     index = pd.DatetimeIndex(bars.index)
+    continuous = trades_every_day(index)
     if is_intraday_index(index):
+        if continuous:
+            step = pd.Series(index[1:] - index[:-1]).tail(50).median() if len(index) > 1 \
+                else pd.Timedelta(hours=1)  # fmt: skip
+            return chart_times(pd.date_range(index[-1] + step, periods=count, freq=step))
         return chart_times(pd.DatetimeIndex(_future_intraday(index, count)))
     last = index[-1]
     gaps = index.to_series().diff().dropna().dt.days.tail(20)
     typical = float(gaps.median()) if not gaps.empty else 1.0
-    if typical <= 4:
+    if typical <= 4 and continuous:
+        dates = pd.date_range(last + pd.Timedelta(days=1), periods=count, freq="D")
+    elif typical <= 4:
         dates = pd.bdate_range(last + pd.Timedelta(days=1), periods=count)
     elif typical <= 10:
         dates = pd.date_range(last + pd.Timedelta(days=7), periods=count, freq="7D")
     else:
         dates = pd.date_range(last, periods=count + 1, freq="MS")[1:]
     return [d.strftime("%Y-%m-%d") for d in dates]
+
+
+def trades_every_day(index: pd.DatetimeIndex) -> bool:
+    """Do the recent bars include weekends (an asset quoted every day, such as crypto)?"""
+    recent = index[-60:]
+    return len(recent) > 0 and bool((recent.weekday >= 5).sum() >= 2)
 
 
 def _future_intraday(index: pd.DatetimeIndex, count: int) -> list[pd.Timestamp]:

@@ -119,3 +119,17 @@ def test_currencies_and_exchange_rates(provider: YahooFinanceProvider) -> None:
     last = float(rates.bars["close"].iloc[-1])
     print(f"EURUSD=X: {len(rates)} bars, last {last}")
     assert len(rates) > 10 and 0.7 < last < 1.6
+
+
+def test_crypto_daily_history_includes_weekends(provider: YahooFinanceProvider) -> None:
+    series = provider.get_historical_data("BTC-USD", Interval.D1)
+    bars = series.bars
+    print(f"BTC-USD: {len(bars)} bars {series.first_date} .. {series.last_date}")
+    assert len(bars) > 1000
+    assert (bars.index[-60:].weekday >= 5).sum() >= 10  # quoted every day
+    assert series.last_date is not None and series.last_date > date.today() - timedelta(days=5)
+
+
+def test_crypto_search(provider: YahooFinanceProvider) -> None:
+    results = provider.search_symbol("bitcoin")
+    assert any(r.asset_type == "CRYPTOCURRENCY" for r in results)

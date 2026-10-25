@@ -38,6 +38,7 @@ from analisis_acciones.data.details import AssetDetails, build_details
 from analisis_acciones.data.freshness import (
     NEW_YORK,
     SESSION_CLOSE,
+    is_crypto,
     needs_refresh,
     session_in_progress,
 )
@@ -261,7 +262,7 @@ class MarketDataService:
     ) -> LoadResult:  # fmt: skip
         series = BarSeries(symbol, interval, bars, source, tuple(notices))
         last = pd.Timestamp(bars.index[-1]).to_pydatetime() if not bars.empty else None
-        in_progress = intraday_bar_in_progress(last, interval, now)
+        in_progress = intraday_bar_in_progress(last, interval, now, is_crypto(symbol))
         return LoadResult(series, fetched_at, from_cache, stale, in_progress, tuple(notices))
 
     @staticmethod
@@ -285,7 +286,7 @@ class MarketDataService:
             cached = self._bars.load(symbol) if meta else None
 
         if meta is not None and cached is not None and not cached.empty:
-            if not needs_refresh(meta.fetched_at, now):
+            if not needs_refresh(meta.fetched_at, now, is_crypto(symbol)):
                 return self._result(symbol, cached, meta.source, meta.fetched_at, now, True)
             try:
                 bars, source = self._refresh(symbol, cached, now)
@@ -363,7 +364,7 @@ class MarketDataService:
             fetched_at,
             from_cache,
             stale,
-            session_in_progress(last, now) and not is_csv_symbol(symbol),
+            session_in_progress(last, now, is_crypto(symbol)) and not is_csv_symbol(symbol),
             tuple(notices),
         )
 
@@ -433,6 +434,12 @@ class MarketDataService:
                 user_message="No hay datos fundamentales para series importadas.",
             )
         symbol = normalize_symbol(raw_symbol)
+        if is_crypto(symbol):
+            raise UserError(
+                "no fundamentals for crypto",
+                user_message="Las criptomonedas no tienen datos fundamentales de empresa "
+                "(beneficios, PER, márgenes ni dividendos).",
+            )
         now = self._clock()
         with self._db():
             row = self._conn.execute(
@@ -516,13 +523,16 @@ class MarketDataService:
 
 
 def intraday_bar_in_progress(last_start: datetime | None, interval: Interval,
-                             now: datetime) -> bool:  # fmt: skip
-    """Is the bar starting at ``last_start`` (New York wall time) still being formed?
+                             now: datetime, crypto: bool = False) -> bool:  # fmt: skip
+    """Is the bar starting at ``last_start`` (exchange wall time) still being formed?
 
-    A bar ends ``interval`` later or at the 16:00 close, whichever is first.
+    A stock bar (New York time) ends ``interval`` later or at the 16:00 close,
+    whichever is first; a crypto bar (UTC, round the clock) ends ``interval`` later.
     """
     if last_start is None or interval not in INTRADAY_STEP:
         return False
+    if crypto:
+        return now.astimezone(UTC).replace(tzinfo=None) < last_start + INTRADAY_STEP[interval]
     close = datetime.combine(last_start.date(), SESSION_CLOSE)
     end = min(last_start + INTRADAY_STEP[interval], close)
     return now.astimezone(NEW_YORK).replace(tzinfo=None) < end

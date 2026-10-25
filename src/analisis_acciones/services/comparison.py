@@ -1,7 +1,8 @@
 """Compare several assets over a common period. Pure calculations (no Qt, no I/O).
 
 * Performance is normalised to 0 % at the first common session, from closes.
-* Volatility: annualised standard deviation of daily log returns (× √252).
+* Volatility: annualised standard deviation of daily log returns (× √252, or × √365
+  when the common sessions include weekends: assets quoted every day such as crypto).
 * Max drawdown: largest peak-to-trough fall of the close over the period.
 """
 
@@ -19,6 +20,7 @@ from analisis_acciones.indicators import functions as f
 from analisis_acciones.models.errors import DataError
 
 TRADING_DAYS = 252
+CALENDAR_DAYS = 365
 PERIODS: dict[str, int | None] = {"6M": 182, "1A": 365, "3A": 3 * 365, "5A": 5 * 365, "Máx": None}
 
 
@@ -55,13 +57,15 @@ def compare(closes_by_symbol: dict[str, pd.DataFrame], period_days: int | None) 
             user_message="Los activos no tienen suficientes sesiones en común en ese periodo.",
         )
     performance = (closes / closes.iloc[0] - 1.0) * 100.0
+    every_day = (pd.DatetimeIndex(closes.index[-60:]).weekday >= 5).sum() >= 2
+    per_year = CALENDAR_DAYS if every_day else TRADING_DAYS
     metrics = []
     for symbol, bars in closes_by_symbol.items():
         series = closes[symbol]
         window = bars.loc[closes.index]
         log_returns = pd.Series(np.log(series / series.shift(1)), index=series.index).dropna()
         volatility = (
-            float(log_returns.std(ddof=1) * math.sqrt(TRADING_DAYS) * 100.0)
+            float(log_returns.std(ddof=1) * math.sqrt(per_year) * 100.0)
             if len(log_returns) >= 2 else None
         )  # fmt: skip
         volume = window["volume"].dropna()

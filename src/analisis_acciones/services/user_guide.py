@@ -45,6 +45,25 @@ Fundamentales y Alertas.</li>
 y el programa indica que pueden no estar actualizados.</p>""",
     ),
     (
+        "cripto",
+        "Criptomonedas",
+        """
+<p>Busque por nombre (<b>bitcoin</b>, <b>ethereum</b>) o escriba el par de Yahoo Finance:
+moneda, guion y divisa (<b>BTC-USD</b>, <b>ETH-EUR</b>, <b>SOL-USD</b>). En la búsqueda aparecen
+marcadas como «criptomoneda».</p>
+<ul>
+<li>Cotizan <b>todos los días, a todas horas</b>. La vela diaria va de 00:00 a 00:00 UTC y la del
+día en curso se trata como no cerrada (alertas, escáner y agotamiento usan solo velas
+cerradas). Las velas intradía se muestran en hora UTC.</li>
+<li>Una semana tiene 7 velas diarias, no 5: «20 sesiones» son 20 días naturales.</li>
+<li>Todas las herramientas de precio funcionan igual que con acciones. La volatilidad anualizada
+de la comparación usa 365 días.</li>
+<li>No hay datos fundamentales (beneficios, PER, dividendos): no son empresas.</li>
+<li>Suelen moverse mucho más que una acción; los resultados pasados de cualquier señal no
+garantizan los futuros.</li>
+</ul>""",
+    ),
+    (
         "colores",
         "Cómo leer colores y símbolos",
         """
