@@ -126,3 +126,25 @@ def test_note_is_single_line_and_bounded(alerts: AlertService) -> None:
     rule = alerts.create("TEST", AlertKind.PRICE_ABOVE, {"value": 105}, note="a\nb  " + "x" * 500)
     assert "\n" not in rule.note and len(rule.note) == 120
     assert alerts.alerts()[0].note == rule.note
+
+
+def test_crypto_alerts_fire_on_weekends_once_the_utc_day_closes(
+    alerts: AlertService, client: FakeYahooClient, clock: Clock
+) -> None:
+    import pandas as pd
+
+    bars = make_bars(np.linspace(100, 104, 60))
+    bars.index = pd.date_range("2023-01-18", periods=60, freq="D", name="date")  # to Sat 03-18
+    for col in ("high", "close"):
+        bars.iloc[-2, bars.columns.get_loc(col)] = 200.0  # Friday 2023-03-17
+        bars.iloc[-1, bars.columns.get_loc(col)] = 300.0  # Saturday
+    client.bars = bars
+    client.known = {"BTC-USD"}
+    alerts.create("BTC-USD", AlertKind.PRICE_ABOVE, {"value": 250})
+    # Saturday 12:00 UTC: Saturday's bar is forming, so its 300 does not count yet.
+    clock.now = datetime(2023, 3, 18, 12, 0, tzinfo=UTC)
+    assert alerts.check_all().events == ()
+    # Sunday 00:30 UTC: Saturday's bar is closed and fires the alert.
+    clock.now = datetime(2023, 3, 19, 0, 30, tzinfo=UTC)
+    fired = alerts.check_all().events
+    assert len(fired) == 1 and fired[0].bar_date.isoformat() == "2023-03-18"

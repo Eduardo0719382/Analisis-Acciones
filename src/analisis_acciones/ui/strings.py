@@ -239,7 +239,9 @@ ALERT_PROBLEMS = "{count} incidencia(s) (pase el ratón para ver el detalle)."
 ALERT_EOD_NOTE = (
     "Las alertas se evalúan sobre velas cerradas del intervalo elegido mientras el programa está "
     "abierto: diarias cada 15 minutos; intradía (1 hora, 15 min) cada 2 minutos. Una alerta de "
-    "nivel avisa al cumplirse la condición y se rearma cuando deja de cumplirse."
+    "nivel avisa al cumplirse la condición y se rearma cuando deja de cumplirse. Las de "
+    "criptomonedas se comprueban también de noche y en fin de semana (vela diaria cerrada a las "
+    "00:00 UTC)."
 )
 ALERT_INTERVAL = "Velas"
 ALERT_INTERVAL_CHOICES = {"1D": "Diarias", "1h": "De 1 hora", "15m": "De 15 minutos"}

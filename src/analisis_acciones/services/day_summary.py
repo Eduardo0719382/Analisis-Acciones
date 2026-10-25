@@ -15,6 +15,7 @@ from html import escape
 from urllib.parse import quote
 
 from analisis_acciones.alerts.service import AlertEvent
+from analisis_acciones.data.freshness import is_crypto
 from analisis_acciones.models.errors import AppError
 from analisis_acciones.models.market import Interval
 from analisis_acciones.services import company_calendar
@@ -190,6 +191,8 @@ def summary_html(items: list[SummaryItem], events: list[AlertEvent], now: dateti
     title_day = f"{DAYS[local.weekday()]} {local:%d/%m/%Y}"
     status = ('<span class="status open">● Mercado de EE. UU. abierto</span>' if is_open
               else '<span class="status">● Mercado de EE. UU. cerrado</span>')  # fmt: skip
+    if any(is_crypto(i.symbol) for i in items):
+        status += ' <span class="status open">● Criptomonedas: cotizan 24 h</span>'
 
     def names(rows: list[SummaryItem]) -> str:
         return ", ".join(f"{escape(r.symbol)} {num(r.change_pct, 1, sign=True)} %"

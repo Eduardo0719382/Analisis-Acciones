@@ -53,6 +53,9 @@ def test_summary_html_content_and_escaping() -> None:
     assert "AAA +2,5 %" in html and "BBB −1,0 %" in html  # movers in the tiles
     assert "— Patrón Doble suelo (ruptura)" in html  # icon shown once, by the row marker
     assert "<script" not in html
+    assert "Criptomonedas: cotizan 24 h" not in html
+    crypto = [SummaryItem("BTC-USD", 60_000.0, 1.0, date(2025, 3, 8), (59_000.0, 60_000.0))]
+    assert "Criptomonedas: cotizan 24 h" in summary_html(crypto, [], NOW, False)
 
 
 def test_dialog_links_open_symbols(qtbot: QtBot, settings: SettingsService,

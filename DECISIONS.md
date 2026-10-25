@@ -1037,3 +1037,10 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
 - The backtest engine bought whole shares only, so a coin priced above the capital (BTC)
   never traded. `BacktestConfig.fractional` buys fractions down to 1e-8 and is set for
   crypto symbols; stocks keep whole shares so earlier results do not change.
+
+## D-069 — Crypto alerts around the clock
+
+- Alert checks never depended on US market hours; with the crypto-aware "bar in progress"
+  rules a crypto daily alert fires once 00:00 UTC closes the day, weekends included, and 1-hour
+  / 15-minute alerts fire as each UTC bar closes. A test covers a Saturday case. The alerts
+  note and the day summary say so.
