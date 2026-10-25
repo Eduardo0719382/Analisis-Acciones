@@ -1010,3 +1010,10 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   comparison with the baseline is the first thing seen, and warns that testing many assets
   makes some look useful by chance (no multiple-comparison correction is applied; the warning
   and the per-asset p-value are shown instead).
+
+## D-066 — Exhaustion exit with re-entry
+
+- Second variant of the exhaustion backtest: after an exhaustion exit it buys again on the first
+  bar where the signs have gone (previous bar signalled, this one not) and the close is still
+  above its average. Exits are identical to the first variant, so the comparison between the
+  two isolates the re-entry rule; both are compared with the same trend-only reference.

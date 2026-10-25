@@ -75,3 +75,31 @@ def test_dialog_shows_the_comparison(qtbot: QtBot) -> None:
     dialog.run()
     qtbot.waitUntil(lambda: dialog.outcome is not None, timeout=10000)
     assert "Misma tendencia sin salida por agotamiento: rentabilidad" in dialog.notes.text()
+
+
+def test_reentry_buys_again_when_the_signs_fade_above_the_average() -> None:
+    from analisis_acciones.strategies.registry import trend_exhaustion_reentry
+
+    bars = boom_and_bust()
+    plain = trend_exhaustion(bars, PARAMS)
+    again = trend_exhaustion_reentry(bars, PARAMS)
+    assert (again["exit"] == plain["exit"]).all()
+    extra = again["entry"] & ~plain["entry"]
+    assert extra.any()
+    exhausted = signal_series(bars, Params(threshold=3)) > 0
+    average = bars["close"].rolling(50).mean()
+    for day in extra[extra].index:
+        i = bars.index.get_loc(day)
+        assert exhausted.iloc[i - 1] and not exhausted.iloc[i]
+        assert bars["close"].iloc[i] > average.iloc[i]
+    assert trend_exhaustion_reentry(bars.iloc[:340], PARAMS).equals(again.iloc[:340])
+
+
+def test_reentry_keeps_more_of_the_trend() -> None:
+    series = BarSeries("RUN", Interval.D1, boom_and_bust(), "synthetic")
+    config = BacktestConfig(10_000, 0.1, 0.0, 0.05)
+    plain = run_strategy(series, "trend_exhaustion", PARAMS, config)
+    again = run_strategy(series, "trend_exhaustion_reentry", PARAMS, config)
+    assert again.reference_stats == plain.reference_stats
+    assert again.stats.trades > plain.stats.trades
+    assert again.stats.exposure_pct > plain.stats.exposure_pct

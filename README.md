@@ -204,7 +204,9 @@ blanco porque su motor se detuvo, se recarga automáticamente.
   la cruza a la baja o, antes, en cuanto la subida muestra N señales de agotamiento. Se ejecuta
   también la misma estrategia sin esa salida y se dibuja como tercera curva, con la diferencia
   de rentabilidad y de caída máxima: así se ve qué habría pasado por salir al agotarse la subida
-  (tras una salida por agotamiento solo se vuelve a entrar con un nuevo cruce al alza).
+  (tras una salida por agotamiento solo se vuelve a entrar con un nuevo cruce al alza). La
+  variante **«… y re-entrada»** vuelve a comprar en cuanto desaparecen las señales si el cierre
+  sigue por encima de la media; se compara con la misma referencia.
 - **Backtesting de patrones:** *Herramientas → Backtesting de patrones…* simula, en varios
   activos a la vez (hasta 30), qué habría pasado operando cada patrón chartista al confirmarse:
   entrada en la apertura siguiente, salida en el objetivo del patrón, en su invalidación (stop) o

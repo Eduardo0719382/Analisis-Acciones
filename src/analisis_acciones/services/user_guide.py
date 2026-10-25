@@ -190,7 +190,8 @@ sin usar información del futuro.</p>
 vende cuando la pierde o, antes, cuando la subida muestra señales de agotamiento. La curva
 naranja es la misma estrategia sin esa salida: comparar las dos muestra si salir al agotarse la
 subida habría ganado o perdido dinero en ese activo (a menudo reduce la caída máxima pero
-también deja fuera parte de la subida).</p>
+también deja fuera parte de la subida). La variante <b>con re-entrada</b> vuelve a comprar
+cuando las señales desaparecen y el precio sigue por encima de la media.</p>
 <p><i>Herramientas → Backtesting de patrones…</i> hace lo mismo con los patrones chartistas en
 varios activos a la vez.</p>
 <p class="warnbox">Un buen resultado pasado no garantiza resultados futuros. Desconfíe de

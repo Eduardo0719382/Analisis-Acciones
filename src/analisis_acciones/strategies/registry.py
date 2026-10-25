@@ -64,6 +64,17 @@ def trend_exhaustion(bars: pd.DataFrame, p: dict[str, Any]) -> pd.DataFrame:
     return _signals(base["entry"], base["exit"] | exhaustion_exit(bars, p))
 
 
+def trend_exhaustion_reentry(bars: pd.DataFrame, p: dict[str, Any]) -> pd.DataFrame:
+    """``trend_exhaustion`` that buys again when the exhaustion signs fade while the close is
+    still above its average (instead of waiting for a new cross)."""
+    close = bars["close"]
+    average = f.sma(close, int(p["period"]))
+    exhausted = exhaustion_exit(bars, p)
+    faded = exhausted.shift(1, fill_value=False) & ~exhausted & (close > average)
+    base = trend_only(bars, p)
+    return _signals(base["entry"] | faded, base["exit"] | exhausted)
+
+
 @dataclass(frozen=True)
 class StrategySpec:
     id: str
@@ -120,6 +131,22 @@ STRATEGIES: tuple[StrategySpec, ...] = (
             ParamSpec("rsi_high", "RSI de sobrecompra", 70, 55, 95),
         ),
         signals=trend_exhaustion,
+        reference=trend_only,
+        reference_name="Misma tendencia sin salida por agotamiento",
+    ),
+    StrategySpec(
+        id="trend_exhaustion_reentry",
+        name="Tendencia con salida por agotamiento y re-entrada",
+        entry_rule="Entrada: el cierre cruza al alza su media de {period}, o vuelve a comprar "
+        "cuando desaparecen las señales de agotamiento con el cierre aún por encima de la media",
+        exit_rule="Salida: el cierre cruza a la baja su media de {period}, o antes si la subida "
+        "muestra {conditions} o más señales de agotamiento (RSI de sobrecompra {rsi_high})",
+        params=(
+            ParamSpec("period", "Media simple", 50, 5, 400),
+            ParamSpec("conditions", "Señales de agotamiento", 3, 1, 6),
+            ParamSpec("rsi_high", "RSI de sobrecompra", 70, 55, 95),
+        ),
+        signals=trend_exhaustion_reentry,
         reference=trend_only,
         reference_name="Misma tendencia sin salida por agotamiento",
     ),
