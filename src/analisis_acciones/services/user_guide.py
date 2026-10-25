@@ -176,6 +176,8 @@ inicial necesario.</p>
 <p><b>Avisos de la cartera</b> (en <i>Ajustes de la cartera…</i>): le avisan si una posición
 pierde un porcentaje desde su coste, si un activo se aleja de su peso objetivo o si la cartera
 cae desde su máximo.</p>
+<p><b>Comparar con varios índices:</b> escriba hasta 3 referencias en «Comparar con» (p. ej.
+SPY, QQQ); el informe las dibuja con el mismo capital y muestra la rentabilidad de cada año.</p>
 <p><b>Divisas:</b> la cartera se lleva en dólares; un activo en euros o en peniques se anota
 con su precio en esa divisa y se convierte con el tipo de cambio del día.</p>
 <p>En la pestaña <b>Rebalanceo</b> indica el peso que quiere para cada activo y el programa

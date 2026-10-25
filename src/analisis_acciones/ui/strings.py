@@ -702,6 +702,11 @@ PF_DISCLAIMER = (
 )
 PF_ITEM = "{name} · capital inicial {cash}"
 PF_TAB_REBALANCE = "Rebalanceo"
+PF_COMPARE = "Comparar con:"
+PF_COMPARE_TIP = (
+    "Hasta 3 índices o activos de referencia separados por comas (p. ej. SPY, QQQ, ^IBEX). "
+    "Cada uno se calcula con el mismo capital inicial y las mismas fechas que la cartera."
+)
 PF_IMPORT = "Importar operaciones (CSV)…"
 PF_IMPORT_FILTER = "CSV (*.csv *.txt);;Todos los archivos (*)"
 PF_IMPORT_READING = "Leyendo el archivo y buscando tipos de cambio…"

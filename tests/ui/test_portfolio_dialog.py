@@ -191,3 +191,18 @@ def test_import_trades_from_csv(
     bad.write_text("", encoding="utf-8")
     dialog.start_import(bad, ask=False)
     assert "vacío" in dialog.status.text()
+
+
+def test_references_are_saved(qtbot: QtBot, service: PaperPortfolioService,
+                              settings: SettingsService) -> None:  # fmt: skip
+    dialog = PortfolioDialog(service, lambda: "SPY", "TEST", None,
+                             settings.portfolio_benchmarks,
+                             settings.set_portfolio_benchmarks)  # fmt: skip
+    qtbot.addWidget(dialog)
+    assert dialog.compare.text() == "SPY"
+    dialog.compare.setText("spy; test, spy, a, b")
+    dialog._references_changed()
+    assert dialog.compare.text() == "SPY, TEST, A"
+    assert settings.portfolio_benchmarks() == ["SPY", "TEST", "A"]
+    dialog.compare.setText("")
+    assert dialog.references() == ["SPY"]

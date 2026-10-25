@@ -48,6 +48,7 @@ MAX_NAME = 40
 
 
 MAX_TEXT = 500
+MAX_BENCHMARKS = 3
 REBALANCE_NOTE = "Rebalanceo hacia los pesos objetivo"
 QUANTITY_DECIMALS = 6
 
@@ -107,6 +108,8 @@ class PortfolioReport:
     # Dividends and splits that affected the portfolio, in the share units of their day
     # (``shares`` is the count after the event for a split).
     events: list[AppliedEvent] = field(default_factory=list)
+    # Every reference index, rebased to the initial cash on the first day (main one first).
+    benchmarks: dict[str, pd.Series] = field(default_factory=dict)
 
 
 class PaperPortfolioService:
@@ -535,8 +538,15 @@ class PaperPortfolioService:
                        (trade_id, portfolio_id))  # fmt: skip
 
     # Report ----------------------------------------------------------------------
-    def report(self, portfolio_id: int, benchmark: str = "SPY") -> PortfolioReport:
-        """Current valuation, events, daily value curve and benchmark (cache-first loads)."""
+    def report(self, portfolio_id: int, benchmark: str | list[str] = "SPY") -> PortfolioReport:
+        """Current valuation, events, daily value curve and benchmarks (cache-first loads).
+
+        ``benchmark`` may list several symbols (at most MAX_BENCHMARKS); the first one is the
+        main reference of the summary.
+        """
+        names = [benchmark] if isinstance(benchmark, str) else list(benchmark)
+        names = list(dict.fromkeys(n.strip().upper() for n in names if n.strip()))
+        names = names[:MAX_BENCHMARKS] or ["SPY"]
         portfolio = self._portfolio(portfolio_id)
         trades = self.trades(portfolio_id)
         fx = FxConverter(self._market)
@@ -555,21 +565,26 @@ class PaperPortfolioService:
         valuation = value(state, portfolio.initial_cash, prices)
         equity, per_symbol = daily_values(adjusted, portfolio.initial_cash, closes, end, events,
                                           withholding)  # fmt: skip
-        bench = pd.Series(dtype=float)
+        benches: dict[str, pd.Series] = {}
         if not equity.empty:
-            try:
-                b = self._market.load(benchmark, Interval.D1).series.bars["close"]
-                aligned = b.reindex(equity.index, method="ffill").dropna()
-                if not aligned.empty:
-                    bench = aligned / float(aligned.iloc[0]) * portfolio.initial_cash
-            except AppError as exc:
-                problems.append(f"{benchmark}: {exc.user_message}")
+            for name in names:
+                try:
+                    raw = self._market.load(name, Interval.D1).series.bars
+                    b = fx.to_usd(raw, fx.currency_of(name))["close"]
+                    aligned = b.reindex(equity.index, method="ffill").dropna()
+                    if not aligned.empty:
+                        benches[name] = aligned / float(aligned.iloc[0]) * portfolio.initial_cash
+                except AppError as exc:
+                    problems.append(f"{name}: {exc.user_message}")
+        bench = benches.get(names[0], pd.Series(dtype=float))
+        benchmark = names[0]
         splits = {s: b["splits"] for s, b in bars.items()}
         closed = [self._closed_as_quoted(c) for c in state.closed]
         taxes = gains_tax(closed, portfolio.capital_gains_tax_pct)
         return PortfolioReport(portfolio, trades, valuation, equity, bench, benchmark, problems,
                                closed, per_symbol, taxes, fx.notes,
-                               [self._as_quoted(e, splits) for e in state.applied])  # fmt: skip
+                               [self._as_quoted(e, splits) for e in state.applied],
+                               benches)  # fmt: skip
 
     @staticmethod
     def _closed_as_quoted(closed: ClosedTrade) -> ClosedTrade:
@@ -607,3 +622,30 @@ def gains_tax(closed: list[ClosedTrade], rate_pct: float) -> list[tuple[int, flo
         year = c.trade.trade_date.year
         by_year[year] = by_year.get(year, 0.0) + c.result
     return [(y, net, max(net, 0.0) * rate_pct / 100) for y, net in sorted(by_year.items())]
+
+
+def yearly_returns(series: pd.Series, initial: float) -> list[tuple[int, float, bool]]:
+    """(year, return %, partial year) of a value curve that starts with ``initial``.
+
+    Each year runs from the last value of the previous year (``initial`` for the first year)
+    to its own last value. The first and the current year are marked partial when the curve
+    does not cover them fully.
+    """
+    clean = series.dropna()
+    if clean.empty or initial <= 0:
+        return []
+    index = pd.DatetimeIndex(clean.index)
+    out: list[tuple[int, float, bool]] = []
+    start = initial
+    years = sorted(set(index.year))
+    for k, year in enumerate(years):
+        values = clean[index.year == year]
+        end = float(values.iloc[-1])
+        first_day = pd.Timestamp(values.index[0])
+        last_day = pd.Timestamp(values.index[-1])
+        partial = (k == 0 and (first_day.month, first_day.day) > (1, 7)) or (
+            k == len(years) - 1 and (last_day.month, last_day.day) < (12, 24)
+        )
+        out.append((int(year), (end / start - 1) * 100, partial))
+        start = end
+    return out

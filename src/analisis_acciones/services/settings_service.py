@@ -41,6 +41,7 @@ KEY_BENCHMARK = "chart.benchmark"
 KEY_BENCHMARK_ON = "chart.benchmark_on"
 DEFAULT_BENCHMARK = "SPY"
 KEY_SCAN_SNAPSHOT = "scanner.daily_snapshot"
+KEY_PORTFOLIO_BENCHMARKS = "portfolio.benchmarks"
 KEY_CALENDAR_DAYS = "scanner.calendar_notice_days"
 KEY_CALENDAR_NOTIFIED = "scanner.calendar_notified"
 DEFAULT_CALENDAR_DAYS = 3
@@ -174,6 +175,16 @@ class SettingsService:
 
     def set_benchmark(self, symbol: str) -> None:
         self._repo.set(KEY_BENCHMARK, symbol)
+
+    def portfolio_benchmarks(self) -> list[str]:
+        """References for the paper portfolio (default: the chart's benchmark)."""
+        raw = self._repo.get(KEY_PORTFOLIO_BENCHMARKS)
+        if isinstance(raw, list) and raw and all(isinstance(s, str) for s in raw):
+            return [str(s) for s in raw][:3]
+        return [self.benchmark()]
+
+    def set_portfolio_benchmarks(self, symbols: list[str]) -> None:
+        self._repo.set(KEY_PORTFOLIO_BENCHMARKS, list(symbols)[:3])
 
     def benchmark_on(self) -> bool:
         return self._repo.get(KEY_BENCHMARK_ON) is True

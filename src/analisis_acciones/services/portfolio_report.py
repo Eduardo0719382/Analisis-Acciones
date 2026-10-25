@@ -18,13 +18,23 @@ import pandas as pd
 from analisis_acciones.data.export import safe_cell
 from analisis_acciones.portfolio.engine import BUY, DIVIDEND, ClosedTrade, PaperTrade
 from analisis_acciones.services.journal_stats import journal_stats
-from analisis_acciones.services.paper_portfolio import PortfolioReport
+from analisis_acciones.services.paper_portfolio import PortfolioReport, yearly_returns
 from analisis_acciones.services.scan_report import STYLE, num
 
 EXTRA_STYLE = """
 .curve { width: 100%; height: auto; display: block; }
 .curve .pf { fill: none; stroke: var(--up); stroke-width: 2.2; }
-.curve .bm { fill: none; stroke: var(--ink-2); stroke-width: 1.6; }
+.curve .bm { fill: none; stroke-width: 1.8; }
+.curve .bm0 { stroke: var(--ref-1); } .curve .bm1 { stroke: var(--ref-2); }
+.curve .bm2 { stroke: var(--ref-3); }
+.curve .lbl0 { fill: var(--ref-1); } .curve .lbl1 { fill: var(--ref-2); }
+.curve .lbl2 { fill: var(--ref-3); }
+.chart-legend i.sw0 { background: var(--ref-1); } .chart-legend i.sw1 { background: var(--ref-2); }
+.chart-legend i.sw2 { background: var(--ref-3); }
+:root { --ref-1: #eb6834; --ref-2: #1baf7a; --ref-3: #eda100; }
+@media screen and (prefers-color-scheme: dark) {
+  :root { --ref-1: #d95926; --ref-2: #199e70; --ref-3: #c98500; }
+}
 .curve .base { stroke: var(--flat); stroke-width: 1; stroke-dasharray: 4 4; }
 .curve text { font-size: 11.5px; fill: var(--ink-2); }
 .curve .axis { fill: var(--muted); font-size: 10.5px; }
@@ -68,18 +78,19 @@ def _signed_cell(value: float | None, decimals: int = 2, suffix: str = "") -> st
 
 def curve_svg(
     equity: pd.Series,
-    benchmark: pd.Series,
+    benchmarks: dict[str, pd.Series],
     initial: float,
-    bench_name: str,
     width: int = 900,
     height: int = 240,
 ) -> str:
+    """Portfolio value against up to three references, each labelled at its line end."""
     if len(equity) < 2:
         return '<p class="muted">La curva aparecerá cuando haya operaciones en más de un día.</p>'
-    values = [float(v) for v in [*equity, *benchmark.dropna(), initial]]
+    shown = {n: b.dropna() for n, b in list(benchmarks.items())[:3] if len(b.dropna()) >= 2}
+    values = [float(v) for v in [*equity, initial, *(v for b in shown.values() for v in b)]]
     low, high = min(values), max(values)
     span = (high - low) or 1.0
-    left, right, top, bottom = 4, width - 130, 10, height - 24
+    left, right, top, bottom = 4, width - 150, 10, height - 24
     index = pd.DatetimeIndex(equity.index)
     first, last = index[0], index[-1]
     total_days = max((last - first).days, 1)
@@ -91,51 +102,74 @@ def curve_svg(
         return top + (high - v) * (bottom - top) / span
 
     def poly(series: pd.Series, css: str, label: str) -> str:
-        clean = series.dropna()
         pts = " ".join(
             f"{x(ts):.1f},{y(float(v)):.1f}"
-            for ts, v in zip(pd.DatetimeIndex(clean.index), clean, strict=True)
+            for ts, v in zip(pd.DatetimeIndex(series.index), series, strict=True)
         )
         return (
             f'<polyline class="{css}" points="{pts}"><title>{escape(label)}: '
-            f"{num(float(series.dropna().iloc[-1]))}</title></polyline>"
+            f"{num(float(series.iloc[-1]))}</title></polyline>"
         )
 
     parts = [
         f'<svg class="curve" viewBox="0 0 {width} {height}" role="img" '
-        'aria-label="Valor de la cartera frente a la referencia">',
+        'aria-label="Valor de la cartera frente a las referencias">',
         f'<line class="base" x1="{left}" x2="{right}" y1="{y(initial):.1f}" '
         f'y2="{y(initial):.1f}"><title>Capital inicial {num(initial)}</title></line>',
     ]
-    labels = [(y(initial) + 4, f"Inicial {num(initial)}")]
-    if len(benchmark.dropna()) >= 2:
-        parts.append(poly(benchmark, "bm", bench_name))
-        labels.append(
-            (
-                y(float(benchmark.dropna().iloc[-1])) + 4,
-                f"{escape(bench_name)} {num(float(benchmark.dropna().iloc[-1]))}",
-            )
-        )
+    labels = [(y(initial) + 4, f"Inicial {num(initial)}", "")]
+    for k, (name, series) in enumerate(shown.items()):
+        parts.append(poly(series, f"bm bm{k}", name))
+        last_value = float(series.iloc[-1])
+        labels.append((y(last_value) + 4, f"{escape(name)} {num(last_value)}", f"lbl{k}"))
     parts.append(poly(equity, "pf", "Cartera"))
-    labels.append((y(float(equity.iloc[-1])) + 4, f"Cartera {num(float(equity.iloc[-1]))}"))
+    labels.append((y(float(equity.iloc[-1])) + 4, f"Cartera {num(float(equity.iloc[-1]))}", ""))
     labels.sort()
     placed: list[float] = []
-    for ly, text in labels:
+    for ly, text, css in labels:
         ly = max(ly, placed[-1] + 14) if placed else ly
         placed.append(ly)
-        parts.append(f'<text x="{right + 8}" y="{ly:.1f}">{text}</text>')
+        marker = f'<tspan class="{css}">■ </tspan>' if css else ""
+        parts.append(f'<text x="{right + 8}" y="{ly:.1f}">{marker}{text}</text>')
     parts.append(
         f'<text class="axis" x="{left}" y="{height - 6}">{first:%d/%m/%Y}</text>'
         f'<text class="axis" x="{right}" y="{height - 6}" text-anchor="end">'
         f"{last:%d/%m/%Y}</text></svg>"
     )
-    legend = (
-        '<div class="chart-legend"><span><i style="background:var(--up)"></i>cartera</span>'
-        f'<span><i style="background:var(--ink-2)"></i>{escape(bench_name)} con el mismo '
-        'capital inicial</span><span><i style="background:repeating-linear-gradient(90deg,'
-        'var(--flat) 0 4px,transparent 4px 7px)"></i>capital inicial</span></div>'
+    legend = ['<div class="chart-legend"><span><i style="background:var(--up)"></i>cartera</span>']
+    for k, name in enumerate(shown):
+        legend.append(
+            f'<span><i class="sw{k}"></i>{escape(name)} con el mismo capital inicial</span>'
+        )
+    legend.append(
+        '<span><i style="background:repeating-linear-gradient(90deg,var(--flat) 0 4px,'
+        'transparent 4px 7px)"></i>capital inicial</span></div>'
     )
-    return "".join(parts) + legend
+    return "".join(parts) + "".join(legend)
+
+
+def yearly_table(report: PortfolioReport) -> str:
+    """Return per calendar year: portfolio and each reference (same capital and dates)."""
+    initial = report.portfolio.initial_cash
+    own = yearly_returns(report.equity, initial)
+    if not own:
+        return ""
+    refs = {n: {y: r for y, r, _p in yearly_returns(b, initial)}
+            for n, b in list(report.benchmarks.items())[:3]}  # fmt: skip
+    head = "".join(f"<th>{escape(n)}</th>" for n in refs)
+    rows = []
+    for year, ret, partial in reversed(own):
+        label = f"{year}" + (' <span class="muted">(parcial)</span>' if partial else "")
+        cells = "".join(_signed_cell(refs[n].get(year), 2, " %") for n in refs)
+        rows.append(f"<tr><td>{label}</td>{_signed_cell(ret, 2, ' %')}{cells}</tr>")
+    return (
+        '<div class="panel"><h3>Rentabilidad por año</h3><p class="muted small">Del último '
+        "valor del año anterior (o del capital inicial) al último valor de cada año; las "
+        "referencias, con el mismo capital y en las mismas fechas.</p>"
+        f"<table><thead><tr><th>Año</th><th>Cartera</th>{head}</tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table></div>"
+    )
 
 
 def _journal(note: str, review: str) -> str:
@@ -433,7 +467,14 @@ se convierten con el tipo de cambio de cada día.
 <div class="tiles">{tiles}</div>
 {problems}
 <div class="panel"><h3>Valor de la cartera en el tiempo</h3>
-{curve_svg(report.equity, report.benchmark, p.initial_cash, report.benchmark_symbol)}</div>
+{
+        curve_svg(
+            report.equity,
+            report.benchmarks or {report.benchmark_symbol: report.benchmark},
+            p.initial_cash,
+        )
+    }</div>
+{yearly_table(report)}
 <div class="panel"><h3>Posiciones y distribución</h3>{alloc}
 <table><thead><tr><th>Activo</th><th>Cantidad</th><th>Coste medio ($)</th>
 <th>Último cierre ($)</th><th>Valor ($)</th><th>Resultado latente</th><th>%</th><th>Peso</th>

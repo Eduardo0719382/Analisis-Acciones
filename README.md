@@ -223,6 +223,10 @@ blanco porque su motor se detuvo, se recarga automáticamente.
   (con el mismo capital y fechas), la evolución diaria, las posiciones con su peso y la lista de
   operaciones. Se exporta a HTML, PDF o CSV. No permite ventas en corto ni gastar más efectivo
   del disponible.
+  - **Comparar con varios índices:** el campo *Comparar con* admite hasta 3 referencias (p. ej.
+    `SPY, QQQ, ^IBEX`), dibujadas con el mismo capital inicial y fechas que la cartera, y la
+    tabla **Rentabilidad por año** compara la cartera con cada una (años incompletos marcados
+    «parcial»).
   - **Importar operaciones reales (CSV del broker):** botón *Importar operaciones (CSV)…*.
     Columnas (español o inglés; separador `,` o `;`): fecha (`AAAA-MM-DD` o `DD/MM/AAAA`),
     ticker, operación (compra/venta, o el signo de la cantidad), cantidad, precio y,

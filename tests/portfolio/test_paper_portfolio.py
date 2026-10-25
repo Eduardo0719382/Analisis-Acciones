@@ -29,6 +29,7 @@ from analisis_acciones.services.paper_portfolio import (
     PaperPortfolioService,
     Portfolio,
     gains_tax,
+    yearly_returns,
 )
 from analisis_acciones.services.portfolio_report import portfolio_html, portfolio_trades_csv
 from analisis_acciones.storage.database import open_database
@@ -323,3 +324,28 @@ def test_daily_values_matches_day_by_day_replay() -> None:
         assert value_ == pytest.approx(expected)
         assert float(per.loc[day].sum()) == pytest.approx(expected - state.cash)
     assert len(total) == len(per) < len(days)  # days with an unpriced holding are skipped
+
+
+def test_yearly_returns() -> None:
+    days = pd.bdate_range("2022-03-01", "2024-06-28")
+    values = pd.Series(1000.0, index=days)
+    values[days.year == 2022] = 1100.0
+    values[days.year == 2023] = 1210.0
+    values[days.year == 2024] = 1089.0
+    years = yearly_returns(values, 1000.0)
+    assert [(y, round(r, 6), p) for y, r, p in years] == [
+        (2022, 10.0, True), (2023, 10.0, False), (2024, -10.0, True)]  # fmt: skip
+    assert yearly_returns(pd.Series(dtype=float), 1000) == []
+
+
+def test_report_with_several_references(service: PaperPortfolioService) -> None:
+    (p,) = service.portfolios()
+    service.add_trade(p.id, "TEST", BUY, 10, trade_date=date(2024, 1, 15))
+    report = service.report(p.id, ["spy", "TEST", "SPY", "ZZZ", "TEST2"])
+    assert list(report.benchmarks) == ["SPY", "TEST"]  # duplicates dropped, max 3, ZZZ unknown
+    assert report.benchmark_symbol == "SPY"
+    assert any(x.startswith("ZZZ") for x in report.problems)
+    assert all(b.iloc[0] == pytest.approx(10_000) for b in report.benchmarks.values())
+    html = portfolio_html(report, datetime(2024, 3, 30))
+    assert "Rentabilidad por año" in html and "<th>SPY</th><th>TEST</th>" in html
+    assert 'class="bm bm1"' in html and "(parcial)" in html

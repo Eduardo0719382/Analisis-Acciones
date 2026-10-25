@@ -167,10 +167,17 @@ class PortfolioDialog(QDialog):
     symbol_activated = Signal(str)
 
     def __init__(self, service: PaperPortfolioService, benchmark: Callable[[], str],
-                 symbol: str = "", parent: QWidget | None = None) -> None:  # fmt: skip
+                 symbol: str = "", parent: QWidget | None = None,
+                 references: Callable[[], list[str]] | None = None,
+                 save_references: Callable[[list[str]], None] | None = None) -> None:  # fmt: skip
         super().__init__(parent)
         self._service = service
         self._benchmark = benchmark
+        self._save_references = save_references
+        self.compare = QLineEdit(", ".join(references() if references else [benchmark()]))
+        self.compare.setToolTip(strings.PF_COMPARE_TIP)
+        self.compare.setMaximumWidth(220)
+        self.compare.editingFinished.connect(self._references_changed)
         self._workers: set[Worker] = set()
         self._pdf_writer: HtmlPdfWriter | None = None
         self.report: PortfolioReport | None = None
@@ -198,6 +205,8 @@ class PortfolioDialog(QDialog):
         top = QHBoxLayout()
         top.addWidget(QLabel(strings.PF_PORTFOLIO))
         top.addWidget(self.portfolio, stretch=1)
+        top.addWidget(QLabel(strings.PF_COMPARE))
+        top.addWidget(self.compare)
         top.addWidget(new_button)
         top.addWidget(self.delete_portfolio_button)
         top.addWidget(self.costs_button)
@@ -527,10 +536,22 @@ class PortfolioDialog(QDialog):
             self.symbol_activated.emit(item.text())
 
     # Report ----------------------------------------------------------------------
+    def references(self) -> list[str]:
+        raw = [s.strip().upper() for s in self.compare.text().replace(";", ",").split(",")]
+        found = list(dict.fromkeys(s for s in raw if s))[:3]
+        return found or [self._benchmark()]
+
+    def _references_changed(self) -> None:
+        refs = self.references()
+        self.compare.setText(", ".join(refs))
+        if self._save_references is not None:
+            self._save_references(refs)
+        self.refresh()
+
     def refresh(self) -> None:
         if self.portfolio.currentData() is None:
             return
-        pid, bench = self.portfolio_id, self._benchmark()
+        pid, bench = self.portfolio_id, self.references()
         self.status.setText(strings.PF_LOADING)
         self._run(lambda: self._service.report(pid, bench), self.show_report)
 

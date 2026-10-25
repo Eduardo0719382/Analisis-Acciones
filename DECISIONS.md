@@ -885,3 +885,17 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
 - De-duplication: the keys of the conditions true at the last check are stored
   (`paper_alert_state`). A notice is given only for a key that was not true before, so a
   condition is announced once, and again only after it disappears and comes back.
+
+## D-057 — Several references and yearly returns in the portfolio report
+
+- Up to 3 references, each rebased to the initial cash on the portfolio's first day and
+  converted to dollars like the holdings. The first one is the main reference of the summary
+  tiles; the list is stored in the settings.
+- Colors (dataviz method): the portfolio keeps slot 1 (blue); references take slots 2–4
+  (orange, aqua, yellow) in fixed order, light and dark steps validated with the palette
+  validator (all checks pass; in light mode aqua and yellow are below 3:1 against the
+  surface, so every line is labelled at its end and the yearly table gives the same
+  numbers).
+- Yearly return = last value of the year / last value of the previous year (the initial cash
+  for the first year) − 1. With no deposits or withdrawals in the simulation this is the
+  return. The first and last years are marked partial when not fully covered.

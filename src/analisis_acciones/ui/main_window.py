@@ -1067,7 +1067,9 @@ class MainWindow(QMainWindow):
             return
         symbol = self.current_result.series.symbol if self.current_result else ""
         dialog = PortfolioDialog(self._portfolio, self._settings.benchmark,
-                                 "" if symbol.startswith("CSV:") else symbol, self)  # fmt: skip
+                                 "" if symbol.startswith("CSV:") else symbol, self,
+                                 self._settings.portfolio_benchmarks,
+                                 self._settings.set_portfolio_benchmarks)  # fmt: skip
         dialog.symbol_activated.connect(self.open_symbol)
         dialog.show()
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
