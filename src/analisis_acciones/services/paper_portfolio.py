@@ -18,10 +18,13 @@ from analisis_acciones.models.market import Interval
 from analisis_acciones.portfolio.alerts import AlertThresholds, conditions
 from analisis_acciones.portfolio.engine import (
     BUY,
+    CASH_DIVIDEND,
     DIVIDEND,
+    MOVEMENT_KINDS,
     SELL,
     SPLIT,
     AppliedEvent,
+    CashMovement,
     ClosedTrade,
     CorporateEvent,
     PaperTrade,
@@ -29,10 +32,13 @@ from analisis_acciones.portfolio.engine import (
     adjust_for_splits,
     cash_needed,
     daily_values,
+    flows_by_day,
     in_dollars,
     replay,
     split_factor_after,
+    time_weighted,
     value,
+    with_flows,
 )
 from analisis_acciones.portfolio.rebalance import RebalancePlan, plan_rebalance
 from analisis_acciones.providers.base import normalize_symbol
@@ -108,8 +114,22 @@ class PortfolioReport:
     # Dividends and splits that affected the portfolio, in the share units of their day
     # (``shares`` is the count after the event for a split).
     events: list[AppliedEvent] = field(default_factory=list)
-    # Every reference index, rebased to the initial cash on the first day (main one first).
+    # Every reference index, rebased to the initial cash on the first day (main one first),
+    # receiving the same deposits/withdrawals as the portfolio on the same days.
     benchmarks: dict[str, pd.Series] = field(default_factory=dict)
+    movements: list[CashMovement] = field(default_factory=list)
+    # The references' price alone, rebased to the initial cash (for return comparisons).
+    benchmark_prices: dict[str, pd.Series] = field(default_factory=dict)
+    # Time-weighted growth of the initial cash: the curve without deposits/withdrawals.
+    growth: pd.Series = field(default_factory=lambda: pd.Series(dtype=float))
+    # Money put in up to each day (initial cash + deposits − withdrawals).
+    invested: pd.Series = field(default_factory=lambda: pd.Series(dtype=float))
+
+    @property
+    def time_weighted_pct(self) -> float | None:
+        if self.growth.empty or self.portfolio.initial_cash <= 0:
+            return None
+        return (float(self.growth.iloc[-1]) / self.portfolio.initial_cash - 1) * 100
 
 
 class PaperPortfolioService:
@@ -203,7 +223,10 @@ class PaperPortfolioService:
             except AppError as exc:
                 logger.warning("Portfolio alerts for %s skipped: %s", portfolio.name, exc)
                 continue
-            now = conditions(report.valuation, report.equity, self.targets(portfolio.id),
+            # With deposits/withdrawals the drawdown is measured on the time-weighted curve,
+            # so taking money out is not mistaken for a fall.
+            curve = report.growth if report.movements else report.equity
+            now = conditions(report.valuation, curve, self.targets(portfolio.id),
                              portfolio.alerts)  # fmt: skip
             with self._db() as db:
                 rows = db.execute(
@@ -249,6 +272,7 @@ class PaperPortfolioService:
             db.execute("DELETE FROM paper_trades WHERE portfolio_id = ?", (portfolio_id,))
             db.execute("DELETE FROM paper_targets WHERE portfolio_id = ?", (portfolio_id,))
             db.execute("DELETE FROM paper_alert_state WHERE portfolio_id = ?", (portfolio_id,))
+            db.execute("DELETE FROM paper_cash WHERE portfolio_id = ?", (portfolio_id,))
             db.execute("DELETE FROM paper_portfolios WHERE id = ?", (portfolio_id,))
 
     def _portfolio(self, portfolio_id: int) -> Portfolio:
@@ -376,13 +400,67 @@ class PaperPortfolioService:
                     events.append(CorporateEvent(symbol, ts.date(), kind, float(v)))
         return events
 
-    def _check(self, portfolio: Portfolio, trades: list[PaperTrade]) -> None:
-        """Raise UserError if the history (with corporate events) is impossible."""
+    def _check(self, portfolio: Portfolio, trades: list[PaperTrade],
+               movements: list[CashMovement] | None = None) -> None:  # fmt: skip
+        """Raise UserError if the history (with corporate events and cash) is impossible."""
+        if movements is None:
+            movements = self.movements(portfolio.id)
         bars, _problems = self._bars({t.symbol for t in trades})
         splits = {s: b["splits"] for s, b in bars.items()}
         replay(adjust_for_splits(in_dollars(trades), splits), portfolio.initial_cash,
                events=self._events(trades, bars, portfolio.apply_dividends),
-               withholding_pct=portfolio.dividend_withholding_pct)  # fmt: skip
+               withholding_pct=portfolio.dividend_withholding_pct,
+               movements=movements)  # fmt: skip
+
+    # Cash movements ------------------------------------------------------------------
+    def movements(self, portfolio_id: int) -> list[CashMovement]:
+        with self._db() as db:
+            rows = db.execute(
+                "SELECT * FROM paper_cash WHERE portfolio_id = ? ORDER BY day, id", (portfolio_id,)
+            ).fetchall()
+        return [CashMovement(date.fromisoformat(r["day"]), r["kind"], r["amount"], r["symbol"],
+                             r["note"], r["id"], r["currency"], r["fx_rate"])
+                for r in rows]  # fmt: skip
+
+    def make_movement(self, kind: str, amount: float, day: date, symbol: str = "",
+                      note: str = "", currency: str | None = None) -> CashMovement:  # fmt: skip
+        """Validated movement (exchange rate of its date); not stored."""
+        if kind not in MOVEMENT_KINDS:
+            raise UserError(f"bad movement {kind!r}", user_message="Tipo de movimiento no válido.")
+        if not amount > 0:
+            raise UserError("amount <= 0", user_message="El importe debe ser positivo.")
+        if day > self._clock().date():
+            raise UserError("future movement", user_message="La fecha no puede ser futura.")
+        clean_symbol = normalize_symbol(symbol) if symbol.strip() else ""
+        if kind == CASH_DIVIDEND and not clean_symbol:
+            raise UserError("dividend without symbol",
+                            user_message="Indique el ticker del dividendo.")  # fmt: skip
+        fx = FxConverter(self._market)
+        cur = currency or "USD"
+        return CashMovement(day, kind, float(amount), clean_symbol,
+                            " ".join(note.split())[:MAX_TEXT], None, cur,
+                            fx.rate_on(cur, day))  # fmt: skip
+
+    def add_movement(self, portfolio_id: int, movement: CashMovement) -> CashMovement:
+        portfolio = self._portfolio(portfolio_id)
+        self._check(portfolio, self.trades(portfolio_id),
+                    [*self.movements(portfolio_id), movement])  # fmt: skip
+        with self._db() as db:
+            cursor = db.execute(
+                "INSERT INTO paper_cash (portfolio_id, day, kind, amount, currency, fx_rate, "
+                "symbol, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (portfolio_id, movement.day.isoformat(), movement.kind, movement.amount,
+                 movement.currency, movement.fx_rate, movement.symbol, movement.note,
+                 self._clock().isoformat()),
+            )  # fmt: skip
+        return replace(movement, id=int(cursor.lastrowid or 0))
+
+    def delete_movement(self, portfolio_id: int, movement_id: int) -> None:
+        remaining = [m for m in self.movements(portfolio_id) if m.id != movement_id]
+        self._check(self._portfolio(portfolio_id), self.trades(portfolio_id), remaining)
+        with self._db() as db:
+            db.execute("DELETE FROM paper_cash WHERE id = ? AND portfolio_id = ?",
+                       (movement_id, portfolio_id))  # fmt: skip
 
     def close_on(self, symbol: str, day: date) -> tuple[float, date]:
         """Real close of ``symbol`` on ``day`` or the session before it, in its own currency.
@@ -549,6 +627,7 @@ class PaperPortfolioService:
         names = names[:MAX_BENCHMARKS] or ["SPY"]
         portfolio = self._portfolio(portfolio_id)
         trades = self.trades(portfolio_id)
+        movements = self.movements(portfolio_id)
         fx = FxConverter(self._market)
         bars, problems = self._bars({t.symbol for t in trades}, fx)
         closes = {s: b["close"] for s, b in bars.items()}
@@ -556,7 +635,7 @@ class PaperPortfolioService:
         events = self._events(trades, bars, portfolio.apply_dividends)
         withholding = portfolio.dividend_withholding_pct
         state = replay(adjusted, portfolio.initial_cash, events=events,
-                       withholding_pct=withholding)  # fmt: skip
+                       withholding_pct=withholding, movements=movements)  # fmt: skip
         end = self._clock().date()
         prices: dict[str, float | None] = {}
         for symbol, series in closes.items():
@@ -564,8 +643,12 @@ class PaperPortfolioService:
             prices[symbol] = float(known.iloc[-1]) if len(known) else None
         valuation = value(state, portfolio.initial_cash, prices)
         equity, per_symbol = daily_values(adjusted, portfolio.initial_cash, closes, end, events,
-                                          withholding)  # fmt: skip
+                                          withholding, movements)  # fmt: skip
+        flows = flows_by_day(movements, pd.DatetimeIndex(equity.index))
+        has_flows = bool((flows != 0).any())
+        growth = time_weighted(equity, flows, portfolio.initial_cash)
         benches: dict[str, pd.Series] = {}
+        bench_prices: dict[str, pd.Series] = {}
         if not equity.empty:
             for name in names:
                 try:
@@ -573,7 +656,10 @@ class PaperPortfolioService:
                     b = fx.to_usd(raw, fx.currency_of(name))["close"]
                     aligned = b.reindex(equity.index, method="ffill").dropna()
                     if not aligned.empty:
-                        benches[name] = aligned / float(aligned.iloc[0]) * portfolio.initial_cash
+                        rebased = aligned / float(aligned.iloc[0]) * portfolio.initial_cash
+                        bench_prices[name] = rebased
+                        benches[name] = (with_flows(aligned, flows, portfolio.initial_cash)
+                                         if has_flows else rebased)  # fmt: skip
                 except AppError as exc:
                     problems.append(f"{name}: {exc.user_message}")
         bench = benches.get(names[0], pd.Series(dtype=float))
@@ -584,7 +670,9 @@ class PaperPortfolioService:
         return PortfolioReport(portfolio, trades, valuation, equity, bench, benchmark, problems,
                                closed, per_symbol, taxes, fx.notes,
                                [self._as_quoted(e, splits) for e in state.applied],
-                               benches)  # fmt: skip
+                               benches, movements, bench_prices,
+                               growth * portfolio.initial_cash,
+                               portfolio.initial_cash + flows.cumsum())  # fmt: skip
 
     @staticmethod
     def _closed_as_quoted(closed: ClosedTrade) -> ClosedTrade:

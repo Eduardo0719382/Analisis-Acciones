@@ -82,12 +82,19 @@ def curve_svg(
     initial: float,
     width: int = 900,
     height: int = 240,
+    invested: pd.Series | None = None,
 ) -> str:
-    """Portfolio value against up to three references, each labelled at its line end."""
+    """Portfolio value against up to three references, each labelled at its line end.
+
+    With deposits/withdrawals, ``invested`` (money put in up to each day) replaces the flat
+    initial-cash line.
+    """
     if len(equity) < 2:
         return '<p class="muted">La curva aparecerá cuando haya operaciones en más de un día.</p>'
     shown = {n: b.dropna() for n, b in list(benchmarks.items())[:3] if len(b.dropna()) >= 2}
-    values = [float(v) for v in [*equity, initial, *(v for b in shown.values() for v in b)]]
+    steps = invested.dropna() if invested is not None else pd.Series(dtype=float)
+    values = [float(v) for v in [*equity, initial, *steps,
+                                 *(v for b in shown.values() for v in b)]]  # fmt: skip
     low, high = min(values), max(values)
     span = (high - low) or 1.0
     left, right, top, bottom = 4, width - 150, 10, height - 24
@@ -118,6 +125,20 @@ def curve_svg(
         f'y2="{y(initial):.1f}"><title>Capital inicial {num(initial)}</title></line>',
     ]
     labels = [(y(initial) + 4, f"Inicial {num(initial)}", "")]
+    if len(steps) >= 2:
+        parts.pop()  # the flat initial-cash line
+        pts = []
+        previous: float | None = None
+        for ts, v in zip(pd.DatetimeIndex(steps.index), steps, strict=True):
+            if previous is not None and float(v) != previous:
+                pts.append(f"{x(ts):.1f},{y(previous):.1f}")  # a step, not a slope
+            pts.append(f"{x(ts):.1f},{y(float(v)):.1f}")
+            previous = float(v)
+        parts.append(
+            f'<polyline class="base" fill="none" points="{" ".join(pts)}"><title>Capital '
+            f"aportado {num(float(steps.iloc[-1]))}</title></polyline>"
+        )
+        labels = [(y(float(steps.iloc[-1])) + 4, f"Aportado {num(float(steps.iloc[-1]))}", "")]
     for k, (name, series) in enumerate(shown.items()):
         parts.append(poly(series, f"bm bm{k}", name))
         last_value = float(series.iloc[-1])
@@ -143,7 +164,9 @@ def curve_svg(
         )
     legend.append(
         '<span><i style="background:repeating-linear-gradient(90deg,var(--flat) 0 4px,'
-        'transparent 4px 7px)"></i>capital inicial</span></div>'
+        'transparent 4px 7px)"></i>'
+        + ("capital aportado" if len(steps) >= 2 else "capital inicial")
+        + "</span></div>"
     )
     return "".join(parts) + "".join(legend)
 
@@ -151,11 +174,12 @@ def curve_svg(
 def yearly_table(report: PortfolioReport) -> str:
     """Return per calendar year: portfolio and each reference (same capital and dates)."""
     initial = report.portfolio.initial_cash
-    own = yearly_returns(report.equity, initial)
+    flows = bool(report.movements) and not report.growth.empty
+    own = yearly_returns(report.growth if flows else report.equity, initial)
     if not own:
         return ""
-    refs = {n: {y: r for y, r, _p in yearly_returns(b, initial)}
-            for n, b in list(report.benchmarks.items())[:3]}  # fmt: skip
+    sources = list((report.benchmark_prices or report.benchmarks).items())[:3]
+    refs = {n: {y: r for y, r, _p in yearly_returns(b, initial)} for n, b in sources}
     head = "".join(f"<th>{escape(n)}</th>" for n in refs)
     rows = []
     for year, ret, partial in reversed(own):
@@ -197,6 +221,38 @@ def position_spark(report: PortfolioReport, symbol: str, width: int = 120,
         f'{escape(symbol)}"><title>{escape(symbol)}: valor desde el {first:%d/%m/%Y}, '
         f"máximo {num(high)}, hoy {num(values[-1])}</title>"
         f'<polyline points="{pts}"></polyline></svg>'
+    )
+
+
+MOVEMENT_LABELS = {
+    "deposit": "Aportación",
+    "withdrawal": "Retirada",
+    "cash_dividend": "Dividendo cobrado",
+    "interest": "Interés",
+    "fee": "Comisión / gasto",
+}
+
+
+def movements_panel(report: PortfolioReport) -> str:
+    if not report.movements:
+        return ""
+    rows = []
+    for m in reversed(report.movements):
+        sign = 1 if m.kind in ("deposit", "cash_dividend", "interest") else -1
+        local = "—" if m.currency == "USD" else f"{num(m.amount)} {escape(m.currency)}"
+        rows.append(
+            f"<tr><td>{m.day:%d/%m/%Y}</td><td>{MOVEMENT_LABELS.get(m.kind, m.kind)}</td>"
+            f"<td>{escape(m.symbol) or '—'}</td>{_signed_cell(sign * m.dollars)}"
+            f"<td>{local}</td><td>{escape(m.note)}</td></tr>"
+        )
+    return (
+        '<div class="panel"><h3>Movimientos de efectivo</h3><p class="muted small">Las '
+        "aportaciones y retiradas no cuentan como ganancia ni pérdida: la rentabilidad se "
+        "pondera en el tiempo y las referencias reciben el mismo dinero en las mismas "
+        "fechas.</p><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Activo</th>"
+        "<th>Importe ($)</th><th>En su divisa</th><th>Nota</th></tr></thead><tbody>"
+        + "".join(rows)
+        + "</tbody></table></div>"
     )
 
 
@@ -358,15 +414,16 @@ def portfolio_html(report: PortfolioReport, generated: datetime) -> str:
     v = report.valuation
     p = report.portfolio
     total = v.total_value
-    result = total - p.initial_cash if total is not None else None
+    result = v.result
+    flows = bool(report.movements) and abs(v.contributions) > 0
+    # With deposits/withdrawals, returns are time-weighted (they ignore the money moved in
+    # and out) and the reference is compared on its price alone.
+    own_ret = report.time_weighted_pct if flows else v.total_return_pct
+    reference = report.benchmark_prices.get(report.benchmark_symbol, report.benchmark).dropna()
     bench_ret = None
-    if len(report.benchmark.dropna()) and total is not None:
-        bench_ret = (float(report.benchmark.dropna().iloc[-1]) / p.initial_cash - 1) * 100
-    diff = (
-        v.total_return_pct - bench_ret
-        if v.total_return_pct is not None and bench_ret is not None
-        else None
-    )
+    if len(reference) and total is not None:
+        bench_ret = (float(reference.iloc[-1]) / p.initial_cash - 1) * 100
+    diff = own_ret - bench_ret if own_ret is not None and bench_ret is not None else None
 
     def tile(big: str, label: str, detail: str = "", css: str = "") -> str:
         return (
@@ -380,26 +437,31 @@ def portfolio_html(report: PortfolioReport, generated: datetime) -> str:
             tile(
                 num(total) if total is not None else "—",
                 "valor total",
-                f"capital inicial {num(p.initial_cash)}",
+                f"aportado {num(v.invested)} (inicial {num(p.initial_cash)}, aportaciones netas "
+                f"{num(v.contributions, 2, sign=True)})"
+                if flows
+                else f"capital inicial {num(p.initial_cash)}",
             ),
             tile(
-                f"{num(v.total_return_pct, 2, sign=True)} %",
-                "resultado total",
-                f"{num(result, 2, sign=True)} (realizado {num(v.realized, 2, sign=True)}, "
-                f"latente {num(v.unrealized, 2, sign=True)})",
+                f"{num(own_ret, 2, sign=True)} %",
+                "rentabilidad ponderada en el tiempo" if flows else "resultado total",
+                f"{num(result, 2, sign=True)} sobre lo aportado (realizado "
+                f"{num(v.realized, 2, sign=True)}, latente {num(v.unrealized, 2, sign=True)})",
                 result_css,
             ),
             tile(
                 num(v.cash),
                 "efectivo disponible",
-                f"comisiones pagadas {num(v.commissions)} · dividendos cobrados {num(v.dividends)}"
-                + (f" (retenido {num(v.withheld)})" if v.withheld else ""),
+                f"comisiones pagadas {num(v.commissions + v.other_fees)} · dividendos cobrados "
+                f"{num(v.dividends)}"
+                + (f" (retenido {num(v.withheld)})" if v.withheld else "")
+                + (f" · intereses {num(v.interest)}" if v.interest else ""),
             ),
             tile(
                 f"{num(diff, 1, sign=True)} pts" if diff is not None else "—",
                 f"frente a {escape(report.benchmark_symbol)}",
-                f"{escape(report.benchmark_symbol)} {num(bench_ret, 2, sign=True)} % con el mismo "
-                "capital y fechas",
+                f"{escape(report.benchmark_symbol)} {num(bench_ret, 2, sign=True)} % en las "
+                "mismas fechas",
             ),
         ]
     )
@@ -442,6 +504,12 @@ def portfolio_html(report: PortfolioReport, generated: datetime) -> str:
         )
         or '<tr><td colspan="8" class="muted">Todavía no hay operaciones.</td></tr>'
     )
+    curve = curve_svg(
+        report.equity,
+        report.benchmarks or {report.benchmark_symbol: report.benchmark},
+        p.initial_cash,
+        invested=report.invested if flows else None,
+    )
     events = _events_panel(report)
     fx_notes = (
         '<p class="muted small">' + " ".join(escape(n) for n in report.fx_notes) + "</p>"
@@ -467,13 +535,7 @@ se convierten con el tipo de cambio de cada día.
 <div class="tiles">{tiles}</div>
 {problems}
 <div class="panel"><h3>Valor de la cartera en el tiempo</h3>
-{
-        curve_svg(
-            report.equity,
-            report.benchmarks or {report.benchmark_symbol: report.benchmark},
-            p.initial_cash,
-        )
-    }</div>
+{curve}</div>
 {yearly_table(report)}
 <div class="panel"><h3>Posiciones y distribución</h3>{alloc}
 <table><thead><tr><th>Activo</th><th>Cantidad</th><th>Coste medio ($)</th>
@@ -481,6 +543,7 @@ se convierten con el tipo de cambio de cada día.
 <th>Valor en el tiempo</th>
 </tr></thead>
 <tbody>{rows}</tbody></table></div>
+{movements_panel(report)}
 {closed_panel(report)}
 {stats_panel(report)}
 {events}

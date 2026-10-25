@@ -709,6 +709,18 @@ PF_DISCLAIMER = (
 )
 PF_ITEM = "{name} · capital inicial {cash}"
 PF_TAB_REBALANCE = "Rebalanceo"
+PF_TAB_CASH = "Efectivo"
+CASH_INTRO = (
+    "Aportaciones y retiradas de dinero, y los dividendos, intereses y gastos que le comunique "
+    "su broker. Las aportaciones y retiradas no cuentan como ganancia: la rentabilidad del "
+    "informe se pondera en el tiempo. Importes en dólares."
+)
+CASH_KIND = "Tipo"
+CASH_AMOUNT = "Importe"
+CASH_SYMBOL_HINT = "solo para dividendos"
+CASH_ADD = "Añadir movimiento"
+CASH_DELETE = "Eliminar movimiento seleccionado"
+CASH_COLUMNS = ("Fecha", "Tipo", "Activo", "Importe ($)", "Nota")
 PF_COMPARE = "Comparar con:"
 PF_COMPARE_TIP = (
     "Hasta 3 índices o activos de referencia separados por comas (p. ej. SPY, QQQ, ^IBEX). "

@@ -28,6 +28,11 @@ from analisis_acciones.models.errors import UserError
 
 BUY, SELL = "buy", "sell"
 DIVIDEND, SPLIT = "dividend", "split"
+# Cash movements (amounts always positive; the kind gives the direction).
+DEPOSIT, WITHDRAWAL = "deposit", "withdrawal"  # money put in / taken out by the owner
+CASH_DIVIDEND, INTEREST, FEE = "cash_dividend", "interest", "fee"  # as paid by the broker
+INFLOWS = frozenset({DEPOSIT, CASH_DIVIDEND, INTEREST})
+MOVEMENT_KINDS = (DEPOSIT, WITHDRAWAL, CASH_DIVIDEND, INTEREST, FEE)
 EPSILON = 1e-9
 
 
@@ -49,6 +54,34 @@ class PaperTrade:
     @property
     def value(self) -> float:
         return self.quantity * self.price
+
+
+@dataclass(frozen=True)
+class CashMovement:
+    """Cash in or out that is not a trade. Inflows are applied before the day's trades,
+    outflows after them."""
+
+    day: date
+    kind: str  # one of MOVEMENT_KINDS
+    amount: float  # positive, in ``currency``
+    symbol: str = ""  # the asset of a broker dividend
+    note: str = ""
+    id: int | None = None
+    currency: str = "USD"
+    fx_rate: float = 1.0  # dollars per unit of ``currency`` on ``day``
+
+    @property
+    def dollars(self) -> float:
+        return self.amount * self.fx_rate
+
+    @property
+    def external_flow(self) -> float:
+        """Money put in (+) or taken out (−) by the owner: not part of the return."""
+        if self.kind == DEPOSIT:
+            return self.dollars
+        if self.kind == WITHDRAWAL:
+            return -self.dollars
+        return 0.0
 
 
 @dataclass(frozen=True)
@@ -147,6 +180,9 @@ class PortfolioState:
     applied: list[AppliedEvent] = field(default_factory=list)
     closed: list[ClosedTrade] = field(default_factory=list)
     withheld: float = 0.0  # dividend tax withheld
+    contributions: float = 0.0  # deposits − withdrawals
+    interest: float = 0.0
+    other_fees: float = 0.0  # fees not tied to a trade (custody, etc.)
 
     @property
     def dividends(self) -> float:
@@ -172,8 +208,9 @@ def replay(
     until: date | None = None,
     events: list[CorporateEvent] | tuple[CorporateEvent, ...] = (),
     withholding_pct: float = 0.0,
+    movements: list[CashMovement] | tuple[CashMovement, ...] = (),
 ) -> PortfolioState:
-    """State after applying ``trades`` and ``events`` (up to ``until``, inclusive).
+    """State after applying ``trades``, ``events`` and cash ``movements`` (up to ``until``).
 
     ``withholding_pct`` of each dividend is withheld as tax (only the rest is credited).
 
@@ -183,7 +220,7 @@ def replay(
     (selling shares not held, spending cash not available).
     """
     state = PortfolioState(cash=initial_cash)
-    for day, item in _timeline(trades, events):
+    for day, item in _timeline(trades, events, movements):
         if until is not None and day > until:
             break
         _apply(state, item, withholding_pct)
@@ -194,34 +231,70 @@ def cash_needed(
     trades: list[PaperTrade],
     events: list[CorporateEvent] | tuple[CorporateEvent, ...] = (),
     withholding_pct: float = 0.0,
+    movements: list[CashMovement] | tuple[CashMovement, ...] = (),
 ) -> float:
     """Smallest initial cash with which the history never runs out of cash."""
     start = 1e12  # large enough never to refuse a purchase; exact to fractions of a cent
     state = PortfolioState(cash=start)
     lowest = start
-    for _day, item in _timeline(trades, events):
+    for _day, item in _timeline(trades, events, movements):
         _apply(state, item, withholding_pct)
         lowest = min(lowest, state.cash)
     return max(start - lowest, 0.0)
 
 
+Item = PaperTrade | CorporateEvent | CashMovement
+
+
 def _timeline(
-    trades: list[PaperTrade], events: list[CorporateEvent] | tuple[CorporateEvent, ...]
-) -> list[tuple[date, PaperTrade | CorporateEvent]]:
-    """Events and trades in application order: by day, events before trades, then entry order."""
-    items: list[tuple[date, int, int, PaperTrade | CorporateEvent]] = [
-        (e.day, 0, i, e) for i, e in enumerate(events)
-    ]
+    trades: list[PaperTrade],
+    events: list[CorporateEvent] | tuple[CorporateEvent, ...],
+    movements: list[CashMovement] | tuple[CashMovement, ...] = (),
+) -> list[tuple[date, Item]]:
+    """Application order by day: corporate events and cash inflows, then trades, then cash
+    outflows; within each group, entry order."""
+    items: list[tuple[date, int, int, Item]] = [(e.day, 0, i, e) for i, e in enumerate(events)]
+    items += [(m.day, 0 if m.kind in INFLOWS else 2, m.id or 0, m) for m in movements]
     items += [(t.trade_date, 1, t.id or 0, t) for t in trades]
     items.sort(key=lambda item: (item[0], item[1], item[2]))
     return [(day, item) for day, _order, _key, item in items]
 
 
-def _apply(state: PortfolioState, item: PaperTrade | CorporateEvent, withholding: float) -> None:
+def _apply(state: PortfolioState, item: Item, withholding: float) -> None:
     if isinstance(item, CorporateEvent):
         _apply_event(state, item, withholding)
+    elif isinstance(item, CashMovement):
+        _apply_movement(state, item)
     else:
         _apply_trade(state, item)
+
+
+def _apply_movement(state: PortfolioState, m: CashMovement) -> None:
+    amount = m.dollars
+    if m.kind in INFLOWS:
+        state.cash += amount
+        if m.kind == DEPOSIT:
+            state.contributions += amount
+        elif m.kind == INTEREST:
+            state.interest += amount
+        else:  # broker dividend
+            position = state.positions.setdefault(m.symbol, Position(m.symbol))
+            position.dividends += amount
+        return
+    if amount > state.cash + 1e-6:
+        raise UserError(
+            f"not enough cash for {m}",
+            user_message=(
+                f"Efectivo insuficiente el {m.day:%d/%m/%Y} para "
+                f"{'retirar' if m.kind == WITHDRAWAL else 'pagar'} {amount:,.2f} $ "
+                f"(disponible {state.cash:,.2f} $)."
+            ),
+        )
+    state.cash -= amount
+    if m.kind == WITHDRAWAL:
+        state.contributions -= amount
+    else:
+        state.other_fees += amount
 
 
 def _apply_event(state: PortfolioState, event: CorporateEvent, withholding_pct: float) -> None:
@@ -303,12 +376,25 @@ class Valuation:
     total_value: float | None  # None when a held symbol has no price
     dividends: float = 0.0
     withheld: float = 0.0  # dividend tax withheld
+    contributions: float = 0.0  # deposits − withdrawals after the initial cash
+    interest: float = 0.0
+    other_fees: float = 0.0
+
+    @property
+    def invested(self) -> float:
+        """Money the owner put in, net: initial cash + deposits − withdrawals."""
+        return self.initial_cash + self.contributions
+
+    @property
+    def result(self) -> float | None:
+        return None if self.total_value is None else self.total_value - self.invested
 
     @property
     def total_return_pct(self) -> float | None:
-        if self.total_value is None or self.initial_cash <= 0:
+        """Result over the money put in (equals value/initial − 1 without deposits)."""
+        if self.total_value is None or self.invested <= 0:
             return None
-        return (self.total_value / self.initial_cash - 1) * 100
+        return (self.total_value / self.invested - 1) * 100
 
     @property
     def unrealized(self) -> float | None:
@@ -369,6 +455,9 @@ def value(
         total,
         state.dividends,
         state.withheld,
+        state.contributions,
+        state.interest,
+        state.other_fees,
     )
 
 
@@ -379,9 +468,10 @@ def equity_curve(
     end: date,
     events: list[CorporateEvent] | tuple[CorporateEvent, ...] = (),
     withholding_pct: float = 0.0,
+    movements: list[CashMovement] | tuple[CashMovement, ...] = (),
 ) -> pd.Series:
     """Daily total value from the first trade date to ``end`` (see ``daily_values``)."""
-    return daily_values(trades, initial_cash, closes, end, events, withholding_pct)[0]
+    return daily_values(trades, initial_cash, closes, end, events, withholding_pct, movements)[0]
 
 
 def daily_values(
@@ -391,6 +481,7 @@ def daily_values(
     end: date,
     events: list[CorporateEvent] | tuple[CorporateEvent, ...] = (),
     withholding_pct: float = 0.0,
+    movements: list[CashMovement] | tuple[CashMovement, ...] = (),
 ) -> tuple[pd.Series, pd.DataFrame]:
     """Daily total value and market value per symbol (business days, first trade to ``end``).
 
@@ -399,16 +490,17 @@ def daily_values(
     on a day is worth 0 that day. The history is replayed once, day by day (same
     result as ``replay(..., until=day)`` for every day).
     """
-    if not trades:
+    if not trades and not movements:
         return pd.Series(dtype=float), pd.DataFrame(dtype=float)
-    days = pd.bdate_range(ordered(trades)[0].trade_date, end)
+    starts = [t.trade_date for t in trades] + [m.day for m in movements]
+    days = pd.bdate_range(min(starts), end)
     symbols = sorted({t.symbol for t in trades})
     column = {s: i for i, s in enumerate(symbols)}
     prices = np.full((len(days), len(symbols)), np.nan)
     for s, c in closes.items():
         if s in column:
             prices[:, column[s]] = c.sort_index().reindex(days, method="ffill").to_numpy(float)
-    timeline = _timeline(trades, events)
+    timeline = _timeline(trades, events, movements)
     state = PortfolioState(cash=initial_cash)
     nxt = 0
     keep: list[int] = []
@@ -435,3 +527,51 @@ def daily_values(
     frame = pd.DataFrame(np.array(rows).reshape(len(rows), len(symbols)), index=index,
                          columns=symbols, dtype=float)  # fmt: skip
     return pd.Series(totals, index=index, dtype=float), frame
+
+
+def flows_by_day(movements: list[CashMovement] | tuple[CashMovement, ...],
+                 days: pd.DatetimeIndex) -> pd.Series:  # fmt: skip
+    """Owner's deposits (+) and withdrawals (−) on each day of ``days``.
+
+    A movement on a non-trading day counts on the next day of ``days`` (when it first
+    shows in the daily values).
+    """
+    totals = np.zeros(len(days))
+    for m in movements:
+        flow = m.external_flow
+        if not flow:
+            continue
+        pos = int(days.searchsorted(pd.Timestamp(m.day)))
+        if pos < len(days):
+            totals[pos] += flow
+    return pd.Series(totals, index=days, dtype=float)
+
+
+def time_weighted(values: pd.Series, flows: pd.Series, initial: float) -> pd.Series:
+    """Growth of 1 unit invested at the start, ignoring the owner's deposits/withdrawals.
+
+    Day t return = (value_t − flow_t) / value_{t−1}; the first day compares with ``initial``.
+    """
+    out = []
+    level = 1.0
+    previous = initial
+    for day, value_t in values.items():
+        flow = float(flows.get(day, 0.0))
+        if previous > 0:
+            level *= (float(value_t) - flow) / previous
+        out.append(level)
+        previous = float(value_t)
+    return pd.Series(out, index=values.index, dtype=float)
+
+
+def with_flows(prices: pd.Series, flows: pd.Series, initial: float) -> pd.Series:
+    """Value of a reference that receives the same money on the same days as the portfolio."""
+    units = 0.0
+    out = []
+    for k, (day, price) in enumerate(prices.items()):
+        p = float(price)
+        if k == 0:
+            units = initial / p
+        units += float(flows.get(day, 0.0)) / p
+        out.append(units * p)
+    return pd.Series(out, index=prices.index, dtype=float)
