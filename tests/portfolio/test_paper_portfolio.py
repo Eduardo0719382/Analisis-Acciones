@@ -295,3 +295,31 @@ def test_taxes_in_service_and_report(events_service: PaperPortfolioService) -> N
     csv_text = portfolio_trades_csv(report)
     assert csv_text.splitlines()[0].endswith(",resultado_venta,divisa,tipo_cambio_usd")
     assert csv_text.splitlines()[2].endswith(f",{round(closed.result, 4)},USD,1.0")
+
+
+def test_daily_values_matches_day_by_day_replay() -> None:
+    """The single-pass curve equals replaying the history up to each day."""
+    import random
+
+    rng = random.Random(5)
+    days = pd.bdate_range("2024-01-01", periods=80)
+    closes = {s: pd.Series([rng.uniform(5, 50) for _ in days], index=days) for s in ("A", "B")}
+    closes["B"] = closes["B"].iloc[10:]  # B has no price during the first days
+    trades = []
+    for k in range(40):
+        day = days[rng.randrange(len(days))].date()
+        s = rng.choice(["A", "B"])
+        trades.append(PaperTrade(s, BUY, rng.uniform(0.5, 3), rng.uniform(5, 50), day, 0.5, id=k))
+    events = [CorporateEvent("A", days[30].date(), DIVIDEND, 0.3),
+              CorporateEvent("B", days[50].date(), SPLIT, 2.0)]  # fmt: skip
+    end = days[-1].date()
+    total, per = daily_values(trades, 1e6, closes, end, events, 10)
+    for day, value_ in total.items():
+        state = replay(trades, 1e6, until=pd.Timestamp(day).date(), events=events,
+                       withholding_pct=10)  # fmt: skip
+        expected = state.cash + sum(
+            p.quantity * float(closes[p.symbol].loc[:day].iloc[-1]) for p in state.open_positions()
+        )
+        assert value_ == pytest.approx(expected)
+        assert float(per.loc[day].sum()) == pytest.approx(expected - state.cash)
+    assert len(total) == len(per) < len(days)  # days with an unpriced holding are skipped

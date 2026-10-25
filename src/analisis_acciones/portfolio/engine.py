@@ -21,6 +21,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from datetime import date
 
+import numpy as np
 import pandas as pd
 
 from analisis_acciones.models.errors import UserError
@@ -182,19 +183,30 @@ def replay(
     (selling shares not held, spending cash not available).
     """
     state = PortfolioState(cash=initial_cash)
-    timeline: list[tuple[date, int, int, PaperTrade | CorporateEvent]] = [
-        (e.day, 0, i, e) for i, e in enumerate(events)
-    ]
-    timeline += [(t.trade_date, 1, t.id or 0, t) for t in trades]
-    timeline.sort(key=lambda item: (item[0], item[1], item[2]))
-    for day, _order, _key, item in timeline:
+    for day, item in _timeline(trades, events):
         if until is not None and day > until:
             break
-        if isinstance(item, CorporateEvent):
-            _apply_event(state, item, withholding_pct)
-        else:
-            _apply_trade(state, item)
+        _apply(state, item, withholding_pct)
     return state
+
+
+def _timeline(
+    trades: list[PaperTrade], events: list[CorporateEvent] | tuple[CorporateEvent, ...]
+) -> list[tuple[date, PaperTrade | CorporateEvent]]:
+    """Events and trades in application order: by day, events before trades, then entry order."""
+    items: list[tuple[date, int, int, PaperTrade | CorporateEvent]] = [
+        (e.day, 0, i, e) for i, e in enumerate(events)
+    ]
+    items += [(t.trade_date, 1, t.id or 0, t) for t in trades]
+    items.sort(key=lambda item: (item[0], item[1], item[2]))
+    return [(day, item) for day, _order, _key, item in items]
+
+
+def _apply(state: PortfolioState, item: PaperTrade | CorporateEvent, withholding: float) -> None:
+    if isinstance(item, CorporateEvent):
+        _apply_event(state, item, withholding)
+    else:
+        _apply_trade(state, item)
 
 
 def _apply_event(state: PortfolioState, event: CorporateEvent, withholding_pct: float) -> None:
@@ -369,31 +381,42 @@ def daily_values(
 
     Each holding is valued at its last close on or before each day; a day where a
     held symbol has no close yet is left out rather than guessed. A symbol not held
-    on a day is worth 0 that day.
+    on a day is worth 0 that day. The history is replayed once, day by day (same
+    result as ``replay(..., until=day)`` for every day).
     """
     if not trades:
         return pd.Series(dtype=float), pd.DataFrame(dtype=float)
     days = pd.bdate_range(ordered(trades)[0].trade_date, end)
-    aligned = {s: c.sort_index().reindex(days, method="ffill") for s, c in closes.items()}
     symbols = sorted({t.symbol for t in trades})
-    totals: dict[pd.Timestamp, float] = {}
-    per_symbol: dict[pd.Timestamp, dict[str, float]] = {}
-    for day in days:
-        state = replay(trades, initial_cash, until=day.date(), events=events,
-                       withholding_pct=withholding_pct)  # fmt: skip
-        total = state.cash
-        row = dict.fromkeys(symbols, 0.0)
+    column = {s: i for i, s in enumerate(symbols)}
+    prices = np.full((len(days), len(symbols)), np.nan)
+    for s, c in closes.items():
+        if s in column:
+            prices[:, column[s]] = c.sort_index().reindex(days, method="ffill").to_numpy(float)
+    timeline = _timeline(trades, events)
+    state = PortfolioState(cash=initial_cash)
+    nxt = 0
+    keep: list[int] = []
+    totals: list[float] = []
+    rows: list[np.ndarray] = []
+    for i, day in enumerate(days):
+        today = day.date()
+        while nxt < len(timeline) and timeline[nxt][0] <= today:
+            _apply(state, timeline[nxt][1], withholding_pct)
+            nxt += 1
+        row = np.zeros(len(symbols))
         complete = True
         for pos in state.open_positions():
-            series = aligned.get(pos.symbol)
-            price = series.loc[day] if series is not None else float("nan")
-            if price != price:  # NaN: no close known yet
+            price = prices[i, column[pos.symbol]] if pos.symbol in column else np.nan
+            if np.isnan(price):  # no close known yet
                 complete = False
                 break
-            row[pos.symbol] = pos.quantity * float(price)
-            total += row[pos.symbol]
+            row[column[pos.symbol]] = pos.quantity * price
         if complete:
-            totals[day] = total
-            per_symbol[day] = row
-    frame = pd.DataFrame.from_dict(per_symbol, orient="index", columns=symbols, dtype=float)
-    return pd.Series(totals, dtype=float), frame
+            keep.append(i)
+            totals.append(state.cash + float(row.sum()))
+            rows.append(row)
+    index = days[keep]
+    frame = pd.DataFrame(np.array(rows).reshape(len(rows), len(symbols)), index=index,
+                         columns=symbols, dtype=float)  # fmt: skip
+    return pd.Series(totals, index=index, dtype=float), frame

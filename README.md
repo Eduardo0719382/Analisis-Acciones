@@ -183,7 +183,8 @@ blanco porque su motor se detuvo, se recarga automáticamente.
   último dibujo» y «Borrar todos». Nota: tras un split, los precios históricos se reajustan y
   los dibujos antiguos pueden quedar desplazados.
 - **Escáner:** *Herramientas → Escáner de la lista…* (Ctrl+E) aplica a la lista de seguimiento
-  (o a los tickers que escriba, hasta 50) las mismas reglas del programa. Por cada activo muestra
+  (o a los tickers que escriba, hasta 200, con barra de progreso y botón Cancelar) las mismas
+  reglas del programa. Por cada activo muestra
   cierre, cambio, RSI 14, número de señales alcistas y bajistas (con el detalle al pasar el
   ratón), patrones en formación o con ruptura reciente, posible cuenta de Elliott y distancia al
   soporte y a la resistencia más cercanos. Se puede filtrar y ordenar por columnas; un doble clic

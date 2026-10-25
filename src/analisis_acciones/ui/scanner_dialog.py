@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import logging
+import threading
 from datetime import datetime
 from pathlib import Path
 
 import shiboken6
-from PySide6.QtCore import QLocale, Qt, QUrl, Signal
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import QLocale, QObject, Qt, QUrl, Signal
+from PySide6.QtGui import QCloseEvent, QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMenu,
+    QProgressBar,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -83,6 +85,12 @@ def matches(row: ScanRow, mode: str) -> bool:
     return True
 
 
+class _ProgressRelay(QObject):
+    """Carries progress from the scan thread to the GUI thread (queued signal)."""
+
+    changed = Signal(int, int, str)
+
+
 class ScannerDialog(QDialog):
     #: The user asked to open this symbol on the main chart.
     symbol_activated = Signal(str)
@@ -98,7 +106,7 @@ class ScannerDialog(QDialog):
         self.resize(1250, 640)
 
         self.symbols = QLineEdit(", ".join(symbols[:MAX_SYMBOLS]))
-        self.symbols.setPlaceholderText(strings.SCAN_PLACEHOLDER)
+        self.symbols.setPlaceholderText(strings.SCAN_PLACEHOLDER.format(max=MAX_SYMBOLS))
         self.symbols.returnPressed.connect(self.run)
         self.run_button = QPushButton(strings.SCAN_RUN)
         self.run_button.clicked.connect(self.run)
@@ -110,6 +118,15 @@ class ScannerDialog(QDialog):
         top.addWidget(QLabel(strings.SCAN_SYMBOLS))
         top.addWidget(self.symbols, stretch=1)
         top.addWidget(self.run_button)
+        self.cancel_button = QPushButton(strings.SCAN_CANCEL)
+        self.cancel_button.hide()
+        self.cancel_button.clicked.connect(self.cancel)
+        top.addWidget(self.cancel_button)
+        self.progress = QProgressBar()
+        self.progress.hide()
+        self._progress_relay = _ProgressRelay(self)
+        self._progress_relay.changed.connect(self._on_progress)
+        self._cancel_event = threading.Event()
         filters = QHBoxLayout()
         filters.addWidget(QLabel(strings.SCAN_FILTER))
         filters.addWidget(self.filter)
@@ -193,6 +210,7 @@ class ScannerDialog(QDialog):
         layout.addLayout(filters)
         layout.addLayout(fundamentals_row)
         layout.addWidget(self.table, stretch=1)
+        layout.addWidget(self.progress)
         layout.addWidget(self.status)
         layout.addWidget(note)
 
@@ -207,30 +225,60 @@ class ScannerDialog(QDialog):
             return
         self.run_button.setEnabled(False)
         self.status.setText(strings.SCAN_RUNNING.format(count=len(symbols)))
+        self._cancel_event = cancel = threading.Event()
+        self.progress.setRange(0, len(symbols))
+        self.progress.setValue(0)
+        self.progress.show()
+        self.cancel_button.show()
+        relay = self._progress_relay
+
+        def finished() -> None:
+            self.run_button.setEnabled(True)
+            self.progress.hide()
+            self.cancel_button.hide()
 
         def done(result: ScanResult) -> None:
             if shiboken6.isValid(self):
-                self.run_button.setEnabled(True)
+                finished()
                 self.show_result(result)
 
         def fail(exc: BaseException) -> None:
             if shiboken6.isValid(self):
-                self.run_button.setEnabled(True)
+                finished()
                 self.status.setText(user_message_for(exc))
 
+        def progress(done_count: int, total: int, symbol: str) -> None:
+            # Called on the worker thread: the relay's signal is delivered on the GUI thread.
+            if shiboken6.isValid(relay):
+                relay.changed.emit(done_count, total, symbol)
+
         fundamentals = self.with_fundamentals.isChecked()
+        market = self._market
         worker = start_worker(
-            lambda: run_scan(self._market, symbols, fundamentals=fundamentals), done, fail
+            lambda: run_scan(market, symbols, progress, fundamentals, cancel.is_set), done, fail
         )
         self._workers.add(worker)
         worker.signals.succeeded.connect(lambda _r: self._workers.discard(worker))
         worker.signals.failed.connect(lambda _e: self._workers.discard(worker))
 
+    def cancel(self) -> None:
+        self._cancel_event.set()
+
+    def _on_progress(self, done_count: int, total: int, symbol: str) -> None:
+        self.progress.setValue(done_count)
+        self.status.setText(strings.SCAN_PROGRESS.format(symbol=symbol, done=done_count + 1,
+                                                         total=total))  # fmt: skip
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        self._cancel_event.set()  # stop a running scan: nobody will see its result
+        super().closeEvent(event)
+
     def show_result(self, result: ScanResult) -> None:
         self.scan = result
         self.export_button.setEnabled(True)
         self._fill()
-        text = strings.SCAN_DONE.format(count=len(result.rows))
+        text = (strings.SCAN_CANCELLED if result.cancelled
+                else strings.SCAN_DONE).format(count=len(result.rows))  # fmt: skip
         if result.problems:
             text += "\n" + "\n".join(result.problems)
         self.status.setText(text)

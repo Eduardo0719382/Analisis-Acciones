@@ -27,7 +27,7 @@ from analisis_acciones.services.market_data_service import MarketDataService
 
 logger = logging.getLogger(__name__)
 
-MAX_SYMBOLS = 50
+MAX_SYMBOLS = 200
 #: A confirmed pattern counts as "recent" if its breakout is within this many bars.
 RECENT_BARS = 10
 MIN_BARS = 60
@@ -90,6 +90,7 @@ class ScanRow:
 class ScanResult:
     rows: list[ScanRow] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
+    cancelled: bool = False
 
 
 def scan_bars(symbol: str, bars: pd.DataFrame) -> ScanRow:
@@ -165,7 +166,8 @@ def scan_bars(symbol: str, bars: pd.DataFrame) -> ScanRow:
 
 def run_scan(market: MarketDataService, symbols: list[str],
              progress: Callable[[int, int, str], None] | None = None,
-             fundamentals: bool = False) -> ScanResult:  # fmt: skip
+             fundamentals: bool = False,
+             cancelled: Callable[[], bool] | None = None) -> ScanResult:  # fmt: skip
     """Scan ``symbols`` (cache-first loads). Problems are reported per symbol, never raised.
 
     With ``fundamentals`` each row also gets its P/E and dividend yield (cached daily);
@@ -174,6 +176,8 @@ def run_scan(market: MarketDataService, symbols: list[str],
     result = ScanResult()
     targets = list(dict.fromkeys(s.strip().upper() for s in symbols if s.strip()))[:MAX_SYMBOLS]
     for done, symbol in enumerate(targets):
+        if cancelled is not None and cancelled():
+            return ScanResult(result.rows, result.problems, cancelled=True)
         if progress is not None:
             progress(done, len(targets), symbol)
         try:

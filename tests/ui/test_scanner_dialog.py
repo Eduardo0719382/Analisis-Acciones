@@ -149,3 +149,19 @@ def test_more_fundamental_filters(qtbot: QtBot, market: MarketDataService,
     dialog.export("html", tmp_path / "f.html")
     page = (tmp_path / "f.html").read_text("utf-8")
     assert "crecimiento de ingresos ≥ -5 %, margen neto ≥ 0 %" in page
+
+
+def test_scan_progress_and_cancel(qtbot: QtBot, market: MarketDataService) -> None:
+    dialog = ScannerDialog(market, ["AAA", "BBB"])
+    qtbot.addWidget(dialog)
+    assert "200" in dialog.symbols.placeholderText()
+    updates: list[tuple[int, int, str]] = []
+    dialog._progress_relay.changed.connect(lambda d, t, s: updates.append((d, t, s)))
+    dialog.run()
+    assert dialog.progress.isVisible() or dialog.progress.maximum() == 2
+    assert dialog.cancel_button.isVisibleTo(dialog)
+    qtbot.waitUntil(lambda: dialog.scan is not None, timeout=20000)
+    assert updates and updates[0][1] == 2
+    assert not dialog.cancel_button.isVisibleTo(dialog) and not dialog.progress.isVisibleTo(dialog)
+    dialog.show_result(ScanResult([row("AAA", 1, 0)], cancelled=True))
+    assert "cancelado" in dialog.status.text()

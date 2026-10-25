@@ -843,3 +843,17 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
 - A symbol's currency comes from the quote payload and is cached in `symbol_currency`. If it
   is unknown (no connection, CSV series) it is treated as dollars and the report says so;
   the rate is never guessed.
+
+## D-054 — Performance with large lists and long histories
+
+- Measured with SYNTHETIC data, 50 symbols × 10 years:
+  - Scan: 4.3 s (about 85 ms per symbol, mostly pattern and signal detection).
+  - Watchlist snapshot: 0.4 s.
+  - Portfolio report with 300 trades: 4.4 s.
+- The daily portfolio curve replayed the whole history for every day (O(days × trades)). It
+  now replays once, day by day, with prices in a NumPy matrix: 0.6 s for the same report. A
+  test compares it with the day-by-day replay on random histories, including events and
+  unpriced days.
+- The scanner limit rose from 50 to 200 symbols. The dialog shows progress (signal relayed from
+  the worker thread) and can be cancelled; closing it cancels too. Scanning still uses each
+  symbol's full history, so results do not depend on the list size.

@@ -72,7 +72,7 @@ class PatternBacktestDialog(QDialog):
         self.resize(1150, 780)
 
         self.symbols = QLineEdit(", ".join(symbols[:MAX_SYMBOLS]))
-        self.symbols.setPlaceholderText(strings.SCAN_PLACEHOLDER.replace("50", str(MAX_SYMBOLS)))
+        self.symbols.setPlaceholderText(strings.SCAN_PLACEHOLDER.format(max=MAX_SYMBOLS))
         self.symbols.returnPressed.connect(self.run)
         self.run_button = QPushButton(strings.PBT_RUN)
         self.run_button.clicked.connect(self.run)

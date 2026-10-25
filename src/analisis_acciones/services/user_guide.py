@@ -125,9 +125,9 @@ en el gráfico.</p>""",
         "Escáner y escaneo diario",
         """
 <p><i>Herramientas → Escáner de la lista…</i> (<kbd>Ctrl</kbd>+<kbd>E</kbd>) aplica las reglas
-del programa a toda la lista (hasta 50 activos): señales, patrones, Elliott y distancia a
-soporte y resistencia. Se puede filtrar, ordenar y exportar a un informe visual (HTML o PDF) o a
-CSV.</p>
+del programa a toda la lista (hasta 200 activos, con barra de progreso y botón Cancelar):
+señales, patrones, Elliott y distancia a soporte y resistencia. Se puede filtrar, ordenar y
+exportar a un informe visual (HTML o PDF) o a CSV.</p>
 <p>Con <b>Incluir fundamentales</b> añade PER, rentabilidad por dividendo, capitalización,
 crecimiento de ingresos y margen neto, y permite filtrar por <b>PER máximo</b>, <b>dividendo
 mínimo</b>, <b>capitalización mínima</b>, <b>crecimiento de ingresos mínimo</b> y <b>margen neto

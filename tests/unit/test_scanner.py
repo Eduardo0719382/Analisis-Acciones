@@ -105,3 +105,11 @@ def test_scan_with_fundamentals_and_filter() -> None:
     csv_text = scan_csv(ScanResult([row]))
     assert "per,rentabilidad_dividendo_pct,capitalizacion" in csv_text.splitlines()[0]
     assert csv_text.splitlines()[1].endswith(",15.0,3.0,250000000000.0,8.0,21.0")
+
+
+def test_run_scan_can_be_cancelled(market: MarketDataService) -> None:
+    seen: list[str] = []
+    result = run_scan(market, ["AAA", "BBB"], progress=lambda _d, _t, s: seen.append(s),
+                      cancelled=lambda: len(seen) >= 1)  # fmt: skip
+    assert result.cancelled and [r.symbol for r in result.rows] == ["AAA"]
+    assert not run_scan(market, ["AAA"]).cancelled
