@@ -622,6 +622,10 @@ PF_SELL = "Venta"
 PF_QUANTITY = "Cantidad"
 PF_PRICE = "Precio"
 PF_PRICE_CLOSE = "Cierre del día"
+PF_PRICE_TIP = (
+    "Precio por acción en la divisa en que cotiza el activo (p. ej. euros para SAP.DE, "
+    "peniques para VOD.L). La cartera lo convierte a dólares con el tipo de cambio del día."
+)
 PF_DATE = "Fecha"
 PF_COMMISSION = "Comisión"
 PF_NOTE = "Nota:"
@@ -636,7 +640,7 @@ PF_TRADE_COLUMNS = (
     "Ticker",
     "Operación",
     "Cantidad",
-    "Precio ($)",
+    "Precio",
     "Comisión ($)",
     "Importe ($)",
     "Resultado ($)",

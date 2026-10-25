@@ -109,3 +109,13 @@ def test_fundamentals(provider: YahooFinanceProvider) -> None:
     # few months of today (past or future).
     for day in (f.earnings_date, f.ex_dividend_date):
         assert day is not None and abs((day - date.today()).days) < 200
+
+
+def test_currencies_and_exchange_rates(provider: YahooFinanceProvider) -> None:
+    found = {s: provider.get_currency(s) for s in ("AAPL", "SAP.DE", "VOD.L")}
+    print(f"currencies: {found}")
+    assert found == {"AAPL": "USD", "SAP.DE": "EUR", "VOD.L": "GBp"}
+    rates = provider.get_historical_data("EURUSD=X", Interval.D1, date.today() - timedelta(30))
+    last = float(rates.bars["close"].iloc[-1])
+    print(f"EURUSD=X: {len(rates)} bars, last {last}")
+    assert len(rates) > 10 and 0.7 < last < 1.6

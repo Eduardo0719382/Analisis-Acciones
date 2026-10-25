@@ -48,6 +48,7 @@ from analisis_acciones.services.paper_portfolio import (
     PortfolioReport,
 )
 from analisis_acciones.services.portfolio_report import (
+    local_price,
     portfolio_html,
     portfolio_trades_csv,
     qty,
@@ -190,6 +191,7 @@ class PortfolioDialog(QDialog):
         self.price.setRange(0, 1e9)
         self.price.setDecimals(4)
         self.price.setSpecialValueText(strings.PF_PRICE_CLOSE)
+        self.price.setToolTip(strings.PF_PRICE_TIP)
         self.trade_date = QDateEdit(QDate.currentDate())
         self.trade_date.setCalendarPopup(True)
         self.trade_date.setMaximumDate(QDate.currentDate())
@@ -457,8 +459,8 @@ class PortfolioDialog(QDialog):
         for r, t in enumerate(rows):
             cells = [f"{t.trade_date:%d/%m/%Y}", t.symbol,
                      strings.PF_BUY if t.side == BUY else strings.PF_SELL, qty(t.quantity),
-                     num(t.price, 4).rstrip("0").rstrip(","), num(t.commission),
-                     num(t.value),
+                     local_price(t), num(t.commission),
+                     num(t.value * t.fx_rate),
                      num(results[t.id], sign=True) if t.id in results else "",
                      t.note, t.review]  # fmt: skip
             for c, text in enumerate(cells):

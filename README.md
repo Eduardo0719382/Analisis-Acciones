@@ -222,6 +222,11 @@ blanco porque su motor se detuvo, se recarga automáticamente.
   (con el mismo capital y fechas), la evolución diaria, las posiciones con su peso y la lista de
   operaciones. Se exporta a HTML, PDF o CSV. No permite ventas en corto ni gastar más efectivo
   del disponible.
+  - **Varias divisas:** la cartera se lleva en dólares. Los activos que cotizan en otra divisa
+    (p. ej. `SAP.DE` en euros o `VOD.L` en peniques) se anotan con su precio en esa divisa y se
+    convierten con el tipo de cambio de Yahoo (`EURUSD=X`, `GBPUSD=X`…) del día de la
+    operación; la valoración y la curva usan el de cada día. El informe indica qué tipos se
+    usaron.
   - **Fracciones y compras en dólares:** se puede indicar la cantidad de acciones (con
     decimales) o un importe en $ («Dólares ($)»), que se convierte en acciones al precio
     elegido (hasta 6 decimales).

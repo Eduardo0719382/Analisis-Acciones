@@ -293,5 +293,5 @@ def test_taxes_in_service_and_report(events_service: PaperPortfolioService) -> N
     assert "Resultado de las ventas" in html and "retenido 1,50" in html
     assert 'class="pspark"' in html and "Impuesto estimado al 19,0 %" in html
     csv_text = portfolio_trades_csv(report)
-    assert csv_text.splitlines()[0].endswith(",resultado_venta")
-    assert csv_text.splitlines()[2].endswith(f",{round(closed.result, 4)}")
+    assert csv_text.splitlines()[0].endswith(",resultado_venta,divisa,tipo_cambio_usd")
+    assert csv_text.splitlines()[2].endswith(f",{round(closed.result, 4)},USD,1.0")

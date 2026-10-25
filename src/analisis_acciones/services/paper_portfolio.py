@@ -26,12 +26,14 @@ from analisis_acciones.portfolio.engine import (
     Valuation,
     adjust_for_splits,
     daily_values,
+    in_dollars,
     replay,
     split_factor_after,
     value,
 )
 from analisis_acciones.portfolio.rebalance import RebalancePlan, plan_rebalance
 from analisis_acciones.providers.base import normalize_symbol
+from analisis_acciones.services.fx import FxConverter
 from analisis_acciones.services.market_data_service import MarketDataService
 
 logger = logging.getLogger(__name__)
@@ -79,6 +81,8 @@ class PortfolioReport:
     position_values: pd.DataFrame = field(default_factory=pd.DataFrame)
     # (year, net realised result, estimated tax) for years with sales.
     taxes: list[tuple[int, float, float]] = field(default_factory=list)
+    # How amounts in other currencies were converted to dollars.
+    fx_notes: list[str] = field(default_factory=list)
     # Dividends and splits that affected the portfolio, in the share units of their day
     # (``shares`` is the count after the event for a split).
     events: list[AppliedEvent] = field(default_factory=list)
@@ -220,22 +224,29 @@ class PaperPortfolioService:
         held = {h.symbol for h in report.valuation.holdings}
         prices: dict[str, float | None] = {}
         today = self._clock().date()
+        fx = FxConverter(self._market)
         for symbol in targets:
             if symbol not in held:
                 try:
-                    prices[symbol] = self.close_on(symbol, today)[0]
+                    local = self.close_on(symbol, today)[0]
+                    prices[symbol] = local * fx.rate_on(fx.currency_of(symbol), today)
                 except AppError as exc:
                     logger.info("No price for target %s: %s", symbol, exc)
                     prices[symbol] = None
         return plan_rebalance(report.valuation, targets, report.portfolio.commission_for, prices)
 
     def apply_rebalance(self, portfolio_id: int, plan: RebalancePlan) -> list[PaperTrade]:
-        """Record the plan's orders today at the plan's prices (sales first)."""
+        """Record the plan's orders today at the plan's prices (sales first).
+
+        Plan prices are in dollars; trades are recorded in each asset's own currency.
+        """
         day = self._clock().date()
+        fx = FxConverter(self._market)
         done = []
         for order in plan.orders:
+            local = order.price / fx.rate_on(fx.currency_of(order.symbol), day)
             done.append(self.add_trade(portfolio_id, order.symbol, order.side, order.quantity,
-                                       order.price, day, note=REBALANCE_NOTE))  # fmt: skip
+                                       local, day, note=REBALANCE_NOTE))  # fmt: skip
         return done
 
     # Trades ----------------------------------------------------------------------
@@ -247,7 +258,8 @@ class PaperPortfolioService:
             ).fetchall()
         return [PaperTrade(r["symbol"], r["side"], r["quantity"], r["price"],
                            date.fromisoformat(r["trade_date"]), r["commission"], r["note"],
-                           r["id"], r["review"]) for r in rows]  # fmt: skip
+                           r["id"], r["review"], 1.0, r["currency"],
+                           r["fx_rate"]) for r in rows]  # fmt: skip
 
     def set_review(self, portfolio_id: int, trade_id: int, text: str) -> None:
         """Journal: what the trade taught, written after the fact."""
@@ -257,12 +269,17 @@ class PaperPortfolioService:
                        (clean, trade_id, portfolio_id))  # fmt: skip
 
     # Market data and corporate events -------------------------------------------------
-    def _bars(self, symbols: set[str]) -> tuple[dict[str, pd.DataFrame], list[str]]:
+    def _bars(
+        self, symbols: set[str], fx: FxConverter | None = None
+    ) -> tuple[dict[str, pd.DataFrame], list[str]]:
+        """Daily bars with prices and dividends converted to dollars."""
+        fx = fx or FxConverter(self._market)
         bars: dict[str, pd.DataFrame] = {}
         problems: list[str] = []
         for symbol in sorted(symbols):
             try:
-                bars[symbol] = self._market.load(symbol, Interval.D1).series.bars
+                raw = self._market.load(symbol, Interval.D1).series.bars
+                bars[symbol] = fx.to_usd(raw, fx.currency_of(symbol))
             except AppError as exc:
                 problems.append(f"{symbol}: {exc.user_message}")
         return bars, problems
@@ -289,12 +306,12 @@ class PaperPortfolioService:
         """Raise UserError if the history (with corporate events) is impossible."""
         bars, _problems = self._bars({t.symbol for t in trades})
         splits = {s: b["splits"] for s, b in bars.items()}
-        replay(adjust_for_splits(trades, splits), portfolio.initial_cash,
+        replay(adjust_for_splits(in_dollars(trades), splits), portfolio.initial_cash,
                events=self._events(trades, bars, portfolio.apply_dividends),
                withholding_pct=portfolio.dividend_withholding_pct)  # fmt: skip
 
     def close_on(self, symbol: str, day: date) -> tuple[float, date]:
-        """Real close of ``symbol`` on ``day`` or the session before it.
+        """Real close of ``symbol`` on ``day`` or the session before it, in its own currency.
 
         The price history is split-adjusted; the close is scaled back by the splits
         that came later so it is the price that was actually quoted that day.
@@ -342,28 +359,33 @@ class PaperPortfolioService:
             price, _session = self.close_on(symbol, day)
         if not price > 0:
             raise UserError("price <= 0", user_message="El precio debe ser positivo.")
+        fx = FxConverter(self._market)
+        currency = fx.currency_of(symbol)
+        rate = fx.rate_on(currency, day)
         if quantity is None:
             assert amount is not None
-            quantity = round(amount / price, QUANTITY_DECIMALS)
+            quantity = round(amount / (price * rate), QUANTITY_DECIMALS)  # amount is in $
             if quantity <= 0:
                 raise UserError("amount too small", user_message="Importe demasiado pequeño.")
         portfolio = self._portfolio(portfolio_id)
-        fee = portfolio.commission_for(quantity * price) if commission is None else commission
+        value_usd = quantity * price * rate
+        fee = portfolio.commission_for(value_usd) if commission is None else commission
         trade = PaperTrade(symbol, side, float(quantity), float(price), day, float(fee),
-                           " ".join(note.split())[:MAX_TEXT])  # fmt: skip
+                           " ".join(note.split())[:MAX_TEXT], currency=currency,
+                           fx_rate=rate)  # fmt: skip
         # Validate against every trade, including later ones (a back-dated sale may make a
         # later sale impossible), with dividends and splits applied.
         self._check(portfolio, [*self.trades(portfolio_id), trade])
         with self._db() as db:
             cursor = db.execute(
                 "INSERT INTO paper_trades (portfolio_id, symbol, side, quantity, price, "
-                "commission, trade_date, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "commission, trade_date, note, created_at, currency, fx_rate) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (portfolio_id, trade.symbol, trade.side, trade.quantity, trade.price,
                  trade.commission, trade.trade_date.isoformat(), trade.note,
-                 self._clock().isoformat()),
+                 self._clock().isoformat(), trade.currency, trade.fx_rate),
             )  # fmt: skip
-        return PaperTrade(trade.symbol, trade.side, trade.quantity, trade.price, trade.trade_date,
-                          trade.commission, trade.note, int(cursor.lastrowid or 0))  # fmt: skip
+        return replace(trade, id=int(cursor.lastrowid or 0))
 
     def delete_trade(self, portfolio_id: int, trade_id: int) -> None:
         """Delete a trade unless the remaining history becomes impossible."""
@@ -378,9 +400,10 @@ class PaperPortfolioService:
         """Current valuation, events, daily value curve and benchmark (cache-first loads)."""
         portfolio = self._portfolio(portfolio_id)
         trades = self.trades(portfolio_id)
-        bars, problems = self._bars({t.symbol for t in trades})
+        fx = FxConverter(self._market)
+        bars, problems = self._bars({t.symbol for t in trades}, fx)
         closes = {s: b["close"] for s, b in bars.items()}
-        adjusted = adjust_for_splits(trades, {s: b["splits"] for s, b in bars.items()})
+        adjusted = adjust_for_splits(in_dollars(trades), {s: b["splits"] for s, b in bars.items()})
         events = self._events(trades, bars, portfolio.apply_dividends)
         withholding = portfolio.dividend_withholding_pct
         state = replay(adjusted, portfolio.initial_cash, events=events,
@@ -406,7 +429,7 @@ class PaperPortfolioService:
         closed = [self._closed_as_quoted(c) for c in state.closed]
         taxes = gains_tax(closed, portfolio.capital_gains_tax_pct)
         return PortfolioReport(portfolio, trades, valuation, equity, bench, benchmark, problems,
-                               closed, per_symbol, taxes,
+                               closed, per_symbol, taxes, fx.notes,
                                [self._as_quoted(e, splits) for e in state.applied])  # fmt: skip
 
     @staticmethod

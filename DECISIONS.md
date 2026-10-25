@@ -676,7 +676,7 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
 - **Value curve:** one point per business day from the first trade. A day is left out when a
   held symbol has no close yet, never estimated. The benchmark is invested with the same
   initial capital on the first day.
-- Amounts are added without currency conversion; the report says so. Taxes are not
+- Amounts are converted to dollars (D-053). Taxes are not
   modelled (dividends, splits and commissions: see D-042).
 
 ## D-041 — Fundamentals
@@ -828,3 +828,18 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   1 $ are ignored.
 - Nothing is recorded until the user confirms. The orders are then normal paper trades dated
   today with a fixed note, so the history validation and commissions are applied as usual.
+
+## D-053 — Multi-currency paper portfolio
+
+- The portfolio is kept in dollars. A trade's price is entered in the asset's trading currency
+  (the price the chart shows). Each trade stores that currency and the exchange rate of its date
+  (migration 0014), so the recorded history does not move when rates change later.
+- Rates are Yahoo daily series `XXXUSD=X`, loaded and cached like any symbol. The rate of a day
+  is the last close on or before it. Sub-units are converted: GBp/GBX (pence), ZAc, ILA → ÷100.
+  Before the first available rate the first rate is used, and the report says so.
+- Valuation, the daily curve, dividends and the rebalancing plan use prices converted with each
+  day's rate. Rebalancing orders are planned in dollars and recorded in local prices at today's
+  rate.
+- A symbol's currency comes from the quote payload and is cached in `symbol_currency`. If it
+  is unknown (no connection, CSV series) it is treated as dollars and the report says so;
+  the rate is never guessed.

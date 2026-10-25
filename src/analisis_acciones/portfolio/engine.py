@@ -18,7 +18,7 @@ paid in cash on their ex-date to the shares held before that day.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 
 import pandas as pd
@@ -42,6 +42,8 @@ class PaperTrade:
     id: int | None = None
     review: str = ""
     split_factor: float = 1.0  # set by adjust_for_splits; messages show the original units
+    currency: str = "USD"  # currency of ``price``; the replay works in dollars
+    fx_rate: float = 1.0  # dollars per unit of ``currency`` on the trade date
 
     @property
     def value(self) -> float:
@@ -105,20 +107,21 @@ def adjust_for_splits(
             out.append(t)
         else:
             out.append(
-                PaperTrade(
-                    t.symbol,
-                    t.side,
-                    t.quantity * factor,
-                    t.price / factor,
-                    t.trade_date,
-                    t.commission,
-                    t.note,
-                    t.id,
-                    t.review,
-                    factor,
+                replace(
+                    t, quantity=t.quantity * factor, price=t.price / factor, split_factor=factor
                 )
             )
     return out
+
+
+def in_dollars(trades: list[PaperTrade]) -> list[PaperTrade]:
+    """Trades with the price converted at their recorded exchange rate."""
+    return [
+        t
+        if t.currency == "USD" and t.fx_rate == 1.0
+        else replace(t, price=t.price * t.fx_rate, currency="USD", fx_rate=1.0)
+        for t in trades
+    ]
 
 
 @dataclass

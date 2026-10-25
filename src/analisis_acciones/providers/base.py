@@ -61,6 +61,10 @@ class MarketDataProvider(ABC):
             user_message=f"{self.name} no ofrece datos fundamentales.",
         )
 
+    def get_currency(self, symbol: str) -> str | None:
+        """Trading currency of ``symbol`` (ISO code as the source reports it), None if unknown."""
+        return None
+
     @abstractmethod
     def get_available_intervals(self) -> list[Interval]:
         """Intervals this provider can return directly from get_historical_data()."""

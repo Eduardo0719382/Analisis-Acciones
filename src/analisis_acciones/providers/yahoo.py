@@ -390,6 +390,13 @@ class YahooFinanceProvider(MarketDataProvider):
             **_calendar(info),
         )
 
+    def get_currency(self, symbol: str) -> str | None:
+        currency = _text(self._info(normalize_symbol(symbol)).get("currency"))
+        # Codes are short alphanumeric strings (USD, EUR, GBp, ZAc); anything else is ignored.
+        if currency is None or not (2 <= len(currency) <= 5 and currency.isalnum()):
+            return None
+        return currency
+
     def get_company_info(self, symbol: str) -> CompanyInfo:
         symbol = normalize_symbol(symbol)
         info = self._info(symbol)

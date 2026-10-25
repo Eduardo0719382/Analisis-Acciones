@@ -169,6 +169,8 @@ e impuestos…</i>: fija en $, porcentaje y mínimo). Desmarque «Automática» 
 <p>Los <b>splits</b> ajustan la cantidad de acciones y los <b>dividendos</b> se cobran en
 efectivo en su fecha ex-dividendo; aparecen en «Eventos corporativos». No se modelan impuestos
 ni retenciones. No permite ventas en corto ni gastar más efectivo del disponible.</p>
+<p><b>Divisas:</b> la cartera se lleva en dólares; un activo en euros o en peniques se anota
+con su precio en esa divisa y se convierte con el tipo de cambio del día.</p>
 <p>En la pestaña <b>Rebalanceo</b> indica el peso que quiere para cada activo y el programa
 calcula qué comprar y vender para llegar a él; puede registrar esas operaciones de una vez.</p>
 <p>El informe incluye las <b>estadísticas del diario</b>: porcentaje de ventas con ganancia,

@@ -16,7 +16,7 @@ from html import escape
 import pandas as pd
 
 from analisis_acciones.data.export import safe_cell
-from analisis_acciones.portfolio.engine import BUY, DIVIDEND, ClosedTrade
+from analisis_acciones.portfolio.engine import BUY, DIVIDEND, ClosedTrade, PaperTrade
 from analisis_acciones.services.journal_stats import journal_stats
 from analisis_acciones.services.paper_portfolio import PortfolioReport
 from analisis_acciones.services.scan_report import STYLE, num
@@ -46,6 +46,12 @@ td.up::before { content: "▲ "; color: var(--up); } td.down::before { content: 
 .pspark polyline { fill: none; stroke: var(--up); stroke-width: 1.6; }
 .review b { color: var(--ink); }
 """  # noqa: E501
+
+
+def local_price(t: PaperTrade) -> str:
+    """Price as entered, with its currency when it is not dollars."""
+    text = num(t.price, 4).rstrip("0").rstrip(",")
+    return text if t.currency == "USD" else f"{text} {escape(t.currency)}"
 
 
 def qty(value: float) -> str:
@@ -395,14 +401,19 @@ def portfolio_html(report: PortfolioReport, generated: datetime) -> str:
         "".join(
             f"<tr><td>{t.trade_date:%d/%m/%Y}</td><td><b>{escape(t.symbol)}</b></td>"
             f"<td>{'Compra ▲' if t.side == BUY else 'Venta ▼'}</td>"
-            f"<td class=n>{qty(t.quantity)}</td><td class=n>{num(t.price)}</td>"
-            f"<td class=n>{num(t.commission)}</td><td class=n>{num(t.value)}</td>"
+            f"<td class=n>{qty(t.quantity)}</td><td class=n>{local_price(t)}</td>"
+            f"<td class=n>{num(t.commission)}</td><td class=n>{num(t.value * t.fx_rate)}</td>"
             f"<td>{_journal(t.note, t.review)}</td></tr>"
             for t in reversed(report.trades)
         )
         or '<tr><td colspan="8" class="muted">Todavía no hay operaciones.</td></tr>'
     )
     events = _events_panel(report)
+    fx_notes = (
+        '<p class="muted small">' + " ".join(escape(n) for n in report.fx_notes) + "</p>"
+        if report.fx_notes
+        else ""
+    )
     problems = ""
     if report.problems:
         items = "".join(f"<li>{escape(x)}</li>" for x in report.problems)
@@ -415,15 +426,18 @@ def portfolio_html(report: PortfolioReport, generated: datetime) -> str:
 <body>
 <h1>Cartera simulada: {escape(p.name)}</h1>
 <p class="intro"><b>Operaciones ficticias</b>, sin dinero real, valoradas con el último cierre
-diario · generado el {generated:%d/%m/%Y %H:%M}. Los importes se suman sin conversión de moneda.
+diario · generado el {generated:%d/%m/%Y %H:%M}. Importes en dólares; los activos en otras divisas
+se convierten con el tipo de cambio de cada día.
 </p>
+{fx_notes}
 <div class="tiles">{tiles}</div>
 {problems}
 <div class="panel"><h3>Valor de la cartera en el tiempo</h3>
 {curve_svg(report.equity, report.benchmark, p.initial_cash, report.benchmark_symbol)}</div>
 <div class="panel"><h3>Posiciones y distribución</h3>{alloc}
-<table><thead><tr><th>Activo</th><th>Cantidad</th><th>Coste medio</th><th>Último cierre</th>
-<th>Valor</th><th>Resultado latente</th><th>%</th><th>Peso</th><th>Valor en el tiempo</th>
+<table><thead><tr><th>Activo</th><th>Cantidad</th><th>Coste medio ($)</th>
+<th>Último cierre ($)</th><th>Valor ($)</th><th>Resultado latente</th><th>%</th><th>Peso</th>
+<th>Valor en el tiempo</th>
 </tr></thead>
 <tbody>{rows}</tbody></table></div>
 {closed_panel(report)}
@@ -431,9 +445,9 @@ diario · generado el {generated:%d/%m/%Y %H:%M}. Los importes se suman sin conv
 {events}
 <h2 class="section-title">Operaciones</h2>
 <table><thead><tr><th>Fecha</th><th>Activo</th><th>Operación</th><th>Cantidad</th><th>Precio</th>
-<th>Comisión</th><th>Importe</th><th>Diario (motivo y revisión)</th></tr></thead>
+<th>Comisión ($)</th><th>Importe ($)</th><th>Diario (motivo y revisión)</th></tr></thead>
 <tbody>{trades}</tbody></table>
-<footer>Análisis de Acciones · Cartera simulada: importes en dólares (sin conversión de moneda);
+<footer>Análisis de Acciones · Cartera simulada: importes en dólares (otras divisas convertidas);
 impuestos simplificados (retención fija sobre dividendos e impuesto estimado sobre las ganancias
 netas de cada año, sin compensar pérdidas entre años). Los splits se aplican a la cantidad de
 acciones y los dividendos se cobran en efectivo en su fecha ex-dividendo. No es asesoramiento
@@ -457,6 +471,8 @@ def portfolio_trades_csv(report: PortfolioReport) -> str:
             "motivo",
             "revision",
             "resultado_venta",
+            "divisa",
+            "tipo_cambio_usd",
         ]
     )
     results = {c.trade.id: c.result for c in report.closed if c.trade.id is not None}
@@ -475,6 +491,8 @@ def portfolio_trades_csv(report: PortfolioReport) -> str:
                     t.note,
                     t.review,
                     round(results[t.id], 4) if t.id in results else "",
+                    t.currency,
+                    t.fx_rate,
                 )
             ]
         )

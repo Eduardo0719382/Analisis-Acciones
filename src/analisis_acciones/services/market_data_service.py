@@ -387,6 +387,31 @@ class MarketDataService:
         return rows
 
     # Fundamentals ------------------------------------------------------------
+    def currency(self, raw_symbol: str) -> str | None:
+        """Trading currency (cached once known; it practically never changes). None if unknown."""
+        if is_csv_symbol(raw_symbol):
+            return None
+        symbol = normalize_symbol(raw_symbol)
+        with self._db():
+            row = self._conn.execute(
+                "SELECT currency FROM symbol_currency WHERE symbol = ?", (symbol,)
+            ).fetchone()
+        if row:
+            return str(row["currency"])
+        try:
+            currency = self._provider.get_currency(symbol)
+        except AppError as exc:
+            logger.info("Currency of %s unknown: %s", symbol, exc)
+            return None
+        if currency:
+            with self._db():
+                self._conn.execute(
+                    "INSERT OR REPLACE INTO symbol_currency (symbol, currency, fetched_at) "
+                    "VALUES (?, ?, ?)",
+                    (symbol, currency, self._clock().isoformat()),
+                )
+        return currency
+
     def cached_fundamentals(self, symbols: list[str]) -> dict[str, Fundamentals]:
         """Stored fundamentals only (no network), for overviews such as the day summary."""
         found: dict[str, Fundamentals] = {}
