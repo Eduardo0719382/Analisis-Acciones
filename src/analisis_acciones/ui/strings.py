@@ -588,6 +588,7 @@ PF_TRADE_COLUMNS = (
     "Precio ($)",
     "Comisión ($)",
     "Importe ($)",
+    "Resultado ($)",
     "Motivo",
     "Revisión",
 )
@@ -599,7 +600,7 @@ PF_COMMISSION_AUTO_TIP = (
     "Marcada: se aplica la comisión configurada en la cartera. Desmarcada: escriba la comisión "
     "de esta operación."
 )
-PF_COSTS = "Comisiones y dividendos…"
+PF_COSTS = "Comisiones, dividendos e impuestos…"
 PF_COSTS_TITLE = "Comisiones y eventos corporativos"
 PF_COSTS_INTRO = (
     "Comisión de cada operación nueva = fija + porcentaje del importe, con un mínimo. Las "
@@ -609,6 +610,14 @@ PF_COSTS_FIXED = "Comisión fija por operación ($):"
 PF_COSTS_PCT = "Porcentaje del importe (%):"
 PF_COSTS_MIN = "Comisión mínima ($):"
 PF_COSTS_DIVIDENDS = "Cobrar dividendos en efectivo (los splits se aplican siempre)"
+PF_TAXES_TITLE = "Impuestos (simulación simplificada)"
+PF_TAXES_WITHHOLDING = "Retención sobre dividendos (%):"
+PF_TAXES_GAINS = "Impuesto sobre ganancias (%):"
+PF_TAXES_INTRO = (
+    "La retención se descuenta de cada dividendo cobrado. El impuesto sobre ganancias es una "
+    "estimación sobre el resultado neto de las ventas de cada año: se muestra en el informe "
+    "pero no se descuenta del efectivo. Consulte la fiscalidad real de su país."
+)
 PF_COSTS_SUMMARY = "Comisión: {text}"
 PF_COSTS_NONE = "sin comisión"
 PF_NOTE_PLACEHOLDER = "Motivo de la operación (diario): por qué compra o vende"

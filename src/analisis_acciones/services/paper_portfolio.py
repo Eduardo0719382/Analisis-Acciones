@@ -7,7 +7,7 @@ import sqlite3
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime
 
 import pandas as pd
@@ -20,11 +20,12 @@ from analisis_acciones.portfolio.engine import (
     SELL,
     SPLIT,
     AppliedEvent,
+    ClosedTrade,
     CorporateEvent,
     PaperTrade,
     Valuation,
     adjust_for_splits,
-    equity_curve,
+    daily_values,
     replay,
     split_factor_after,
     value,
@@ -52,6 +53,8 @@ class Portfolio:
     commission_pct: float = 0.0  # percent of the traded value
     commission_min: float = 0.0  # minimum per trade, in dollars
     apply_dividends: bool = True
+    dividend_withholding_pct: float = 0.0  # withheld from each dividend
+    capital_gains_tax_pct: float = 0.0  # estimate on each year's net realised gains
 
     def commission_for(self, value: float) -> float:
         """Commission of a trade of ``value`` dollars under this portfolio's schedule."""
@@ -68,6 +71,12 @@ class PortfolioReport:
     benchmark: pd.Series  # benchmark rebased to the initial cash, same days (may be empty)
     benchmark_symbol: str
     problems: list[str]
+    # Sales with their result (quantities and prices in the units of their day), oldest first.
+    closed: list[ClosedTrade] = field(default_factory=list)
+    # Market value per symbol per day (same days as ``equity``).
+    position_values: pd.DataFrame = field(default_factory=pd.DataFrame)
+    # (year, net realised result, estimated tax) for years with sales.
+    taxes: list[tuple[int, float, float]] = field(default_factory=list)
     # Dividends and splits that affected the portfolio, in the share units of their day
     # (``shares`` is the count after the event for a split).
     events: list[AppliedEvent] = field(default_factory=list)
@@ -92,7 +101,8 @@ class PaperPortfolioService:
             rows = db.execute("SELECT * FROM paper_portfolios ORDER BY id")
             found = [Portfolio(r["id"], r["name"], r["initial_cash"], r["commission_fixed"],
                                r["commission_pct"], r["commission_min"],
-                               bool(r["apply_dividends"])) for r in rows.fetchall()]  # fmt: skip
+                               bool(r["apply_dividends"]), r["dividend_withholding_pct"],
+                               r["capital_gains_tax_pct"]) for r in rows.fetchall()]  # fmt: skip
         return found or [self.create(DEFAULT_NAME, DEFAULT_CASH)]
 
     def set_costs(self, portfolio_id: int, fixed: float, pct: float, minimum: float,
@@ -110,6 +120,28 @@ class PaperPortfolioService:
                 (float(fixed), float(pct), float(minimum), int(apply_dividends), portfolio_id),
             )
         return self._portfolio(portfolio_id)
+
+    def set_taxes(self, portfolio_id: int, dividend_withholding_pct: float,
+                  capital_gains_tax_pct: float) -> Portfolio:  # fmt: skip
+        """Tax rates of the simulation (applied to the whole history when it is recalculated)."""
+        rates = (dividend_withholding_pct, capital_gains_tax_pct)
+        if not all(0 <= r <= 60 for r in rates):
+            raise UserError(
+                "bad tax rate",
+                user_message="Los porcentajes de impuestos deben estar entre 0 y 60.",
+            )
+        portfolio = self._portfolio(portfolio_id)
+        trades = self.trades(portfolio_id)
+        updated = replace(portfolio, dividend_withholding_pct=float(rates[0]),
+                          capital_gains_tax_pct=float(rates[1]))  # fmt: skip
+        self._check(updated, trades)  # a higher withholding can leave too little cash later
+        with self._db() as db:
+            db.execute(
+                "UPDATE paper_portfolios SET dividend_withholding_pct = ?, "
+                "capital_gains_tax_pct = ? WHERE id = ?",
+                (float(rates[0]), float(rates[1]), portfolio_id),
+            )
+        return updated
 
     def create(self, name: str, initial_cash: float) -> Portfolio:
         clean = " ".join(str(name).split())
@@ -196,7 +228,8 @@ class PaperPortfolioService:
         bars, _problems = self._bars({t.symbol for t in trades})
         splits = {s: b["splits"] for s, b in bars.items()}
         replay(adjust_for_splits(trades, splits), portfolio.initial_cash,
-               events=self._events(trades, bars, portfolio.apply_dividends))  # fmt: skip
+               events=self._events(trades, bars, portfolio.apply_dividends),
+               withholding_pct=portfolio.dividend_withholding_pct)  # fmt: skip
 
     def close_on(self, symbol: str, day: date) -> tuple[float, date]:
         """Real close of ``symbol`` on ``day`` or the session before it.
@@ -287,14 +320,17 @@ class PaperPortfolioService:
         closes = {s: b["close"] for s, b in bars.items()}
         adjusted = adjust_for_splits(trades, {s: b["splits"] for s, b in bars.items()})
         events = self._events(trades, bars, portfolio.apply_dividends)
-        state = replay(adjusted, portfolio.initial_cash, events=events)
+        withholding = portfolio.dividend_withholding_pct
+        state = replay(adjusted, portfolio.initial_cash, events=events,
+                       withholding_pct=withholding)  # fmt: skip
         end = self._clock().date()
         prices: dict[str, float | None] = {}
         for symbol, series in closes.items():
             known = series[series.index <= pd.Timestamp(end)]  # same day as the value curve
             prices[symbol] = float(known.iloc[-1]) if len(known) else None
         valuation = value(state, portfolio.initial_cash, prices)
-        equity = equity_curve(adjusted, portfolio.initial_cash, closes, end, events)
+        equity, per_symbol = daily_values(adjusted, portfolio.initial_cash, closes, end, events,
+                                          withholding)  # fmt: skip
         bench = pd.Series(dtype=float)
         if not equity.empty:
             try:
@@ -305,8 +341,20 @@ class PaperPortfolioService:
             except AppError as exc:
                 problems.append(f"{benchmark}: {exc.user_message}")
         splits = {s: b["splits"] for s, b in bars.items()}
+        closed = [self._closed_as_quoted(c) for c in state.closed]
+        taxes = gains_tax(closed, portfolio.capital_gains_tax_pct)
         return PortfolioReport(portfolio, trades, valuation, equity, bench, benchmark, problems,
+                               closed, per_symbol, taxes,
                                [self._as_quoted(e, splits) for e in state.applied])  # fmt: skip
+
+    @staticmethod
+    def _closed_as_quoted(closed: ClosedTrade) -> ClosedTrade:
+        t = closed.trade
+        f = t.split_factor
+        if f == 1.0:
+            return closed
+        real = replace(t, quantity=t.quantity / f, price=t.price * f, split_factor=1.0)
+        return ClosedTrade(real, closed.cost, closed.proceeds)
 
     @staticmethod
     def _as_quoted(applied: AppliedEvent, splits: dict[str, pd.Series]) -> AppliedEvent:
@@ -321,4 +369,17 @@ class PaperPortfolioService:
             return applied
         amount = e.value * factor if e.kind == DIVIDEND else e.value
         return AppliedEvent(CorporateEvent(e.symbol, e.day, e.kind, amount),
-                            applied.shares / factor, applied.cash)  # fmt: skip
+                            applied.shares / factor, applied.cash, applied.withheld)  # fmt: skip
+
+
+def gains_tax(closed: list[ClosedTrade], rate_pct: float) -> list[tuple[int, float, float]]:
+    """Per year: net realised result of the sales and the estimated tax on it.
+
+    Losses offset gains within the same year only; a net loss pays no tax (losses are
+    not carried to other years in this simplified estimate).
+    """
+    by_year: dict[int, float] = {}
+    for c in closed:
+        year = c.trade.trade_date.year
+        by_year[year] = by_year.get(year, 0.0) + c.result
+    return [(y, net, max(net, 0.0) * rate_pct / 100) for y, net in sorted(by_year.items())]

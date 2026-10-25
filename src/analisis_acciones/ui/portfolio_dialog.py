@@ -95,6 +95,23 @@ class CostsDialog(QDialog):
         self.minimum.setValue(portfolio.commission_min)
         self.dividends = QCheckBox(strings.PF_COSTS_DIVIDENDS)
         self.dividends.setChecked(portfolio.apply_dividends)
+        self.withholding = QDoubleSpinBox()
+        self.withholding.setRange(0, 60)
+        self.withholding.setDecimals(1)
+        self.withholding.setSuffix(" %")
+        self.withholding.setValue(portfolio.dividend_withholding_pct)
+        self.gains_tax = QDoubleSpinBox()
+        self.gains_tax.setRange(0, 60)
+        self.gains_tax.setDecimals(1)
+        self.gains_tax.setSuffix(" %")
+        self.gains_tax.setValue(portfolio.capital_gains_tax_pct)
+        taxes = QGroupBox(strings.PF_TAXES_TITLE)
+        taxes_form = QFormLayout(taxes)
+        taxes_intro = QLabel(strings.PF_TAXES_INTRO)
+        taxes_intro.setWordWrap(True)
+        taxes_form.addRow(taxes_intro)
+        taxes_form.addRow(strings.PF_TAXES_WITHHOLDING, self.withholding)
+        taxes_form.addRow(strings.PF_TAXES_GAINS, self.gains_tax)
         intro = QLabel(strings.PF_COSTS_INTRO)
         intro.setWordWrap(True)
         form = QFormLayout()
@@ -110,6 +127,7 @@ class CostsDialog(QDialog):
         layout.addWidget(intro)
         layout.addLayout(form)
         layout.addWidget(self.dividends)
+        layout.addWidget(taxes)
         layout.addWidget(buttons)
 
 
@@ -315,11 +333,25 @@ class PortfolioDialog(QDialog):
         dialog = CostsDialog(current, self)
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.set_costs(dialog.fixed.value(), dialog.pct.value(), dialog.minimum.value(),
-                           dialog.dividends.isChecked())  # fmt: skip
+                           dialog.dividends.isChecked(), dialog.withholding.value(),
+                           dialog.gains_tax.value())  # fmt: skip
 
-    def set_costs(self, fixed: float, pct: float, minimum: float, dividends: bool) -> None:
+    def set_costs(
+        self,
+        fixed: float,
+        pct: float,
+        minimum: float,
+        dividends: bool,
+        withholding: float | None = None,
+        gains_tax: float | None = None,
+    ) -> None:
         try:
-            self._service.set_costs(self.portfolio_id, fixed, pct, minimum, dividends)
+            current = self._service.set_costs(self.portfolio_id, fixed, pct, minimum, dividends)
+            self._service.set_taxes(
+                self.portfolio_id,
+                current.dividend_withholding_pct if withholding is None else withholding,
+                current.capital_gains_tax_pct if gains_tax is None else gains_tax,
+            )
         except UserError as exc:
             self.status.setText(exc.user_message)
             return
@@ -416,12 +448,15 @@ class PortfolioDialog(QDialog):
         self.costs_label.setText(costs_text(report.portfolio))
         self.view.setHtml(portfolio_html(report, datetime.now()), QUrl("about:blank"))
         rows = list(reversed(report.trades))
+        results = {c.trade.id: c.result for c in report.closed if c.trade.id is not None}
         self.trades.setRowCount(len(rows))
         for r, t in enumerate(rows):
             cells = [f"{t.trade_date:%d/%m/%Y}", t.symbol,
                      strings.PF_BUY if t.side == BUY else strings.PF_SELL, qty(t.quantity),
                      num(t.price, 4).rstrip("0").rstrip(","), num(t.commission),
-                     num(t.value), t.note, t.review]  # fmt: skip
+                     num(t.value),
+                     num(results[t.id], sign=True) if t.id in results else "",
+                     t.note, t.review]  # fmt: skip
             for c, text in enumerate(cells):
                 item = QTableWidgetItem(text)
                 if c == 0:

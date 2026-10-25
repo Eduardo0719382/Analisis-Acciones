@@ -62,7 +62,25 @@ class AppliedEvent:
 
     event: CorporateEvent
     shares: float  # shares held (today's units) on the event
-    cash: float  # cash credited (dividends), 0 for splits
+    cash: float  # cash credited (dividends, after withholding), 0 for splits
+    withheld: float = 0.0  # tax withheld from the dividend
+
+
+@dataclass(frozen=True)
+class ClosedTrade:
+    """Result of one sale against the average cost of the shares sold."""
+
+    trade: PaperTrade  # in the units used by the replay
+    cost: float  # average cost of the shares sold, purchase commissions included
+    proceeds: float  # sale value minus its commission
+
+    @property
+    def result(self) -> float:
+        return self.proceeds - self.cost
+
+    @property
+    def result_pct(self) -> float | None:
+        return self.result / self.cost * 100 if self.cost > EPSILON else None
 
 
 def split_factor_after(splits: pd.Series, day: date) -> float:
@@ -121,6 +139,8 @@ class PortfolioState:
     positions: dict[str, Position] = field(default_factory=dict)
     commissions: float = 0.0
     applied: list[AppliedEvent] = field(default_factory=list)
+    closed: list[ClosedTrade] = field(default_factory=list)
+    withheld: float = 0.0  # dividend tax withheld
 
     @property
     def dividends(self) -> float:
@@ -145,8 +165,11 @@ def replay(
     initial_cash: float,
     until: date | None = None,
     events: list[CorporateEvent] | tuple[CorporateEvent, ...] = (),
+    withholding_pct: float = 0.0,
 ) -> PortfolioState:
     """State after applying ``trades`` and ``events`` (up to ``until``, inclusive).
+
+    ``withholding_pct`` of each dividend is withheld as tax (only the rest is credited).
 
     Trades must already be in today's share units (``adjust_for_splits``). On a
     given day, events are applied before trades: a dividend goes to the shares
@@ -163,22 +186,25 @@ def replay(
         if until is not None and day > until:
             break
         if isinstance(item, CorporateEvent):
-            _apply_event(state, item)
+            _apply_event(state, item, withholding_pct)
         else:
             _apply_trade(state, item)
     return state
 
 
-def _apply_event(state: PortfolioState, event: CorporateEvent) -> None:
+def _apply_event(state: PortfolioState, event: CorporateEvent, withholding_pct: float) -> None:
     position = state.positions.get(event.symbol)
     if position is None or position.quantity <= EPSILON:
         return
-    cash = 0.0
+    cash = withheld = 0.0
     if event.kind == DIVIDEND:
-        cash = position.quantity * event.value
+        gross = position.quantity * event.value
+        withheld = gross * withholding_pct / 100
+        cash = gross - withheld
         position.dividends += cash
         state.cash += cash
-    state.applied.append(AppliedEvent(event, position.quantity, cash))
+        state.withheld += withheld
+    state.applied.append(AppliedEvent(event, position.quantity, cash, withheld))
 
 
 def _apply_trade(state: PortfolioState, trade: PaperTrade) -> None:
@@ -213,6 +239,7 @@ def _apply_trade(state: PortfolioState, trade: PaperTrade) -> None:
     cost_out = position.average_cost * quantity
     proceeds = trade.value - trade.commission
     position.realized += proceeds - cost_out
+    state.closed.append(ClosedTrade(trade, cost_out, proceeds))
     position.quantity -= quantity
     position.cost_basis -= cost_out
     if position.quantity <= 1e-6:
@@ -241,6 +268,7 @@ class Valuation:
     commissions: float
     total_value: float | None  # None when a held symbol has no price
     dividends: float = 0.0
+    withheld: float = 0.0  # dividend tax withheld
 
     @property
     def total_return_pct(self) -> float | None:
@@ -299,7 +327,14 @@ def value(
             for h in rows
         ]
     return Valuation(
-        initial_cash, state.cash, rows, state.realized, state.commissions, total, state.dividends
+        initial_cash,
+        state.cash,
+        rows,
+        state.realized,
+        state.commissions,
+        total,
+        state.dividends,
+        state.withheld,
     )
 
 
@@ -309,20 +344,38 @@ def equity_curve(
     closes: Mapping[str, pd.Series],
     end: date,
     events: list[CorporateEvent] | tuple[CorporateEvent, ...] = (),
+    withholding_pct: float = 0.0,
 ) -> pd.Series:
-    """Daily total value from the first trade date to ``end`` (business days).
+    """Daily total value from the first trade date to ``end`` (see ``daily_values``)."""
+    return daily_values(trades, initial_cash, closes, end, events, withholding_pct)[0]
+
+
+def daily_values(
+    trades: list[PaperTrade],
+    initial_cash: float,
+    closes: Mapping[str, pd.Series],
+    end: date,
+    events: list[CorporateEvent] | tuple[CorporateEvent, ...] = (),
+    withholding_pct: float = 0.0,
+) -> tuple[pd.Series, pd.DataFrame]:
+    """Daily total value and market value per symbol (business days, first trade to ``end``).
 
     Each holding is valued at its last close on or before each day; a day where a
-    held symbol has no close yet is left out rather than guessed.
+    held symbol has no close yet is left out rather than guessed. A symbol not held
+    on a day is worth 0 that day.
     """
     if not trades:
-        return pd.Series(dtype=float)
+        return pd.Series(dtype=float), pd.DataFrame(dtype=float)
     days = pd.bdate_range(ordered(trades)[0].trade_date, end)
     aligned = {s: c.sort_index().reindex(days, method="ffill") for s, c in closes.items()}
-    values: dict[pd.Timestamp, float] = {}
+    symbols = sorted({t.symbol for t in trades})
+    totals: dict[pd.Timestamp, float] = {}
+    per_symbol: dict[pd.Timestamp, dict[str, float]] = {}
     for day in days:
-        state = replay(trades, initial_cash, until=day.date(), events=events)
+        state = replay(trades, initial_cash, until=day.date(), events=events,
+                       withholding_pct=withholding_pct)  # fmt: skip
         total = state.cash
+        row = dict.fromkeys(symbols, 0.0)
         complete = True
         for pos in state.open_positions():
             series = aligned.get(pos.symbol)
@@ -330,7 +383,10 @@ def equity_curve(
             if price != price:  # NaN: no close known yet
                 complete = False
                 break
-            total += pos.quantity * float(price)
+            row[pos.symbol] = pos.quantity * float(price)
+            total += row[pos.symbol]
         if complete:
-            values[day] = total
-    return pd.Series(values, dtype=float)
+            totals[day] = total
+            per_symbol[day] = row
+    frame = pd.DataFrame.from_dict(per_symbol, orient="index", columns=symbols, dtype=float)
+    return pd.Series(totals, dtype=float), frame

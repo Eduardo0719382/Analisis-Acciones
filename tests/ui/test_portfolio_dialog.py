@@ -47,7 +47,7 @@ def test_trade_report_delete_and_export(qtbot: QtBot, service: PaperPortfolioSer
     dialog.add_trade()
     qtbot.waitUntil(lambda: dialog.report is not None and len(dialog.report.trades) == 1,
                     timeout=10000)  # fmt: skip
-    assert dialog.trades.rowCount() == 1 and dialog.trades.item(0, 7).text() == "primera"
+    assert dialog.trades.rowCount() == 1 and dialog.trades.item(0, 8).text() == "primera"
     assert dialog.report.valuation.holdings[0].quantity == 5
 
     dialog.side.setCurrentIndex(dialog.side.findData("sell"))
@@ -75,8 +75,12 @@ def test_dollars_commission_and_journal(qtbot: QtBot, service: PaperPortfolioSer
     qtbot.addWidget(dialog)
     qtbot.waitUntil(lambda: dialog.report is not None, timeout=10000)
     assert dialog.commission_auto.isChecked() and not dialog.commission.isEnabled()
-    dialog.set_costs(2.5, 0, 0, True)
+    dialog.set_costs(2.5, 0, 0, True, 15, 19)
     qtbot.waitUntil(lambda: "2,50 $" in dialog.costs_label.text(), timeout=10000)
+    stored = service.portfolios()[0]
+    assert (stored.dividend_withholding_pct, stored.capital_gains_tax_pct) == (15, 19)
+    dialog.set_costs(2.5, 0, 0, True)  # taxes unchanged when not given
+    assert service.portfolios()[0].capital_gains_tax_pct == 19
 
     dialog.mode.setCurrentIndex(dialog.mode.findData("dollars"))
     assert dialog.quantity_label.text() == "Importe ($)"
@@ -101,8 +105,8 @@ def test_dollars_commission_and_journal(qtbot: QtBot, service: PaperPortfolioSer
     assert dialog.report.trades[1].commission == 0.75
 
     dialog.set_review(trade.id or 0, "Salió bien")
-    qtbot.waitUntil(lambda: dialog.trades.item(1, 8) is not None
-                    and dialog.trades.item(1, 8).text() == "Salió bien", timeout=10000)  # fmt: skip
+    qtbot.waitUntil(lambda: dialog.trades.item(1, 9) is not None
+                    and dialog.trades.item(1, 9).text() == "Salió bien", timeout=10000)  # fmt: skip
 
 
 def test_menu_opens_portfolio(qtbot: QtBot, settings: SettingsService, market: MarketDataService,

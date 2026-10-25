@@ -13,9 +13,11 @@ from analisis_acciones.portfolio.engine import (
     DIVIDEND,
     SELL,
     SPLIT,
+    ClosedTrade,
     CorporateEvent,
     PaperTrade,
     adjust_for_splits,
+    daily_values,
     equity_curve,
     replay,
     split_factor_after,
@@ -23,8 +25,12 @@ from analisis_acciones.portfolio.engine import (
 )
 from analisis_acciones.providers.yahoo import YahooFinanceProvider
 from analisis_acciones.services.market_data_service import MarketDataService
-from analisis_acciones.services.paper_portfolio import PaperPortfolioService, Portfolio
-from analisis_acciones.services.portfolio_report import portfolio_html
+from analisis_acciones.services.paper_portfolio import (
+    PaperPortfolioService,
+    Portfolio,
+    gains_tax,
+)
+from analisis_acciones.services.portfolio_report import portfolio_html, portfolio_trades_csv
 from analisis_acciones.storage.database import open_database
 from tests.synthetic import FakeYahooClient, synthetic_daily
 
@@ -230,3 +236,62 @@ def test_messages_use_the_units_of_the_trade_day() -> None:
     with pytest.raises(UserError) as exc:
         replay(adjust_for_splits([t(BUY, 30, 400, D1)], splits), 10_000)
     assert "comprar 30 AAA" in exc.value.user_message
+
+
+def test_withholding_and_closed_trades() -> None:
+    events = [CorporateEvent("AAA", D2, DIVIDEND, 1.0)]
+    trades = [t(BUY, 10, 100, D1, 2), t(SELL, 4, 120, D3, 1)]
+    state = replay(trades, 10_000, events=events, withholding_pct=15)
+    assert state.withheld == pytest.approx(1.5) and state.dividends == pytest.approx(8.5)
+    assert state.applied[0].cash == pytest.approx(8.5) and state.applied[0].withheld == 1.5
+    (closed,) = state.closed
+    assert closed.cost == pytest.approx(4 * 100.2) and closed.proceeds == pytest.approx(479)
+    assert closed.result == pytest.approx(479 - 400.8)
+    assert closed.result_pct == pytest.approx((479 - 400.8) / 400.8 * 100)
+    assert value(state, 10_000, {"AAA": 100}).withheld == pytest.approx(1.5)
+
+
+def test_daily_values_per_symbol() -> None:
+    days = pd.bdate_range(D1, periods=3)
+    closes = {"AAA": pd.Series([100.0, 110.0, 90.0], index=days),
+              "BBB": pd.Series([10.0, 10.0, 12.0], index=days)}  # fmt: skip
+    trades = [t(BUY, 10, 100, D1), t(BUY, 5, 10, D2, symbol="BBB"), t(SELL, 10, 90, D3)]
+    total, per = daily_values(trades, 2000, closes, D3)
+    assert list(per["AAA"]) == pytest.approx([1000, 1100, 0])
+    assert list(per["BBB"]) == pytest.approx([0, 50, 60])
+    assert list(total) == pytest.approx([2000, 2100, 2000 - 100 - 50 + 60])
+
+
+def test_gains_tax_per_year() -> None:
+    def closed(day: date, result: float) -> ClosedTrade:
+        return ClosedTrade(t(SELL, 1, 100, day), 100.0, 100.0 + result)
+
+    sales = [closed(date(2023, 3, 1), 300), closed(date(2023, 9, 1), -100),
+             closed(date(2024, 2, 1), -50)]  # fmt: skip
+    assert gains_tax(sales, 20) == [(2023, pytest.approx(200), pytest.approx(40)),
+                                    (2024, pytest.approx(-50), 0.0)]  # fmt: skip
+
+
+def test_taxes_in_service_and_report(events_service: PaperPortfolioService) -> None:
+    service = events_service
+    (p,) = service.portfolios()
+    with pytest.raises(UserError):
+        service.set_taxes(p.id, 80, 0)
+    service.add_trade(p.id, "TEST", BUY, 10, trade_date=date(2024, 1, 15))
+    sale = service.add_trade(p.id, "TEST", SELL, 15, trade_date=date(2024, 3, 1))
+    service.set_taxes(p.id, 30, 19)
+    report = service.report(p.id)
+    assert report.valuation.dividends == pytest.approx(5 * 0.7)  # 20 shares × 0.25, 30 % kept
+    assert report.valuation.withheld == pytest.approx(1.5)
+    (closed,) = report.closed
+    assert closed.trade.quantity == pytest.approx(15) and closed.trade.id == sale.id
+    (year,) = report.taxes
+    assert year[0] == 2024 and year[2] == pytest.approx(max(closed.result, 0) * 0.19)
+    assert list(report.position_values.columns) == ["TEST"]
+    assert len(report.position_values) == len(report.equity)
+    html = portfolio_html(report, datetime(2024, 3, 30))
+    assert "Resultado de las ventas" in html and "retenido 1,50" in html
+    assert 'class="pspark"' in html and "Impuesto estimado al 19,0 %" in html
+    csv_text = portfolio_trades_csv(report)
+    assert csv_text.splitlines()[0].endswith(",resultado_venta")
+    assert csv_text.splitlines()[2].endswith(f",{round(closed.result, 4)}")

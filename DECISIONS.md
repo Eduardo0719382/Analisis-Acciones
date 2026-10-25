@@ -746,3 +746,16 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   JavaScript off (same as the reports); section links are plain `#anchors`. No external
   resources. A test checks every link has a target and that the menu names it cites exist.
 - It mirrors the README "Uso" section in shorter, task-oriented form; keep both in step.
+
+## D-046 — Portfolio taxes, closed trades and per-position values
+
+- **Dividend withholding** (migration 0012) is deducted when each dividend is credited, so it
+  affects cash and therefore which later trades are possible; changing it re-validates the
+  whole history.
+- **Capital gains tax** is only an estimate: rate × each calendar year's net realised result
+  (losses offset gains within the year; no carry-forward, no country rules). It is shown, not
+  deducted, because real rules vary too much to simulate cash flows honestly.
+- **Closed trades:** each sale against the average cost of the shares sold (purchase
+  commissions included) minus its own commission; shown in the units of the trade's day.
+- **Per-position values** come from the same daily replay as the equity curve
+  (`daily_values`), so the per-symbol values plus cash add up to the curve.

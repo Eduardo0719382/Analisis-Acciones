@@ -41,6 +41,8 @@ td.up::before { content: "▲ "; color: var(--up); } td.down::before { content: 
   padding: 12px 16px; margin: 14px 0; break-inside: avoid; }
 .warn { color: var(--ink-2); font-size: 12px; }
 .review { color: var(--ink-2); font-size: 12px; margin-top: 2px; }
+.pspark { width: 120px; height: 28px; display: block; }
+.pspark polyline { fill: none; stroke: var(--up); stroke-width: 1.6; }
 .review b { color: var(--ink); }
 """  # noqa: E501
 
@@ -136,6 +138,65 @@ def _journal(note: str, review: str) -> str:
     return text
 
 
+def position_spark(report: PortfolioReport, symbol: str, width: int = 120,
+                   height: int = 28) -> str:  # fmt: skip
+    """Market value of one holding per day (0 while not held)."""
+    frame = report.position_values
+    if symbol not in frame.columns or len(frame) < 2:
+        return '<span class="muted">—</span>'
+    values = [float(v) for v in frame[symbol]]
+    high = max(values) or 1.0
+    step = width / (len(values) - 1)
+    pts = " ".join(
+        f"{i * step:.1f},{2 + (high - v) * (height - 4) / high:.1f}" for i, v in enumerate(values)
+    )
+    first = pd.Timestamp(frame.index[0])
+    return (
+        f'<svg class="pspark" viewBox="0 0 {width} {height}" role="img" aria-label="Valor de '
+        f'{escape(symbol)}"><title>{escape(symbol)}: valor desde el {first:%d/%m/%Y}, '
+        f"máximo {num(high)}, hoy {num(values[-1])}</title>"
+        f'<polyline points="{pts}"></polyline></svg>'
+    )
+
+
+def closed_panel(report: PortfolioReport) -> str:
+    """Each sale's result and, per year, the net result and the estimated tax."""
+    if not report.closed:
+        return ""
+    rows = []
+    for c in reversed(report.closed):
+        t = c.trade
+        rows.append(
+            f"<tr><td>{t.trade_date:%d/%m/%Y}</td><td><b>{escape(t.symbol)}</b></td>"
+            f"<td class=n>{qty(t.quantity)}</td><td class=n>{num(t.price)}</td>"
+            f"<td class=n>{num(c.cost)}</td><td class=n>{num(c.proceeds)}</td>"
+            f"{_signed_cell(c.result)}{_signed_cell(c.result_pct, 2, ' %')}</tr>"
+        )
+    rate = report.portfolio.capital_gains_tax_pct
+    years = "".join(
+        f"<tr><td>{year}</td>{_signed_cell(net)}<td class=n>{num(tax)}</td></tr>"
+        for year, net, tax in report.taxes
+    )
+    total_tax = sum(tax for _y, _n, tax in report.taxes)
+    tax_note = (
+        f"Impuesto estimado al {num(rate, 1)} % de la ganancia neta de cada año: "
+        f"<b>{num(total_tax)}</b> en total (no se descuenta del efectivo)."
+        if rate
+        else "Sin tipo de impuesto configurado (botón «Impuestos…» de la cartera)."
+    )
+    return (
+        '<div class="panel"><h3>Resultado de las ventas</h3><p class="muted small">Cada venta '
+        "frente al coste medio de las acciones vendidas (comisiones incluidas).</p>"
+        "<table><thead><tr><th>Fecha</th><th>Activo</th><th>Cantidad</th><th>Precio</th>"
+        "<th>Coste</th><th>Importe neto</th><th>Resultado</th><th>%</th></tr></thead><tbody>"
+        + "".join(rows)
+        + '</tbody></table><h3>Por año</h3><table class="taxes"><thead><tr><th>Año</th>'
+        "<th>Resultado neto</th><th>Impuesto estimado</th></tr></thead><tbody>"
+        + years
+        + f'</tbody></table><p class="muted small">{tax_note}</p></div>'
+    )
+
+
 def _events_panel(report: PortfolioReport) -> str:
     """Dividends and splits that affected the portfolio, newest first."""
     if not report.events:
@@ -148,6 +209,8 @@ def _events_panel(report: PortfolioReport) -> str:
             what = "Dividendo"
             detail = f"{num(e.value, 4).rstrip('0').rstrip(',')} $ por acción"
             effect = f"+{num(applied.cash)} $ en efectivo"
+            if applied.withheld:
+                effect += f" (retenido {num(applied.withheld)} $)"
             affected = shares
         else:
             what = "Split"
@@ -211,7 +274,8 @@ def portfolio_html(report: PortfolioReport, generated: datetime) -> str:
             tile(
                 num(v.cash),
                 "efectivo disponible",
-                f"comisiones pagadas {num(v.commissions)} · dividendos cobrados {num(v.dividends)}",
+                f"comisiones pagadas {num(v.commissions)} · dividendos cobrados {num(v.dividends)}"
+                + (f" (retenido {num(v.withheld)})" if v.withheld else ""),
             ),
             tile(
                 f"{num(diff, 1, sign=True)} pts" if diff is not None else "—",
@@ -243,10 +307,11 @@ def portfolio_html(report: PortfolioReport, generated: datetime) -> str:
             f"<td class=n>{num(h.market_value)}</td>{_signed_cell(h.unrealized)}"
             f"{_signed_cell(h.unrealized_pct, 2, ' %')}"
             f'<td><div class="wbar" title="{num(h.weight_pct, 1)} %"><div style="width:'
-            f'{min(h.weight_pct or 0, 100):.1f}%"></div></div></td></tr>'
+            f'{min(h.weight_pct or 0, 100):.1f}%"></div></div></td>'
+            f"<td>{position_spark(report, h.symbol)}</td></tr>"
             for h in holdings
         )
-        or '<tr><td colspan="8" class="muted">Sin posiciones abiertas.</td></tr>'
+        or '<tr><td colspan="9" class="muted">Sin posiciones abiertas.</td></tr>'
     )
     trades = (
         "".join(
@@ -280,15 +345,18 @@ diario · generado el {generated:%d/%m/%Y %H:%M}. Los importes se suman sin conv
 {curve_svg(report.equity, report.benchmark, p.initial_cash, report.benchmark_symbol)}</div>
 <div class="panel"><h3>Posiciones y distribución</h3>{alloc}
 <table><thead><tr><th>Activo</th><th>Cantidad</th><th>Coste medio</th><th>Último cierre</th>
-<th>Valor</th><th>Resultado latente</th><th>%</th><th>Peso</th></tr></thead>
+<th>Valor</th><th>Resultado latente</th><th>%</th><th>Peso</th><th>Valor en el tiempo</th>
+</tr></thead>
 <tbody>{rows}</tbody></table></div>
+{closed_panel(report)}
 {events}
 <h2 class="section-title">Operaciones</h2>
 <table><thead><tr><th>Fecha</th><th>Activo</th><th>Operación</th><th>Cantidad</th><th>Precio</th>
 <th>Comisión</th><th>Importe</th><th>Diario (motivo y revisión)</th></tr></thead>
 <tbody>{trades}</tbody></table>
 <footer>Análisis de Acciones · Cartera simulada: importes en dólares (sin conversión de moneda);
-no refleja impuestos ni retenciones sobre dividendos. Los splits se aplican a la cantidad de
+impuestos simplificados (retención fija sobre dividendos e impuesto estimado sobre las ganancias
+netas de cada año, sin compensar pérdidas entre años). Los splits se aplican a la cantidad de
 acciones y los dividendos se cobran en efectivo en su fecha ex-dividendo. No es asesoramiento
 financiero.
 </footer>
@@ -309,8 +377,10 @@ def portfolio_trades_csv(report: PortfolioReport) -> str:
             "importe",
             "motivo",
             "revision",
+            "resultado_venta",
         ]
     )
+    results = {c.trade.id: c.result for c in report.closed if c.trade.id is not None}
     for t in report.trades:
         writer.writerow(
             [
@@ -325,6 +395,7 @@ def portfolio_trades_csv(report: PortfolioReport) -> str:
                     round(t.value, 4),
                     t.note,
                     t.review,
+                    round(results[t.id], 4) if t.id in results else "",
                 )
             ]
         )

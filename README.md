@@ -209,6 +209,11 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   - **Eventos corporativos:** los splits ajustan la cantidad de acciones y los dividendos se
     cobran en efectivo en su fecha ex-dividendo (se puede desactivar). El informe los lista en
     «Eventos corporativos». Sin impuestos ni retenciones.
+  - **Impuestos (simplificados):** en el mismo botón se fija una **retención sobre
+    dividendos** (se descuenta de cada cobro) y un **impuesto sobre ganancias** que se estima
+    sobre el resultado neto de las ventas de cada año (se muestra, no se descuenta).
+  - **Resultado de cada venta** frente al coste medio (también en la tabla de operaciones y en
+    el CSV), resumen por año y un mini gráfico del **valor de cada posición en el tiempo**.
   - **Diario de operaciones:** cada operación guarda su motivo y, después, una revisión
     (*Operaciones → Escribir revisión…*); ambos salen en el informe y en el CSV.
 - **Comparar activos:** *Herramientas → Comparar activos…* (hasta 6 tickers; se rellena con el
