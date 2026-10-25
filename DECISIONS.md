@@ -944,3 +944,13 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   section titles stay with their content, and long panels may continue on the next page.
 - The footer line lists the portfolio's settings (commissions, automatic dividends,
   withholding, gains tax) so a printed report explains its own numbers.
+
+## D-061 — Menus and shortcuts
+
+- *Herramientas* is grouped by task: analysis of the watchlist, then simulation (backtests,
+  portfolio), then comparison. *Ver* starts with the everyday actions (search, refresh,
+  indicators).
+- New shortcuts avoid the standard ones of text fields (Ctrl+C/V/X/Z/A) and use Ctrl+Shift
+  for the less frequent windows. Ctrl+Q is set explicitly because the "Quit" standard key has
+  no binding on Windows. Ctrl+1…9 select the right-panel tabs.
+- A test checks that no two actions share a shortcut.

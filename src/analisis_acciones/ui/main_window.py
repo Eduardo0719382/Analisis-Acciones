@@ -13,7 +13,7 @@ from typing import Any
 import pandas as pd
 import shiboken6
 from PySide6.QtCore import QByteArray, QLocale, Qt, QTimer
-from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
+from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -172,6 +172,7 @@ class MainWindow(QMainWindow):
         self._build_regions()
         self._build_status_bar()
         self._build_menus()
+        self._install_tab_shortcuts()
         self._restore_layout()
         self._wire_market()
         self._wire_chart_type()
@@ -334,6 +335,7 @@ class MainWindow(QMainWindow):
 
         file_menu = menu_bar.addMenu(strings.MENU_FILE)
         self.import_csv_action = QAction(strings.ACTION_IMPORT_CSV, self)
+        self.import_csv_action.setShortcut(QKeySequence("Ctrl+O"))
         self.import_csv_action.triggered.connect(self._import_csv)
         file_menu.addAction(self.import_csv_action)
         file_menu.addSeparator()
@@ -355,25 +357,12 @@ class MainWindow(QMainWindow):
             file_menu.addAction(action)
         file_menu.addSeparator()
         quit_action = QAction(strings.ACTION_QUIT, self)
-        quit_action.setShortcut(QKeySequence.StandardKey.Quit)
+        quit_action.setShortcut(QKeySequence("Ctrl+Q"))  # StandardKey.Quit is empty on Windows
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
 
         tools_menu = menu_bar.addMenu(strings.MENU_TOOLS)
-        self.backtest_action = QAction(strings.ACTION_BACKTEST, self)
-        self.backtest_action.setShortcut(QKeySequence("Ctrl+B"))
-        self.backtest_action.triggered.connect(self.open_backtest)
-        tools_menu.addAction(self.backtest_action)
-        self.compare_action = QAction(strings.ACTION_COMPARE, self)
-        self.compare_action.triggered.connect(self.open_comparison)
-        tools_menu.addAction(self.compare_action)
-        self.portfolio_action = QAction(strings.ACTION_PORTFOLIO, self)
-        self.portfolio_action.triggered.connect(self.open_portfolio)
-        self.portfolio_action.setEnabled(self._portfolio is not None)
-        tools_menu.addAction(self.portfolio_action)
-        self.pattern_backtest_action = QAction(strings.ACTION_PATTERN_BACKTEST, self)
-        self.pattern_backtest_action.triggered.connect(self.open_pattern_backtest)
-        tools_menu.addAction(self.pattern_backtest_action)
+        # Watchlist analysis
         self.scanner_action = QAction(strings.ACTION_SCANNER, self)
         self.scanner_action.setShortcut(QKeySequence("Ctrl+E"))
         self.scanner_action.triggered.connect(self.open_scanner)
@@ -390,8 +379,41 @@ class MainWindow(QMainWindow):
         self.calendar_notices_action = QAction(strings.ACTION_CALENDAR_NOTICES, self)
         self.calendar_notices_action.triggered.connect(self._ask_calendar_notice_days)
         tools_menu.addAction(self.calendar_notices_action)
+        tools_menu.addSeparator()
+        # Simulation
+        self.backtest_action = QAction(strings.ACTION_BACKTEST, self)
+        self.backtest_action.setShortcut(QKeySequence("Ctrl+B"))
+        self.backtest_action.triggered.connect(self.open_backtest)
+        tools_menu.addAction(self.backtest_action)
+        self.pattern_backtest_action = QAction(strings.ACTION_PATTERN_BACKTEST, self)
+        self.pattern_backtest_action.setShortcut(QKeySequence("Ctrl+Shift+B"))
+        self.pattern_backtest_action.triggered.connect(self.open_pattern_backtest)
+        tools_menu.addAction(self.pattern_backtest_action)
+        self.portfolio_action = QAction(strings.ACTION_PORTFOLIO, self)
+        self.portfolio_action.setShortcut(QKeySequence("Ctrl+Shift+P"))
+        self.portfolio_action.triggered.connect(self.open_portfolio)
+        self.portfolio_action.setEnabled(self._portfolio is not None)
+        tools_menu.addAction(self.portfolio_action)
+        tools_menu.addSeparator()
+        self.compare_action = QAction(strings.ACTION_COMPARE, self)
+        self.compare_action.setShortcut(QKeySequence("Ctrl+Shift+C"))
+        self.compare_action.triggered.connect(self.open_comparison)
+        tools_menu.addAction(self.compare_action)
 
         view_menu = menu_bar.addMenu(strings.MENU_VIEW)
+        self.search_action = QAction(strings.ACTION_SEARCH, self)
+        self.search_action.setShortcut(QKeySequence("Ctrl+F"))
+        self.search_action.triggered.connect(self.focus_search)
+        view_menu.addAction(self.search_action)
+        self.refresh_action = QAction(strings.ACTION_REFRESH, self)
+        self.refresh_action.setShortcut(QKeySequence("F5"))
+        self.refresh_action.triggered.connect(self.refresh_current)
+        view_menu.addAction(self.refresh_action)
+        self.indicators_action = QAction(strings.ACTION_INDICATORS, self)
+        self.indicators_action.setShortcut(QKeySequence("Ctrl+I"))
+        self.indicators_action.triggered.connect(self.edit_indicators)
+        view_menu.addAction(self.indicators_action)
+        view_menu.addSeparator()
         self.dark_theme_action = QAction(strings.ACTION_DARK_THEME, self)
         self.dark_theme_action.setCheckable(True)
         self.dark_theme_action.setChecked(self._settings.theme() is Theme.DARK)
@@ -428,6 +450,7 @@ class MainWindow(QMainWindow):
             self.software_graphics_action.setChecked(self._session_guard.software_rendering)
         self.software_graphics_action.toggled.connect(self._on_software_graphics_toggled)
         view_menu.addAction(self.software_graphics_action)
+        view_menu.addSeparator()
         self.reset_layout_action = QAction(strings.ACTION_RESET_LAYOUT, self)
         self.reset_layout_action.triggered.connect(self.reset_layout)
         view_menu.addAction(self.reset_layout_action)
@@ -533,6 +556,27 @@ class MainWindow(QMainWindow):
         if start.switched_to_software:
             text += "\n\n" + strings.UNCLEAN_EXIT_SOFTWARE
         QMessageBox.information(self, strings.UNCLEAN_EXIT_TITLE, text)
+
+    def focus_search(self) -> None:
+        self.search_box.setFocus()
+        self.search_box.selectAll()
+
+    def refresh_current(self) -> None:
+        """Reload the open symbol (new bars are downloaded when the cache is not current)."""
+        if self.current_symbol and self.market is not None:
+            self.market.load(self.current_symbol, self.current_interval())
+
+    def _install_tab_shortcuts(self) -> None:
+        """Ctrl+1 … Ctrl+9 select the tabs of the right panel."""
+        self._tab_shortcuts = []
+        for n in range(1, 10):
+            shortcut = QShortcut(QKeySequence(f"Ctrl+{n}"), self)
+            shortcut.activated.connect(lambda n=n: self._select_tab(n - 1))
+            self._tab_shortcuts.append(shortcut)
+
+    def _select_tab(self, index: int) -> None:
+        if 0 <= index < self.right_tabs.count():
+            self.right_tabs.setCurrentIndex(index)
 
     def open_guide(self) -> None:
         if self._guide_dialog is None or not shiboken6.isValid(self._guide_dialog):

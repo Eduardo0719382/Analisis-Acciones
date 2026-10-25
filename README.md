@@ -75,6 +75,12 @@ blanco porque su motor se detuvo, se recarga automáticamente.
 
 - **Guía de uso** (*Ayuda → Guía de uso*, F1): explica dentro del programa cada parte, cómo
   leerla, los atajos de teclado, un glosario y los límites.
+- **Atajos:** F1 guía · Ctrl+F buscar · F5 actualizar el activo · Ctrl+I indicadores ·
+  Ctrl+1…9 pestañas del panel derecho · Ctrl+D resumen del día · Ctrl+E escáner · Ctrl+B
+  backtesting · Ctrl+Mayús+B backtesting de patrones · Ctrl+Mayús+P cartera simulada ·
+  Ctrl+Mayús+C comparar · Ctrl+O importar CSV · Ctrl+Q salir. El menú *Herramientas* agrupa
+  primero el análisis de la lista (escáner, escaneo diario, avisos), después la simulación
+  (backtesting, cartera) y al final la comparación.
 - **Resumen del día** (*Ver → Resumen del día…*, Ctrl+D; se abre al iniciar si la lista de
   seguimiento tiene activos, lo que se puede desactivar): estado del mercado, cuántos activos de
   la lista suben y bajan (y los que más), una tarjeta por activo con su cambio y su evolución

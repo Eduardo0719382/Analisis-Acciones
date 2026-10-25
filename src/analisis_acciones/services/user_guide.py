@@ -215,12 +215,22 @@ carga al reiniciar.</li>
         """
 <table><tbody>
 <tr><td><kbd>F1</kbd></td><td>Esta guía</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>F</kbd></td><td>Buscar un activo</td></tr>
+<tr><td><kbd>F5</kbd></td><td>Actualizar los datos del activo abierto</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>I</kbd></td><td>Indicadores</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>1</kbd> … <kbd>9</kbd></td><td>Pestañas del panel derecho
+(Detalles, Análisis, Agotamiento…)</td></tr>
 <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>Resumen del día</td></tr>
 <tr><td><kbd>Ctrl</kbd>+<kbd>E</kbd></td><td>Escáner de la lista</td></tr>
 <tr><td><kbd>Ctrl</kbd>+<kbd>B</kbd></td><td>Backtesting</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Mayús</kbd>+<kbd>B</kbd></td><td>Backtesting de patrones</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Mayús</kbd>+<kbd>P</kbd></td><td>Cartera simulada</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Mayús</kbd>+<kbd>C</kbd></td><td>Comparar activos</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>O</kbd></td><td>Importar un CSV de precios</td></tr>
 <tr><td><kbd>↑</kbd> <kbd>↓</kbd> <kbd>Enter</kbd></td><td>Elegir en la búsqueda</td></tr>
 <tr><td><kbd>Supr</kbd></td><td>Quitar el activo seleccionado de la lista</td></tr>
 <tr><td><kbd>Esc</kbd></td><td>Cancelar un dibujo</td></tr>
+<tr><td><kbd>Ctrl</kbd>+<kbd>Q</kbd></td><td>Salir</td></tr>
 </tbody></table>""",
     ),
     (
