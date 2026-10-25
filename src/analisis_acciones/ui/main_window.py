@@ -63,7 +63,7 @@ from analisis_acciones.services.comparison import benchmark_line
 from analisis_acciones.services.daily_scan import Novelty
 from analisis_acciones.services.drawing_service import DrawingService
 from analisis_acciones.services.market_data_service import LoadResult, MarketDataService
-from analisis_acciones.services.paper_portfolio import PaperPortfolioService
+from analisis_acciones.services.paper_portfolio import PaperPortfolioService, PortfolioNotice
 from analisis_acciones.services.scanner import ScanResult
 from analisis_acciones.services.settings_service import MAX_CALENDAR_DAYS, SettingsService, Theme
 from analisis_acciones.services.update_service import UpdateCheck, UpdateService
@@ -96,6 +96,9 @@ from analisis_acciones.ui.watchlist_panel import WatchlistPanel
 from analisis_acciones.ui.workers import Worker, start_worker
 
 logger = logging.getLogger(__name__)
+
+PORTFOLIO_ALERTS_INTERVAL_MS = 30 * 60 * 1000
+PORTFOLIO_ALERTS_FIRST_MS = 90_000
 
 #: Bars used for the volume profile (about a year of daily bars).
 VOLUME_PROFILE_BARS = 250
@@ -148,6 +151,12 @@ class MainWindow(QMainWindow):
         self.daily_scan: DailyScanController | None = None
         self._summary_dialog: DaySummaryDialog | None = None
         self._guide_dialog: GuideDialog | None = None
+        self._portfolio_alerts_running = False
+        self._portfolio_alert_worker: Worker | None = None
+        self.portfolio_notices: list[PortfolioNotice] = []
+        self._portfolio_alert_timer = QTimer(self)
+        self._portfolio_alert_timer.setInterval(PORTFOLIO_ALERTS_INTERVAL_MS)
+        self._portfolio_alert_timer.timeout.connect(self.check_portfolio_alerts)
         self._benchmark_seq = 0
         self.benchmark_summary = ""
         self._benchmark_workers: set[Worker] = set()
@@ -605,6 +614,48 @@ class MainWindow(QMainWindow):
     def start_alert_schedule(self) -> None:
         if self.alerts_panel is not None:
             self.alerts_panel.start_schedule()
+        if self._portfolio is not None:
+            self._portfolio_alert_timer.start()
+            QTimer.singleShot(PORTFOLIO_ALERTS_FIRST_MS, self.check_portfolio_alerts)
+
+    def check_portfolio_alerts(self) -> bool:
+        """Check paper-portfolio alerts in the background. Returns True when started."""
+        service = self._portfolio
+        if service is None or self._portfolio_alerts_running:
+            return False
+        self._portfolio_alerts_running = True
+        benchmark = self._settings.benchmark()
+
+        def done(notices: list[PortfolioNotice]) -> None:
+            self._portfolio_alerts_running = False
+            if shiboken6.isValid(self):
+                self._record_portfolio_notices(notices)
+
+        def fail(exc: BaseException) -> None:
+            self._portfolio_alerts_running = False
+            logger.warning("Portfolio alerts failed: %s", exc)
+
+        worker = start_worker(lambda: service.check_alerts(benchmark), done, fail)
+        self._portfolio_alert_worker = worker
+        return True
+
+    def _record_portfolio_notices(self, notices: list[PortfolioNotice]) -> None:
+        self.portfolio_notices = notices
+        if not notices or self._alert_service is None:
+            return
+        events: list[AlertEvent] = []
+        for notice in notices:
+            try:
+                events.append(self._alert_service.record_event(
+                    notice.symbol or "—", strings.PORTFOLIO_EVENT.format(name=notice.portfolio),
+                    f"● {notice.message}", date.today(),
+                ))  # fmt: skip
+            except AppError as exc:
+                logger.warning("Could not record portfolio notice: %s", exc)
+        if self.alerts_panel is not None:
+            self.alerts_panel.reload()
+        if events:
+            self._notify_alerts(events)
 
     def _draw_projection(self, outcome: object) -> None:
         if not isinstance(outcome, ProjectionOutcome):

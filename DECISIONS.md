@@ -873,3 +873,15 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   The trades are stored in one transaction only after the whole history (existing + imported)
   validates. When importing into a new portfolio that then fails, the empty portfolio is
   removed.
+
+## D-056 — Paper portfolio alerts
+
+- Three rules per portfolio (migration 0015; 0 = off): loss of a holding from its average
+  cost, weight drift from the target, and drawdown of the portfolio value from its peak. They
+  are pure functions of the report (`portfolio/alerts.py`).
+- Checked every 30 minutes in a worker (first check 90 s after start) only for portfolios
+  with a rule on. Notices go to the alert history as "Cartera «nombre»" and use the same
+  desktop notification as the alerts.
+- De-duplication: the keys of the conditions true at the last check are stored
+  (`paper_alert_state`). A notice is given only for a key that was not true before, so a
+  condition is announced once, and again only after it disappears and comes back.

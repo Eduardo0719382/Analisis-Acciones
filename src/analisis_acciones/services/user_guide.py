@@ -161,8 +161,8 @@ muestras pequeñas (pocas operaciones).</p>""",
 <b>Dólares ($)</b>: con dólares se compran las acciones (o fracciones) que permite ese
 importe.</li>
 <li>Deje «Cierre del día» para usar el precio de cierre de esa fecha, o escriba un precio.</li>
-<li>La comisión es <b>Automática</b> según la cartera (botón <i>Comisiones, dividendos
-e impuestos…</i>: fija en $, porcentaje y mínimo). Desmarque «Automática» para escribir otra.</li>
+<li>La comisión es <b>Automática</b> según la cartera (botón <i>Ajustes de la
+cartera…</i>: fija en $, porcentaje y mínimo). Desmarque «Automática» para escribir otra.</li>
 <li>Escriba el <b>motivo</b> en «Nota»: es su diario de operaciones. Más tarde, en la pestaña
 <i>Operaciones</i>, <i>Escribir revisión…</i> guarda qué aprendió.</li>
 </ol>
@@ -173,6 +173,9 @@ ni retenciones. No permite ventas en corto ni gastar más efectivo del disponibl
 que exporta su broker (fecha, ticker, compra/venta, cantidad, precio y, si los hay, comisión,
 divisa y nota), muestra qué se importará y qué filas se descartan, y calcula el capital
 inicial necesario.</p>
+<p><b>Avisos de la cartera</b> (en <i>Ajustes de la cartera…</i>): le avisan si una posición
+pierde un porcentaje desde su coste, si un activo se aleja de su peso objetivo o si la cartera
+cae desde su máximo.</p>
 <p><b>Divisas:</b> la cartera se lleva en dólares; un activo en euros o en peniques se anota
 con su precio en esa divisa y se convierte con el tipo de cambio del día.</p>
 <p>En la pestaña <b>Rebalanceo</b> indica el peso que quiere para cada activo y el programa

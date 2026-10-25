@@ -15,6 +15,7 @@ import pandas as pd
 from analisis_acciones.data.trades_import import ImportedTrade
 from analisis_acciones.models.errors import AppError, InternalError, UserError
 from analisis_acciones.models.market import Interval
+from analisis_acciones.portfolio.alerts import AlertThresholds, conditions
 from analisis_acciones.portfolio.engine import (
     BUY,
     DIVIDEND,
@@ -62,11 +63,19 @@ class Portfolio:
     apply_dividends: bool = True
     dividend_withholding_pct: float = 0.0  # withheld from each dividend
     capital_gains_tax_pct: float = 0.0  # estimate on each year's net realised gains
+    alerts: AlertThresholds = field(default_factory=AlertThresholds)
 
     def commission_for(self, value: float) -> float:
         """Commission of a trade of ``value`` dollars under this portfolio's schedule."""
         fee = self.commission_fixed + value * self.commission_pct / 100
         return round(max(fee, self.commission_min), 2) if fee or self.commission_min else 0.0
+
+
+@dataclass(frozen=True)
+class PortfolioNotice:
+    portfolio: str
+    symbol: str  # "" for the whole portfolio
+    message: str
 
 
 @dataclass(frozen=True)
@@ -120,7 +129,10 @@ class PaperPortfolioService:
             found = [Portfolio(r["id"], r["name"], r["initial_cash"], r["commission_fixed"],
                                r["commission_pct"], r["commission_min"],
                                bool(r["apply_dividends"]), r["dividend_withholding_pct"],
-                               r["capital_gains_tax_pct"]) for r in rows.fetchall()]  # fmt: skip
+                               r["capital_gains_tax_pct"],
+                               AlertThresholds(r["alert_loss_pct"], r["alert_drift_pts"],
+                                               r["alert_drawdown_pct"]))
+                     for r in rows.fetchall()]  # fmt: skip
         return found or [self.create(DEFAULT_NAME, DEFAULT_CASH)]
 
     def set_costs(self, portfolio_id: int, fixed: float, pct: float, minimum: float,
@@ -161,6 +173,52 @@ class PaperPortfolioService:
             )
         return updated
 
+    def set_alerts(self, portfolio_id: int, limits: AlertThresholds) -> Portfolio:
+        values = (limits.loss_pct, limits.drift_pts, limits.drawdown_pct)
+        if not all(0 <= v <= 100 for v in values):
+            raise UserError("bad alert", user_message="Los umbrales deben estar entre 0 y 100.")
+        with self._db() as db:
+            db.execute(
+                "UPDATE paper_portfolios SET alert_loss_pct = ?, alert_drift_pts = ?, "
+                "alert_drawdown_pct = ? WHERE id = ?",
+                (*map(float, values), portfolio_id),
+            )
+        return self._portfolio(portfolio_id)
+
+    def check_alerts(self, benchmark: str = "SPY") -> list[PortfolioNotice]:
+        """New notices for every portfolio with alerts on; never raises for data problems.
+
+        A condition is announced once; when it stops being true it is forgotten, so it is
+        announced again if it comes back.
+        """
+        notices: list[PortfolioNotice] = []
+        for portfolio in self.portfolios():
+            if not portfolio.alerts.active or not self.trades(portfolio.id):
+                continue
+            try:
+                report = self.report(portfolio.id, benchmark)
+            except AppError as exc:
+                logger.warning("Portfolio alerts for %s skipped: %s", portfolio.name, exc)
+                continue
+            now = conditions(report.valuation, report.equity, self.targets(portfolio.id),
+                             portfolio.alerts)  # fmt: skip
+            with self._db() as db:
+                rows = db.execute(
+                    "SELECT key FROM paper_alert_state WHERE portfolio_id = ?", (portfolio.id,)
+                ).fetchall()
+                known = {r["key"] for r in rows}
+                with transaction(db):
+                    db.execute("DELETE FROM paper_alert_state WHERE portfolio_id = ?",
+                               (portfolio.id,))  # fmt: skip
+                    db.executemany(
+                        "INSERT INTO paper_alert_state (portfolio_id, key) VALUES (?, ?)",
+                        [(portfolio.id, k) for k in now],
+                    )
+            for key, (symbol, message) in now.items():
+                if key not in known:
+                    notices.append(PortfolioNotice(portfolio.name, symbol, message))
+        return notices
+
     def create(self, name: str, initial_cash: float) -> Portfolio:
         clean = " ".join(str(name).split())
         if not clean or len(clean) > MAX_NAME:
@@ -187,6 +245,7 @@ class PaperPortfolioService:
         with self._db() as db:
             db.execute("DELETE FROM paper_trades WHERE portfolio_id = ?", (portfolio_id,))
             db.execute("DELETE FROM paper_targets WHERE portfolio_id = ?", (portfolio_id,))
+            db.execute("DELETE FROM paper_alert_state WHERE portfolio_id = ?", (portfolio_id,))
             db.execute("DELETE FROM paper_portfolios WHERE id = ?", (portfolio_id,))
 
     def _portfolio(self, portfolio_id: int) -> Portfolio:

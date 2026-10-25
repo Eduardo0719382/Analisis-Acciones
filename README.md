@@ -238,13 +238,18 @@ blanco porque su motor se detuvo, se recarga automáticamente.
   - **Fracciones y compras en dólares:** se puede indicar la cantidad de acciones (con
     decimales) o un importe en $ («Dólares ($)»), que se convierte en acciones al precio
     elegido (hasta 6 decimales).
-  - **Comisiones:** el botón *Comisiones, dividendos e impuestos…* fija por cartera una comisión fija en
-    $ por operación, un porcentaje del importe y un mínimo. Con «Automática» marcada se aplica
+  - **Comisiones:** el botón *Ajustes de la cartera…* fija por cartera una comisión fija en $
+    por operación, un porcentaje del importe y un mínimo. Con «Automática» marcada se aplica
     sola; desmarcándola se escribe la de esa operación.
+  - **Avisos de la cartera** (en *Ajustes de la cartera…*): cuando una posición pierde un X %
+    desde su coste medio, cuando un activo se aleja Y puntos de su peso objetivo o cuando la
+    cartera cae un Z % desde su máximo. Se comprueban cada 30 minutos con el programa abierto,
+    llegan como las alertas (notificación e historial) y cada uno se repite solo si la
+    situación desaparece y vuelve.
   - **Eventos corporativos:** los splits ajustan la cantidad de acciones y los dividendos se
     cobran en efectivo en su fecha ex-dividendo (se puede desactivar). El informe los lista en
     «Eventos corporativos». Sin impuestos ni retenciones.
-  - **Impuestos (simplificados):** en el mismo botón se fija una **retención sobre
+  - **Impuestos (simplificados):** en *Ajustes de la cartera…* se fija una **retención sobre
     dividendos** (se descuenta de cada cobro) y un **impuesto sobre ganancias** que se estima
     sobre el resultado neto de las ventas de cada año (se muestra, no se descuenta).
   - **Resultado de cada venta** frente al coste medio (también en la tabla de operaciones y en

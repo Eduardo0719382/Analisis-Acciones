@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
 
 from analisis_acciones.data.trades_import import TradesFile, read_trades_csv
 from analisis_acciones.models.errors import UserError, user_message_for
+from analisis_acciones.portfolio.alerts import AlertThresholds
 from analisis_acciones.portfolio.engine import BUY, SELL
 from analisis_acciones.services.paper_portfolio import (
     ImportPreview,
@@ -133,7 +134,33 @@ class CostsDialog(QDialog):
         layout.addLayout(form)
         layout.addWidget(self.dividends)
         layout.addWidget(taxes)
+        alerts = QGroupBox(strings.PF_ALERTS_TITLE)
+        alerts_form = QFormLayout(alerts)
+        alerts_intro = QLabel(strings.PF_ALERTS_INTRO)
+        alerts_intro.setWordWrap(True)
+        alerts_form.addRow(alerts_intro)
+        self.alert_loss = self._threshold(portfolio.alerts.loss_pct, " %")
+        self.alert_drift = self._threshold(portfolio.alerts.drift_pts, strings.PF_POINTS)
+        self.alert_drawdown = self._threshold(portfolio.alerts.drawdown_pct, " %")
+        alerts_form.addRow(strings.PF_ALERT_LOSS, self.alert_loss)
+        alerts_form.addRow(strings.PF_ALERT_DRIFT, self.alert_drift)
+        alerts_form.addRow(strings.PF_ALERT_DRAWDOWN, self.alert_drawdown)
+        layout.addWidget(alerts)
         layout.addWidget(buttons)
+
+    @staticmethod
+    def _threshold(value: float, suffix: str) -> QDoubleSpinBox:
+        spin = QDoubleSpinBox()
+        spin.setRange(0, 100)
+        spin.setDecimals(1)
+        spin.setSuffix(suffix)
+        spin.setSpecialValueText(strings.PF_ALERT_OFF)
+        spin.setValue(value)
+        return spin
+
+    def thresholds(self) -> AlertThresholds:
+        return AlertThresholds(self.alert_loss.value(), self.alert_drift.value(),
+                               self.alert_drawdown.value())  # fmt: skip
 
 
 class PortfolioDialog(QDialog):
@@ -347,7 +374,7 @@ class PortfolioDialog(QDialog):
         if dialog.exec() == QDialog.DialogCode.Accepted:
             self.set_costs(dialog.fixed.value(), dialog.pct.value(), dialog.minimum.value(),
                            dialog.dividends.isChecked(), dialog.withholding.value(),
-                           dialog.gains_tax.value())  # fmt: skip
+                           dialog.gains_tax.value(), dialog.thresholds())  # fmt: skip
 
     def set_costs(
         self,
@@ -357,9 +384,12 @@ class PortfolioDialog(QDialog):
         dividends: bool,
         withholding: float | None = None,
         gains_tax: float | None = None,
+        alerts: AlertThresholds | None = None,
     ) -> None:
         try:
             current = self._service.set_costs(self.portfolio_id, fixed, pct, minimum, dividends)
+            if alerts is not None:
+                self._service.set_alerts(self.portfolio_id, alerts)
             self._service.set_taxes(
                 self.portfolio_id,
                 current.dividend_withholding_pct if withholding is None else withholding,

@@ -658,8 +658,19 @@ PF_COMMISSION_AUTO_TIP = (
     "Marcada: se aplica la comisión configurada en la cartera. Desmarcada: escriba la comisión "
     "de esta operación."
 )
-PF_COSTS = "Comisiones, dividendos e impuestos…"
-PF_COSTS_TITLE = "Comisiones y eventos corporativos"
+PF_COSTS = "Ajustes de la cartera…"
+PF_COSTS_TITLE = "Ajustes de la cartera"
+PF_ALERTS_TITLE = "Avisos de la cartera"
+PF_ALERTS_INTRO = (
+    "Se comprueban cada 30 minutos mientras el programa está abierto y llegan como las alertas. "
+    "Cada aviso se da una vez y vuelve a armarse cuando la situación desaparece. 0 = sin aviso."
+)
+PF_ALERT_LOSS = "Una posición pierde desde su coste medio:"
+PF_ALERT_DRIFT = "Un activo se aleja de su peso objetivo:"
+PF_ALERT_DRAWDOWN = "La cartera cae desde su máximo:"
+PF_ALERT_OFF = "no avisar"
+PF_POINTS = " puntos"
+PORTFOLIO_EVENT = "Cartera «{name}»"
 PF_COSTS_INTRO = (
     "Comisión de cada operación nueva = fija + porcentaje del importe, con un mínimo. Las "
     "operaciones ya registradas conservan su comisión."
