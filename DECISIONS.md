@@ -759,3 +759,15 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   commissions included) minus its own commission; shown in the units of the trade's day.
 - **Per-position values** come from the same daily replay as the equity curve
   (`daily_values`), so the per-symbol values plus cash add up to the curve.
+
+## D-047 — Earnings / ex-dividend notices
+
+- Run with the daily automatic scan (once per completed session) so there is a single
+  background job and one place to switch notices off. The job refreshes each watchlist
+  symbol's fundamentals, which are cached for a day (D-041), so this is at most one extra
+  request per symbol per day.
+- Earnings and ex-dividend dates within N days (default 3, 0 = off, max 30) are announced
+  once. The remembered key includes the date, so a moved date is announced again; keys for
+  past dates are pruned. Payment dates are not announced (nothing to decide on them).
+- Notices go to the alert history as "<ticker> · calendario", with a neutral marker: they
+  describe a published date, not a signal.

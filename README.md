@@ -193,6 +193,11 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   avisos llegan como las alertas (notificación de Windows e historial de la pestaña Alertas).
   *Ver el último escaneo diario…* abre los resultados para revisarlos o exportar el informe.
   La primera vez que se ve un activo solo se toma como referencia, sin avisar.
+  **Avisos de resultados y dividendos:** con el escaneo diario activado, el programa avisa
+  (por defecto 3 días antes) de la presentación de resultados y de la fecha ex-dividendo de los
+  activos de la lista; cada fecha se avisa una vez (otra vez si la empresa la cambia). Los días
+  de antelación se cambian en *Herramientas → Avisos de resultados y dividendos…* (0 = no
+  avisar).
 - **Cartera simulada:** *Herramientas → Cartera simulada…* para practicar sin dinero real. Se
   registran compras y ventas ficticias (ticker, cantidad, precio o «cierre del día», fecha,
   comisión, nota) en una o varias carteras con su capital inicial. Muestra el valor total, el
@@ -203,7 +208,7 @@ usuario (`%LOCALAPPDATA%\AnalisisAcciones` en Windows). Puede cambiarse con la v
   - **Fracciones y compras en dólares:** se puede indicar la cantidad de acciones (con
     decimales) o un importe en $ («Dólares ($)»), que se convierte en acciones al precio
     elegido (hasta 6 decimales).
-  - **Comisiones:** el botón *Comisiones y dividendos…* fija por cartera una comisión fija en
+  - **Comisiones:** el botón *Comisiones, dividendos e impuestos…* fija por cartera una comisión fija en
     $ por operación, un porcentaje del importe y un mínimo. Con «Automática» marcada se aplica
     sola; desmarcándola se escribe la de esa operación.
   - **Eventos corporativos:** los splits ajustan la cantidad de acciones y los dividendos se

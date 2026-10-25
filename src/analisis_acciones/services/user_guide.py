@@ -132,7 +132,11 @@ CSV.</p>
 filtrar por <b>PER máximo</b> y <b>dividendo mínimo</b>. Un activo sin el dato no pasa un filtro
 activo.</p>
 <p>El <b>escaneo diario automático</b> (en el mismo menú) revisa la lista una vez al día y avisa
-solo de lo nuevo: patrones que aparecen o se rompen y señales nuevas.</p>""",
+solo de lo nuevo: patrones que aparecen o se rompen y señales nuevas.</p>
+<p>Junto al escaneo diario llegan los <b>avisos de resultados y dividendos</b>: por defecto 3
+días antes de la presentación de resultados y de la fecha ex-dividendo de cada activo de la
+lista. Los días se cambian en <i>Herramientas → Avisos de resultados y dividendos…</i> (0 = no
+avisar).</p>""",
     ),
     (
         "backtesting",
@@ -156,8 +160,8 @@ muestras pequeñas (pocas operaciones).</p>""",
 <b>Dólares ($)</b>: con dólares se compran las acciones (o fracciones) que permite ese
 importe.</li>
 <li>Deje «Cierre del día» para usar el precio de cierre de esa fecha, o escriba un precio.</li>
-<li>La comisión es <b>Automática</b> según la cartera (botón <i>Comisiones y
-dividendos…</i>: fija en $, porcentaje y mínimo). Desmarque «Automática» para escribir otra.</li>
+<li>La comisión es <b>Automática</b> según la cartera (botón <i>Comisiones, dividendos
+e impuestos…</i>: fija en $, porcentaje y mínimo). Desmarque «Automática» para escribir otra.</li>
 <li>Escriba el <b>motivo</b> en «Nota»: es su diario de operaciones. Más tarde, en la pestaña
 <i>Operaciones</i>, <i>Escribir revisión…</i> guarda qué aprendió.</li>
 </ol>

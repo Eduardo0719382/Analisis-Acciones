@@ -9,6 +9,10 @@ from datetime import UTC, datetime
 import shiboken6
 from PySide6.QtCore import QObject, QTimer, Signal
 
+from analisis_acciones.data.freshness import NEW_YORK
+from analisis_acciones.models.errors import AppError
+from analisis_acciones.models.market import Fundamentals
+from analisis_acciones.services.calendar_notices import due_notices
 from analisis_acciones.services.daily_scan import (
     find_novelties,
     is_due,
@@ -65,23 +69,29 @@ class DailyScanController(QObject):
             return False
         self.running = True
         market = self._market
+        with_calendar = self._settings.calendar_notice_days() > 0
 
-        def done(result: ScanResult) -> None:
+        def job() -> tuple[ScanResult, dict[str, Fundamentals]]:
+            result = run_scan(market, symbols)
+            return result, fetch_fundamentals(market, symbols) if with_calendar else {}
+
+        def done(loaded: tuple[ScanResult, dict[str, Fundamentals]]) -> None:
             self.running = False
             if shiboken6.isValid(self):
-                self._finish(result)
+                self._finish(*loaded)
 
         def fail(exc: BaseException) -> None:
             self.running = False
             logger.error("Daily scan failed: %s", exc, exc_info=exc)
 
-        worker = start_worker(lambda: run_scan(market, symbols), done, fail)
+        worker = start_worker(job, done, fail)
         self._workers.add(worker)
         worker.signals.succeeded.connect(lambda _r: self._workers.discard(worker))
         worker.signals.failed.connect(lambda _e: self._workers.discard(worker))
         return True
 
-    def _finish(self, result: ScanResult) -> None:
+    def _finish(self, result: ScanResult,
+                fundamentals: dict[str, Fundamentals] | None = None) -> None:  # fmt: skip
         self.last_result = result
         if not result.rows:
             # Nothing analysed (offline?): try again later instead of marking the session done.
@@ -91,6 +101,24 @@ class DailyScanController(QObject):
         snapshot = self._settings.scan_snapshot()
         previous = previous_items(snapshot)
         novelties = find_novelties(previous, result)
+        if fundamentals:
+            today = self._clock().astimezone(NEW_YORK).date()
+            notices, notified = due_notices(fundamentals, today,
+                                            self._settings.calendar_notice_days(),
+                                            self._settings.calendar_notified())  # fmt: skip
+            self._settings.set_calendar_notified(notified)
+            novelties += notices
         self._settings.set_scan_snapshot(make_snapshot(result, session_of(self._clock()), previous))
         logger.info("Daily scan: %d symbols, %d novelties", len(result.rows), len(novelties))
         self.finished.emit(result, novelties)
+
+
+def fetch_fundamentals(market: MarketDataService, symbols: list[str]) -> dict[str, Fundamentals]:
+    """Fundamentals (refreshed at most once a day each) for the calendar notices; never raises."""
+    found: dict[str, Fundamentals] = {}
+    for symbol in symbols:
+        try:
+            found[symbol] = market.fundamentals(symbol).data
+        except AppError as exc:
+            logger.info("No calendar data for %s: %s", symbol, exc.user_message)
+    return found

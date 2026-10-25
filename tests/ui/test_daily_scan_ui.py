@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 from pytestqt.qtbot import QtBot
 
 from analisis_acciones.alerts.service import AlertService
+from analisis_acciones.models.market import Fundamentals
 from analisis_acciones.providers.yahoo import YahooFinanceProvider
+from analisis_acciones.services.calendar_notices import due_notices
+from analisis_acciones.services.daily_scan import Novelty
 from analisis_acciones.services.market_data_service import MarketDataService
 from analisis_acciones.services.scanner import ScanResult
 from analisis_acciones.services.settings_service import SettingsService
@@ -101,6 +104,59 @@ def test_window_records_and_notifies(
     assert win.last_daily_scan_action.isEnabled()
     win.open_last_daily_scan()
     assert win._scanner_dialog.table.rowCount() == 1
+    calendar = Novelty("AAA", "Fecha ex-dividendo: 10/03/2025 · dentro de 2 días", 0,
+                       date(2025, 3, 8), "calendar")  # fmt: skip
+    win._on_daily_scan_finished(ScanResult([make_row()]), [calendar])
+    assert alerts.events()[0].description == "AAA · calendario"
+    assert alerts.events()[0].message.startswith("● Fecha ex-dividendo")
     win.daily_scan_action.setChecked(False)
     assert settings.daily_scan_enabled() is False
     alerts.close()
+
+
+def test_calendar_notices_once_per_date(qtbot: QtBot, settings: SettingsService,
+                                        market: MarketDataService, scans: FakeScans,
+                                        monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
+    data = {"AAA": Fundamentals("AAA", earnings_date=date(2025, 3, 11), earnings_estimated=True,
+                                ex_dividend_date=date(2025, 4, 30))}  # fmt: skip
+    monkeypatch.setattr(daily_module, "fetch_fundamentals", lambda _m, _s: data)
+    now = [SATURDAY]
+    controller = DailyScanController(settings, market, lambda: ["AAA"], clock=lambda: now[0])
+    scans.results = [ScanResult([make_row()]), ScanResult([make_row()])]
+    with qtbot.waitSignal(controller.finished, timeout=5000) as first:
+        controller.maybe_run()
+    (notice,) = first.args[1]  # ex-dividend is too far ahead (default 3 days)
+    assert notice.source == "calendar" and notice.symbol == "AAA"
+    assert notice.text == (
+        "Presentación de resultados (fecha estimada): 11/03/2025 · dentro de 3 días"
+    )
+    assert settings.calendar_notified() == ["AAA|earnings|2025-03-11"]
+    now[0] = datetime(2025, 3, 10, 22, 0, tzinfo=UTC)
+    with qtbot.waitSignal(controller.finished, timeout=5000) as second:
+        controller.maybe_run()
+    assert second.args[1] == []  # already announced
+
+
+def test_calendar_notice_rules() -> None:
+    today = date(2025, 3, 8)
+    data = {"AAA": Fundamentals("AAA", earnings_date=date(2025, 3, 10),
+                                ex_dividend_date=date(2025, 3, 9),
+                                dividend_payment_date=date(2025, 3, 9))}  # fmt: skip
+    notices, keys = due_notices(data, today, 3, ["OLD|earnings|2025-01-01", "bad"])
+    assert [n.text.split(":")[0] for n in notices] == [
+        "Fecha ex-dividendo",
+        "Presentación de resultados",
+    ]  # payment dates are not announced
+    assert keys == ["AAA|ex_dividend|2025-03-09", "AAA|earnings|2025-03-10"]
+    assert due_notices(data, today, 0, ["x"]) == ([], ["x"])
+    moved = {"AAA": Fundamentals("AAA", earnings_date=date(2025, 3, 11))}
+    again, _ = due_notices(moved, today, 3, keys)
+    assert len(again) == 1  # a moved date is new information
+
+
+def test_calendar_days_setting(settings: SettingsService) -> None:
+    assert settings.calendar_notice_days() == 3
+    settings.set_calendar_notice_days(99)
+    assert settings.calendar_notice_days() == 30
+    settings.set_calendar_notice_days(0)
+    assert settings.calendar_notice_days() == 0

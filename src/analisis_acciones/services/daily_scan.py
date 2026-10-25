@@ -26,6 +26,7 @@ class Novelty:
     text: str
     bias: int  # +1 bullish, -1 bearish, 0 neutral/undecided
     bar_date: date | None
+    source: str = "scan"  # "scan" or "calendar" (earnings / ex-dividend notice)
 
 
 def session_of(now: datetime) -> date:

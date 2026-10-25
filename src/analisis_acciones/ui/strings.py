@@ -487,6 +487,13 @@ SCAN_EXPORT_WORKING = "Generando PDF…"
 ACTION_DAILY_SCAN = "Escaneo diario automático de la lista"
 ACTION_LAST_DAILY_SCAN = "Ver el último escaneo diario…"
 DAILY_SCAN_EVENT = "{symbol} · escaneo diario"
+CALENDAR_EVENT = "{symbol} · calendario"
+ACTION_CALENDAR_NOTICES = "Avisos de resultados y dividendos…"
+CALENDAR_NOTICES_PROMPT = (
+    "Avisar con cuántos días de antelación de la presentación de resultados y de la fecha "
+    "ex-dividendo de los activos de la lista (0 = no avisar).\n\nSe comprueba junto con el "
+    "escaneo diario automático (debe estar activado) y cada fecha se avisa una vez."
+)
 DAILY_SCAN_DONE = "Escaneo diario: {count} novedades en {symbols} activos."
 DAILY_SCAN_NONE = "Escaneo diario: sin novedades respecto a la sesión anterior ({count} activos)."
 DAILY_SCAN_FAILED = "Escaneo diario: no se pudo analizar ningún activo (¿sin conexión?)."

@@ -56,7 +56,7 @@ from analisis_acciones.services.drawing_service import DrawingService
 from analisis_acciones.services.market_data_service import LoadResult, MarketDataService
 from analisis_acciones.services.paper_portfolio import PaperPortfolioService
 from analisis_acciones.services.scanner import ScanResult
-from analisis_acciones.services.settings_service import SettingsService, Theme
+from analisis_acciones.services.settings_service import MAX_CALENDAR_DAYS, SettingsService, Theme
 from analisis_acciones.services.update_service import UpdateCheck, UpdateService
 from analisis_acciones.services.watchlist_service import WatchlistService
 from analisis_acciones.ui import strings
@@ -351,6 +351,9 @@ class MainWindow(QMainWindow):
         self.last_daily_scan_action.setEnabled(False)
         self.last_daily_scan_action.triggered.connect(self.open_last_daily_scan)
         tools_menu.addAction(self.last_daily_scan_action)
+        self.calendar_notices_action = QAction(strings.ACTION_CALENDAR_NOTICES, self)
+        self.calendar_notices_action.triggered.connect(self._ask_calendar_notice_days)
+        tools_menu.addAction(self.calendar_notices_action)
 
         view_menu = menu_bar.addMenu(strings.MENU_VIEW)
         self.dark_theme_action = QAction(strings.ACTION_DARK_THEME, self)
@@ -815,6 +818,14 @@ class MainWindow(QMainWindow):
         else:
             self.daily_scan.start(first_delay_ms)
 
+    def _ask_calendar_notice_days(self) -> None:
+        days, ok = QInputDialog.getInt(self, strings.ACTION_CALENDAR_NOTICES.rstrip("…"),
+                                       strings.CALENDAR_NOTICES_PROMPT,
+                                       self._settings.calendar_notice_days(), 0,
+                                       MAX_CALENDAR_DAYS)  # fmt: skip
+        if ok:
+            self._settings.set_calendar_notice_days(days)
+
     def _on_daily_scan_toggled(self, enabled: bool) -> None:
         self._settings.set_daily_scan_enabled(enabled)
         if enabled and self.daily_scan is not None:
@@ -835,9 +846,11 @@ class MainWindow(QMainWindow):
         if self._alert_service is not None:
             for novelty in novelties:
                 icon = "▲" if novelty.bias > 0 else "▼" if novelty.bias < 0 else "●"
+                label = (strings.CALENDAR_EVENT if novelty.source == "calendar"
+                         else strings.DAILY_SCAN_EVENT)  # fmt: skip
                 try:
                     events.append(self._alert_service.record_event(
-                        novelty.symbol, strings.DAILY_SCAN_EVENT.format(symbol=novelty.symbol),
+                        novelty.symbol, label.format(symbol=novelty.symbol),
                         f"{icon} {novelty.text}", novelty.bar_date or date.today(),
                     ))  # fmt: skip
                 except AppError as exc:

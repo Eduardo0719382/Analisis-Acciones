@@ -41,6 +41,10 @@ KEY_BENCHMARK = "chart.benchmark"
 KEY_BENCHMARK_ON = "chart.benchmark_on"
 DEFAULT_BENCHMARK = "SPY"
 KEY_SCAN_SNAPSHOT = "scanner.daily_snapshot"
+KEY_CALENDAR_DAYS = "scanner.calendar_notice_days"
+KEY_CALENDAR_NOTIFIED = "scanner.calendar_notified"
+DEFAULT_CALENDAR_DAYS = 3
+MAX_CALENDAR_DAYS = 30
 
 
 class SettingsService:
@@ -202,6 +206,23 @@ class SettingsService:
 
     def set_scan_snapshot(self, snapshot: dict[str, Any]) -> None:
         self._repo.set(KEY_SCAN_SNAPSHOT, snapshot)
+
+    def calendar_notice_days(self) -> int:
+        """Days ahead to announce earnings/ex-dividend dates (0 = off)."""
+        raw = self._repo.get(KEY_CALENDAR_DAYS)
+        if isinstance(raw, int) and not isinstance(raw, bool) and 0 <= raw <= MAX_CALENDAR_DAYS:
+            return raw
+        return DEFAULT_CALENDAR_DAYS
+
+    def set_calendar_notice_days(self, days: int) -> None:
+        self._repo.set(KEY_CALENDAR_DAYS, max(0, min(int(days), MAX_CALENDAR_DAYS)))
+
+    def calendar_notified(self) -> list[str]:
+        raw = self._repo.get(KEY_CALENDAR_NOTIFIED)
+        return [str(k) for k in raw] if isinstance(raw, list) else []
+
+    def set_calendar_notified(self, keys: list[str]) -> None:
+        self._repo.set(KEY_CALENDAR_NOTIFIED, list(keys))
 
     def layout(self) -> dict[str, Any]:
         """Opaque UI layout state (window geometry, splitter sizes, ...)."""
