@@ -187,6 +187,13 @@ blanco porque su motor se detuvo, se recarga automáticamente.
   En las pestañas **Elliott** y **Patrones**, «Crear alertas de precio» crea alertas para los
   objetivos y el nivel de invalidación de la cuenta, patrón o nivel seleccionado; cada alerta
   indica de dónde viene (p. ej. «Cierre > 125,46 (Elliott impulso alcista 1-2-3: …)»).
+- **Agotamiento en varios activos:** *Herramientas → Agotamiento en varios activos…* mide, para
+  cada activo de la lista (o los tickers que escriba, hasta 200), cuántas veces aparecieron
+  señales de agotamiento de las subidas y de las bajadas, en qué % el precio giró después (a 10 o
+  20 sesiones) frente a un día normal de la misma tendencia, la probabilidad de que la
+  diferencia sea azar y una lectura («Anticipó bajadas/rebotes», «La subida/bajada siguió», «Sin
+  diferencia», «Pocos casos»). Usa los umbrales de la pestaña Agotamiento. Exporta un informe
+  visual (HTML o PDF, con barras «tras la señal» frente a «día normal») o un CSV.
 - **Backtesting:** *Herramientas → Backtesting…* (Ctrl+B) sobre el activo e intervalo del
   gráfico. Estrategias: cruce de EMAs y reversión con RSI, con parámetros editables, capital,
   comisión (% y fija) y deslizamiento. Muestra capital final, rentabilidad, operaciones,

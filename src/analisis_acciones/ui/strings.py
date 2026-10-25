@@ -467,6 +467,30 @@ LEVEL_ALERTS_CREATED = "Se crearon {count} alertas de precio para {symbol} (pest
 LEVEL_ALERTS_UNAVAILABLE = "Las alertas no están disponibles en esta sesión."
 
 ACTION_SCANNER = "&Escáner de la lista…"
+ACTION_EXHAUSTION_COMPARE = "&Agotamiento en varios activos…"
+EXC_TITLE = "Señales de agotamiento en varios activos"
+EXC_RUN = "Comparar"
+EXC_HORIZON = "A {h} sesiones"
+EXC_COLUMNS = [
+    "Activo", "Ahora",
+    "Subidas: casos", "Subidas: % que bajó", "Subidas: p (azar)", "Subidas: lectura",
+    "Bajadas: casos", "Bajadas: % que subió", "Bajadas: p (azar)", "Bajadas: lectura",
+]  # fmt: skip
+EXC_SUMMARY_UP = (
+    "Agotamiento de las subidas: anticipó bajadas en {useful} de {total} activos ({names}); la "
+    "subida siguió más de lo normal en {cont}."
+)
+EXC_SUMMARY_DOWN = (
+    "Agotamiento de las bajadas: anticipó rebotes en {useful} de {total} activos ({names}); la "
+    "bajada siguió más de lo normal en {cont}."
+)
+EXC_NOTE = (
+    "Para cada activo: veces pasadas con señales de agotamiento (sin solapar, solo con los datos "
+    "de cada fecha) y % en que el precio giró después, frente a un día normal de la misma "
+    "tendencia. «Anticipó» exige 10 casos, 10 puntos de diferencia y p < 0,05. Con muchos "
+    "activos, alguno saldrá «bien» por casualidad. Usa los umbrales de la pestaña Agotamiento. "
+    "Doble clic abre el activo. No es una predicción ni una recomendación."
+)
 SCAN_TITLE = "Escáner"
 SCAN_SYMBOLS = "Tickers:"
 SCAN_PLACEHOLDER = "Tickers separados por comas (máximo {max})"

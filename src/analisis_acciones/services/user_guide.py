@@ -122,6 +122,11 @@ movimiento inusual y cuántas condiciones hacen falta. El historial se recalcula
 debajo, se muestra el resultado con los valores por defecto para comparar. Los umbrales se usan
 también en el escáner y en el escaneo diario. Ajustar los umbrales hasta que el pasado «salga
 bien» es engañoso: con pocos casos el resultado puede ser casualidad.</p>
+<p><i>Herramientas → Agotamiento en varios activos…</i> hace la misma medición en toda la lista:
+para cada activo, cuántas veces aparecieron las señales, en qué % el precio giró después frente
+a un día normal y si la diferencia puede ser azar, con una lectura en palabras. Se exporta como
+informe visual (HTML/PDF) o CSV. Al comparar muchos activos, alguno parecerá que «funciona» por
+pura suerte.</p>
 <h3>Proyección</h3>
 <p>Rangos estadísticos para las próximas barras (cono de volatilidad o canal de regresión) con
 percentiles P5–P95. Incluye una <b>calibración histórica</b>: cuántas veces el precio real acabó

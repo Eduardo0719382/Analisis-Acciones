@@ -44,6 +44,15 @@ HORIZONS = (10, 20)
 SMALL_SAMPLE = 10
 SIGNIFICANCE = 0.05
 Z_WINDOW = 500
+EDGE_POINTS = 10.0  # difference vs baseline (percentage points) considered noticeable
+
+# Readings of an asset's record (the UI turns them into sentences).
+READ_NONE = "none"  # no comparable history
+READ_FEW = "few"  # too few cases
+READ_MIXED = "mixed"  # horizons point in opposite ways
+READ_USEFUL = "useful"  # the trend turned clearly more often than on an ordinary day
+READ_CONTINUE = "continue"  # the trend continued clearly more often than usual
+READ_NO_EDGE = "no_edge"  # small difference, or one that may be luck
 
 
 @dataclass(frozen=True)
@@ -378,3 +387,47 @@ def signal_series(bars: pd.DataFrame, params: Params = DEFAULT_PARAMS) -> pd.Ser
     down = _condition_table(f, DOWN, params).fillna(0).sum(axis=1).where(down_trend, 0)
     t = params.threshold
     return (up.where(up >= t, 0) - down.where(down >= t, 0)).astype(int)
+
+
+def outcome_effect(o: Outcome) -> int:
+    """+1 / -1 when the record differs clearly (and not by luck) from the baseline, else 0.
+
+    Clearly = at least ``SMALL_SAMPLE`` cases, ``EDGE_POINTS`` from the baseline and an exact
+    binomial test below ``SIGNIFICANCE``.
+    """
+    if o.against_pct is None or o.baseline_against_pct is None or o.events < SMALL_SAMPLE:
+        return 0
+    diff = o.against_pct - o.baseline_against_pct
+    p = o.p_value
+    if abs(diff) < EDGE_POINTS or p is None or p >= SIGNIFICANCE:
+        return 0
+    return 1 if diff > 0 else -1
+
+
+def record_reading(outcomes: list[Outcome]) -> str:
+    """One of the ``READ_*`` codes for a record (never a forecast)."""
+    usable = [o for o in outcomes if o.against_pct is not None]
+    if not usable or all(o.baseline_against_pct is None for o in usable):
+        return READ_NONE
+    if all(o.events < SMALL_SAMPLE for o in usable):
+        return READ_FEW
+    effects = {outcome_effect(o) for o in usable}
+    if effects >= {1, -1}:
+        return READ_MIXED
+    if 1 in effects:
+        return READ_USEFUL
+    if -1 in effects:
+        return READ_CONTINUE
+    return READ_NO_EDGE
+
+
+def history(bars: pd.DataFrame, direction: str,
+            params: Params = DEFAULT_PARAMS) -> list[Outcome]:  # fmt: skip
+    """Record of every past ``direction`` exhaustion in ``bars``, whatever the trend is now."""
+    if len(bars) < MIN_BARS:
+        return []
+    f = _frame(bars)
+    up_trend, down_trend = _trends(f)
+    trend = up_trend if direction == UP else down_trend
+    score = _condition_table(f, direction, params).fillna(0).sum(axis=1)
+    return _outcomes(f, trend, score, direction, params.threshold)

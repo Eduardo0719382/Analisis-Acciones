@@ -997,3 +997,15 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   of the exit is measured, not assumed. The CSV summary includes the reference figures.
 - The strategy exposes the number of conditions and the RSI level; the other thresholds keep
   their defaults so a run is reproducible from what the dialog shows.
+
+## D-065 — Exhaustion record across several assets
+
+- The reading of a record (`record_reading`, `outcome_effect`) moved to the Qt-free analysis
+  module so the tab, the comparison window and its reports share one definition.
+- Each asset gets both records (exhaustion of rises and of falls) whatever its current trend,
+  measured on completed daily bars with the stored thresholds.
+- The window shows one horizon at a time (20 sessions by default, 10 selectable); the CSV holds
+  both. The report draws "after the signal" against "ordinary day" as two bars so the
+  comparison with the baseline is the first thing seen, and warns that testing many assets
+  makes some look useful by chance (no multiple-comparison correction is applied; the warning
+  and the per-asset p-value are shown instead).

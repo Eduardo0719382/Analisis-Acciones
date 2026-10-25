@@ -79,6 +79,7 @@ from analisis_acciones.ui.day_summary_dialog import DaySummaryDialog
 from analisis_acciones.ui.details_panel import DetailsPanel
 from analisis_acciones.ui.disclaimer import DisclaimerDialog
 from analisis_acciones.ui.elliott_panel import ElliottPanel, ElliottView
+from analisis_acciones.ui.exhaustion_compare_dialog import ExhaustionCompareDialog
 from analisis_acciones.ui.exhaustion_panel import ExhaustionPanel
 from analisis_acciones.ui.fundamentals_panel import FundamentalsPanel
 from analisis_acciones.ui.guide_dialog import GuideDialog
@@ -369,6 +370,9 @@ class MainWindow(QMainWindow):
         self.scanner_action.setShortcut(QKeySequence("Ctrl+E"))
         self.scanner_action.triggered.connect(self.open_scanner)
         tools_menu.addAction(self.scanner_action)
+        self.exhaustion_compare_action = QAction(strings.ACTION_EXHAUSTION_COMPARE, self)
+        self.exhaustion_compare_action.triggered.connect(self.open_exhaustion_compare)
+        tools_menu.addAction(self.exhaustion_compare_action)
         self.daily_scan_action = QAction(strings.ACTION_DAILY_SCAN, self)
         self.daily_scan_action.setCheckable(True)
         self.daily_scan_action.setChecked(self._settings.daily_scan_enabled())
@@ -1026,6 +1030,18 @@ class MainWindow(QMainWindow):
         dialog.show()
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         self._scanner_dialog = dialog
+        if symbols:
+            dialog.run()
+
+    def open_exhaustion_compare(self) -> None:
+        if self.market is None:
+            return
+        symbols = self._candidate_symbols()
+        dialog = ExhaustionCompareDialog(self.market.service, symbols,
+                                         self._settings.exhaustion_params(), self)  # fmt: skip
+        dialog.symbol_activated.connect(self.open_symbol)
+        dialog.show()
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         if symbols:
             dialog.run()
 

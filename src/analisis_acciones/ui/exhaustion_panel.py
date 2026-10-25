@@ -25,6 +25,12 @@ from PySide6.QtWidgets import (
 from analisis_acciones.analysis.exhaustion import (
     DEFAULT_PARAMS,
     LIMITS,
+    READ_CONTINUE,
+    READ_FEW,
+    READ_MIXED,
+    READ_NO_EDGE,
+    READ_NONE,
+    READ_USEFUL,
     SIGNIFICANCE,
     SMALL_SAMPLE,
     UP,
@@ -32,6 +38,7 @@ from analisis_acciones.analysis.exhaustion import (
     Outcome,
     Params,
     assess,
+    record_reading,
     signal_series,
 )
 from analisis_acciones.models.market import BarSeries
@@ -40,8 +47,6 @@ from analisis_acciones.ui import strings
 
 if TYPE_CHECKING:
     from analisis_acciones.services.settings_service import SettingsService
-
-EDGE_POINTS = 10.0  # difference vs baseline (percentage points) considered noticeable
 
 
 def verdict(a: Assessment) -> str:
@@ -71,37 +76,24 @@ def outcome_line(o: Outcome, up: bool) -> str:
     return f"{line} {strings.EXH_CHANCE if chance else strings.EXH_NOT_CHANCE}"
 
 
-def _effect(o: Outcome) -> int:
-    """+1 / -1 when the record differs clearly (and not by luck) from the baseline, else 0."""
-    if o.against_pct is None or o.baseline_against_pct is None or o.events < SMALL_SAMPLE:
-        return 0
-    diff = o.against_pct - o.baseline_against_pct
-    p = o.p_value
-    if abs(diff) < EDGE_POINTS or p is None or p >= SIGNIFICANCE:
-        return 0
-    return 1 if diff > 0 else -1
+_READINGS = {
+    (READ_USEFUL, True): strings.EXH_READ_USEFUL_UP,
+    (READ_USEFUL, False): strings.EXH_READ_USEFUL_DOWN,
+    (READ_CONTINUE, True): strings.EXH_READ_CONTINUE_UP,
+    (READ_CONTINUE, False): strings.EXH_READ_CONTINUE_DOWN,
+}
+_PLAIN = {
+    READ_NONE: strings.EXH_READ_NONE,
+    READ_FEW: strings.EXH_READ_FEW,
+    READ_MIXED: strings.EXH_READ_MIXED,
+    READ_NO_EDGE: strings.EXH_READ_NO_EDGE,
+}
 
 
 def reading(a: Assessment) -> str:
-    """Plain-words reading of the record (never a forecast).
-
-    A difference counts only with enough cases, at least 10 points from the baseline and an
-    exact binomial test below 5 %; horizons pointing in opposite ways are reported as mixed.
-    """
-    usable = [o for o in a.outcomes if o.against_pct is not None]
-    if not usable or all(o.baseline_against_pct is None for o in usable):
-        return strings.EXH_READ_NONE
-    if all(o.events < SMALL_SAMPLE for o in usable):
-        return strings.EXH_READ_FEW
-    effects = {_effect(o) for o in usable}
-    up = a.direction == UP
-    if effects >= {1, -1}:
-        return strings.EXH_READ_MIXED
-    if 1 in effects:
-        return strings.EXH_READ_USEFUL_UP if up else strings.EXH_READ_USEFUL_DOWN
-    if -1 in effects:
-        return strings.EXH_READ_CONTINUE_UP if up else strings.EXH_READ_CONTINUE_DOWN
-    return strings.EXH_READ_NO_EDGE
+    """Plain-words reading of the record (never a forecast); see ``record_reading``."""
+    code = record_reading(a.outcomes)
+    return _PLAIN.get(code) or _READINGS[(code, a.direction == UP)]
 
 
 def params_line(p: Params) -> str:
