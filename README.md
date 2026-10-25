@@ -223,6 +223,13 @@ blanco porque su motor se detuvo, se recarga automáticamente.
   (con el mismo capital y fechas), la evolución diaria, las posiciones con su peso y la lista de
   operaciones. Se exporta a HTML, PDF o CSV. No permite ventas en corto ni gastar más efectivo
   del disponible.
+  - **Importar operaciones reales (CSV del broker):** botón *Importar operaciones (CSV)…*.
+    Columnas (español o inglés; separador `,` o `;`): fecha (`AAAA-MM-DD` o `DD/MM/AAAA`),
+    ticker, operación (compra/venta, o el signo de la cantidad), cantidad, precio y,
+    opcionalmente, comisión, divisa y nota. Antes de importar muestra lo que se añadirá, las
+    filas descartadas con su motivo y el capital inicial mínimo necesario; se puede añadir a la
+    cartera actual o crear una nueva. Las fechas `MM/DD/AAAA` (estilo EE. UU.) se rechazan para
+    no confundir día y mes. Luego se analizan con el diario, las estadísticas y el informe.
   - **Varias divisas:** la cartera se lleva en dólares. Los activos que cotizan en otra divisa
     (p. ej. `SAP.DE` en euros o `VOD.L` en peniques) se anotan con su precio en esa divisa y se
     convierten con el tipo de cambio de Yahoo (`EURUSD=X`, `GBPUSD=X`…) del día de la

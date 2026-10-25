@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QDate
+from PySide6.QtWidgets import QMessageBox
 from pytestqt.qtbot import QtBot
 
 from analisis_acciones.providers.yahoo import YahooFinanceProvider
@@ -13,6 +14,7 @@ from analisis_acciones.services.market_data_service import MarketDataService
 from analisis_acciones.services.paper_portfolio import PaperPortfolioService
 from analisis_acciones.services.settings_service import SettingsService
 from analisis_acciones.storage.database import open_database
+from analisis_acciones.ui.import_trades_dialog import ImportTradesDialog
 from analisis_acciones.ui.main_window import MainWindow
 from analisis_acciones.ui.portfolio_dialog import PortfolioDialog
 from tests.synthetic import FakeYahooClient, synthetic_daily
@@ -148,3 +150,44 @@ def test_rebalance_tab(qtbot: QtBot, service: PaperPortfolioService) -> None:
     assert dialog.report.trades[0].note == "Rebalanceo hacia los pesos objetivo"
     qtbot.waitUntil(lambda: panel.plan is not None and not panel.plan.orders, timeout=10000)
     assert "ya está en sus pesos" in panel.summary.text()
+
+
+def test_import_trades_from_csv(
+    qtbot: QtBot, service: PaperPortfolioService, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    warnings: list[str] = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda _w, _t, text: warnings.append(text))
+    dialog = PortfolioDialog(service, lambda: "SPY", "TEST")
+    qtbot.addWidget(dialog)
+    qtbot.waitUntil(lambda: dialog.report is not None, timeout=10000)
+    path = tmp_path / "broker.csv"
+    path.write_text("Fecha;Ticker;Operación;Cantidad;Precio;Comisión\n"
+                    "15/01/2024;TEST;Compra;100;100;1\n"
+                    "01/02/2024;TEST;Venta;40;105;1\n"
+                    "xx;TEST;Compra;1;1;0\n", encoding="utf-8")  # fmt: skip
+    dialog.start_import(path, ask=False)
+    qtbot.waitUntil(lambda: dialog.last_import is not None, timeout=10000)
+    parsed, preview = dialog.last_import
+    assert len(preview.trades) == 2 and len(parsed.errors) == 1
+    assert preview.cash_needed_alone == pytest.approx(100 * 100 + 1)
+
+    current = service.portfolios()[0]
+    preview_dialog = ImportTradesDialog(parsed, preview, current)
+    qtbot.addWidget(preview_dialog)
+    assert preview_dialog.into_new.isChecked()  # 10 001 $ do not fit in 10 000 $
+    assert preview_dialog.new_cash.value() == 10_001
+    assert preview_dialog.table.rowCount() == 2 and "Línea 4" in preview_dialog.errors.toPlainText()
+
+    assert not dialog.finish_import(preview, None)  # the current portfolio lacks cash
+    assert warnings and "Efectivo insuficiente" in warnings[0]
+    assert not dialog.finish_import(preview, ("Pobre", 50))  # not enough either
+    assert len(service.portfolios()) == 1  # the failed new portfolio was removed
+    assert dialog.finish_import(preview, ("Broker", 10_001))
+    qtbot.waitUntil(lambda: dialog.report is not None and dialog.report.portfolio.name == "Broker",
+                    timeout=10000)  # fmt: skip
+    assert dialog.report.valuation.holdings[0].quantity == pytest.approx(60)
+    dialog.status.setText("")
+    bad = tmp_path / "vacio.csv"
+    bad.write_text("", encoding="utf-8")
+    dialog.start_import(bad, ask=False)
+    assert "vacío" in dialog.status.text()

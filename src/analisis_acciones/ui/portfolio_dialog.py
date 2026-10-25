@@ -40,9 +40,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from analisis_acciones.data.trades_import import TradesFile, read_trades_csv
 from analisis_acciones.models.errors import UserError, user_message_for
 from analisis_acciones.portfolio.engine import BUY, SELL
 from analisis_acciones.services.paper_portfolio import (
+    ImportPreview,
     PaperPortfolioService,
     Portfolio,
     PortfolioReport,
@@ -56,6 +58,7 @@ from analisis_acciones.services.portfolio_report import (
 from analisis_acciones.services.scan_report import num
 from analisis_acciones.ui import strings
 from analisis_acciones.ui.html_pdf import HtmlPdfWriter
+from analisis_acciones.ui.import_trades_dialog import ImportTradesDialog
 from analisis_acciones.ui.rebalance_panel import RebalancePanel
 from analisis_acciones.ui.workers import Worker, start_worker
 
@@ -144,6 +147,7 @@ class PortfolioDialog(QDialog):
         self._workers: set[Worker] = set()
         self._pdf_writer: HtmlPdfWriter | None = None
         self.report: PortfolioReport | None = None
+        self.last_import: tuple[TradesFile, ImportPreview] | None = None
         self.last_export: Path | None = None
         self.open_after_export = True
         self.setWindowTitle(strings.PF_TITLE)
@@ -170,6 +174,9 @@ class PortfolioDialog(QDialog):
         top.addWidget(new_button)
         top.addWidget(self.delete_portfolio_button)
         top.addWidget(self.costs_button)
+        self.import_button = QPushButton(strings.PF_IMPORT)
+        self.import_button.clicked.connect(self._ask_import)
+        top.addWidget(self.import_button)
         top.addWidget(self.export_button)
 
         # Trade form
@@ -362,6 +369,57 @@ class PortfolioDialog(QDialog):
             self.status.setText(exc.user_message)
             return
         self.refresh()
+
+    # Import ------------------------------------------------------------------------
+    def _ask_import(self) -> None:
+        title = strings.PF_IMPORT.rstrip("…")
+        path, _ = QFileDialog.getOpenFileName(self, title, str(Path.home()),
+                                              strings.PF_IMPORT_FILTER)  # fmt: skip
+        if path:
+            self.start_import(Path(path))
+
+    def start_import(self, path: Path, ask: bool = True) -> None:
+        """Parse, preview in a worker (currencies and rates may need downloads), then confirm."""
+        try:
+            parsed = read_trades_csv(path)
+        except UserError as exc:
+            self.status.setText(exc.user_message)
+            return
+        current = self.current_portfolio()
+        if current is None:
+            return
+        self.status.setText(strings.PF_IMPORT_READING)
+
+        def done(preview: ImportPreview) -> None:
+            self.status.setText("")
+            self.last_import = (parsed, preview)
+            if ask:
+                dialog = ImportTradesDialog(parsed, preview, current, self)
+                if dialog.exec() != QDialog.DialogCode.Accepted:
+                    return
+                new = None
+                if dialog.into_new.isChecked():
+                    new = (dialog.new_name.text(), dialog.new_cash.value())
+                self.finish_import(preview, new)
+
+        self._run(lambda: self._service.prepare_import(current.id, parsed.trades), done)
+
+    def finish_import(self, preview: ImportPreview, new: tuple[str, float] | None) -> bool:
+        try:
+            target = self._service.create(*new) if new else self.current_portfolio()
+            if target is None:
+                return False
+            count = self._service.import_trades(target.id, preview)
+        except UserError as exc:
+            QMessageBox.warning(self, strings.IMP_TITLE, exc.user_message)
+            if new:  # do not leave an empty portfolio behind
+                created = [p for p in self._service.portfolios() if p.name == new[0]]
+                if created and not self._service.trades(created[0].id):
+                    self._service.delete(created[0].id)
+            return False
+        self._fill_portfolios(select=target.id)
+        self.status.setText(strings.PF_IMPORT_DONE.format(count=count, name=target.name))
+        return True
 
     # Trades ----------------------------------------------------------------------
     def _mode_changed(self) -> None:

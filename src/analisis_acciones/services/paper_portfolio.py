@@ -12,6 +12,7 @@ from datetime import UTC, date, datetime
 
 import pandas as pd
 
+from analisis_acciones.data.trades_import import ImportedTrade
 from analisis_acciones.models.errors import AppError, InternalError, UserError
 from analisis_acciones.models.market import Interval
 from analisis_acciones.portfolio.engine import (
@@ -25,6 +26,7 @@ from analisis_acciones.portfolio.engine import (
     PaperTrade,
     Valuation,
     adjust_for_splits,
+    cash_needed,
     daily_values,
     in_dollars,
     replay,
@@ -35,6 +37,7 @@ from analisis_acciones.portfolio.rebalance import RebalancePlan, plan_rebalance
 from analisis_acciones.providers.base import normalize_symbol
 from analisis_acciones.services.fx import FxConverter
 from analisis_acciones.services.market_data_service import MarketDataService
+from analisis_acciones.storage.database import transaction
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +67,15 @@ class Portfolio:
         """Commission of a trade of ``value`` dollars under this portfolio's schedule."""
         fee = self.commission_fixed + value * self.commission_pct / 100
         return round(max(fee, self.commission_min), 2) if fee or self.commission_min else 0.0
+
+
+@dataclass(frozen=True)
+class ImportPreview:
+    trades: list[PaperTrade]  # ready to store, in file order
+    cash_needed: float | None  # initial cash the history needs (None: history impossible)
+    problems: list[str]
+    fx_notes: list[str] = field(default_factory=list)
+    cash_needed_alone: float | None = None  # same, for the imported trades only
 
 
 @dataclass(frozen=True)
@@ -386,6 +398,74 @@ class PaperPortfolioService:
                  self._clock().isoformat(), trade.currency, trade.fx_rate),
             )  # fmt: skip
         return replace(trade, id=int(cursor.lastrowid or 0))
+
+    # Import from a broker's CSV -------------------------------------------------------
+    def prepare_import(self, portfolio_id: int,
+                       rows: list[ImportedTrade]) -> ImportPreview:  # fmt: skip
+        """Turn parsed rows into trades (currency and exchange rate of each date) and work
+        out the cash the portfolio would need. Nothing is stored."""
+        fx = FxConverter(self._market)
+        today = self._clock().date()
+        trades: list[PaperTrade] = []
+        problems: list[str] = []
+        for row in rows:
+            if row.day > today:
+                problems.append(f"Línea {row.line}: fecha futura.")
+                continue
+            try:
+                symbol = normalize_symbol(row.symbol)
+                currency = row.currency or fx.currency_of(symbol)
+                rate = fx.rate_on(currency, row.day)
+            except UserError as exc:
+                problems.append(f"Línea {row.line}: {exc.user_message}")
+                continue
+            trades.append(PaperTrade(symbol, row.side, row.quantity, row.price, row.day,
+                                     round(row.commission, 2), row.note, currency=currency,
+                                     fx_rate=rate))  # fmt: skip
+        existing = self.trades(portfolio_id)
+        start = max((t.id or 0 for t in existing), default=0) + 1
+        numbered = [replace(t, id=start + i) for i, t in enumerate(trades)]  # keep file order
+        portfolio = self._portfolio(portfolio_id)
+        combined = [*existing, *numbered]
+        bars, bar_problems = self._bars({t.symbol for t in combined}, fx)
+        splits = {s: b["splits"] for s, b in bars.items()}
+        adjusted = adjust_for_splits(in_dollars(combined), splits)
+        events = self._events(combined, bars, portfolio.apply_dividends)
+        withholding = portfolio.dividend_withholding_pct
+
+        def need(history: list[PaperTrade]) -> float | None:
+            try:
+                return cash_needed(adjust_for_splits(in_dollars(history), splits),
+                                   self._events(history, bars, portfolio.apply_dividends),
+                                   withholding)  # fmt: skip
+            except UserError:
+                return None
+
+        alone = need(numbered)
+        try:
+            needed = cash_needed(adjusted, events, withholding)
+        except UserError as exc:  # e.g. selling shares never bought
+            return ImportPreview(numbered, None, [*problems, exc.user_message], fx.notes, alone)
+        return ImportPreview(numbered, needed, [*problems, *bar_problems], fx.notes, alone)
+
+    def import_trades(self, portfolio_id: int, preview: ImportPreview) -> int:
+        """Store the previewed trades in one transaction, after validating the whole history."""
+        if not preview.trades:
+            return 0
+        portfolio = self._portfolio(portfolio_id)
+        self._check(portfolio, [*self.trades(portfolio_id), *preview.trades])
+        now = self._clock().isoformat()
+        with self._db() as db, transaction(db):
+            db.executemany(
+                "INSERT INTO paper_trades (portfolio_id, symbol, side, quantity, price, "
+                "commission, trade_date, note, created_at, currency, fx_rate) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                [(portfolio_id, t.symbol, t.side, t.quantity, t.price, t.commission,
+                  t.trade_date.isoformat(), t.note, now, t.currency, t.fx_rate)
+                 for t in preview.trades],
+            )  # fmt: skip
+        logger.info("Imported %d trades into portfolio %d", len(preview.trades), portfolio_id)
+        return len(preview.trades)
 
     def delete_trade(self, portfolio_id: int, trade_id: int) -> None:
         """Delete a trade unless the remaining history becomes impossible."""

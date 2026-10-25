@@ -857,3 +857,19 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
 - The scanner limit rose from 50 to 200 symbols. The dialog shows progress (signal relayed from
   the worker thread) and can be cancelled; closing it cancels too. Scanning still uses each
   symbol's full history, so results do not depend on the list size.
+
+## D-055 — Importing a broker's trade CSV
+
+- The file is external data. It is limited to 5 MB and 20 000 rows. Each row is validated
+  (date, ticker pattern, positive price, non-zero quantity, known side, 3-letter or sub-unit
+  currency). Invalid rows are listed with their line number and skipped; nothing is guessed.
+  Notes are stored as plain text (formula-safe on CSV export, escaped in HTML).
+- Dates: `AAAA-MM-DD` (optionally with time) or `DD/MM/AAAA` only. US `MM/DD/AAAA` is
+  rejected because day/month confusion would silently corrupt the history.
+- Decimal comma is decided per file (`;` separator and commas in numeric columns), as in the
+  bar CSV import.
+- Preview before storing: each trade's currency and exchange rate of its date, and the minimum
+  initial cash the resulting history needs (`cash_needed`, a replay tracking the lowest cash).
+  The trades are stored in one transaction only after the whole history (existing + imported)
+  validates. When importing into a new portfolio that then fails, the empty portfolio is
+  removed.

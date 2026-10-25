@@ -190,6 +190,21 @@ def replay(
     return state
 
 
+def cash_needed(
+    trades: list[PaperTrade],
+    events: list[CorporateEvent] | tuple[CorporateEvent, ...] = (),
+    withholding_pct: float = 0.0,
+) -> float:
+    """Smallest initial cash with which the history never runs out of cash."""
+    start = 1e12  # large enough never to refuse a purchase; exact to fractions of a cent
+    state = PortfolioState(cash=start)
+    lowest = start
+    for _day, item in _timeline(trades, events):
+        _apply(state, item, withholding_pct)
+        lowest = min(lowest, state.cash)
+    return max(start - lowest, 0.0)
+
+
 def _timeline(
     trades: list[PaperTrade], events: list[CorporateEvent] | tuple[CorporateEvent, ...]
 ) -> list[tuple[date, PaperTrade | CorporateEvent]]:

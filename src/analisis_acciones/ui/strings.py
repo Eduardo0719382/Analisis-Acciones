@@ -691,6 +691,26 @@ PF_DISCLAIMER = (
 )
 PF_ITEM = "{name} · capital inicial {cash}"
 PF_TAB_REBALANCE = "Rebalanceo"
+PF_IMPORT = "Importar operaciones (CSV)…"
+PF_IMPORT_FILTER = "CSV (*.csv *.txt);;Todos los archivos (*)"
+PF_IMPORT_READING = "Leyendo el archivo y buscando tipos de cambio…"
+PF_IMPORT_DONE = "Importadas {count} operaciones en «{name}»."
+IMP_TITLE = "Importar operaciones de su broker"
+IMP_COUNT = "{count} operaciones listas para importar · {errors} filas descartadas (ver abajo)."
+IMP_CASH = (
+    "Capital inicial mínimo para que el historial sea posible: {needed} $ (la cartera «{name}» "
+    "tiene {cash} $)."
+)
+IMP_NO_COMMISSION = "El archivo no tiene columna de comisión: se importan con comisión 0."
+IMP_COLUMNS = ("Fecha", "Ticker", "Operación", "Cantidad", "Precio", "Comisión ($)", "Nota")
+IMP_ERRORS = "Filas descartadas y avisos:"
+IMP_NO_ERRORS = "Ninguna."
+IMP_INTO_CURRENT = "Añadir a la cartera actual («{name}»)"
+IMP_INTO_NEW = "Crear una cartera nueva con estas operaciones"
+IMP_NEW_NAME = "Nombre:"
+IMP_NEW_CASH = "Capital inicial:"
+IMP_DEFAULT_NAME = "Importada"
+IMP_IMPORT = "Importar"
 RB_INTRO = (
     "Indique qué peso (% del valor total) quiere para cada activo; lo que no asigne queda en "
     "efectivo. Los activos que tenga sin peso objetivo se venden. El plan usa el último cierre, "
