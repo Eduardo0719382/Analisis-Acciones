@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
@@ -12,6 +12,7 @@ from pytestqt.qtbot import QtBot
 from analisis_acciones.providers.yahoo import YahooFinanceProvider
 from analisis_acciones.services.market_data_service import MarketDataService
 from analisis_acciones.services.paper_portfolio import PaperPortfolioService
+from analisis_acciones.services.portfolio_report import portfolio_html
 from analisis_acciones.services.settings_service import SettingsService
 from analisis_acciones.storage.database import open_database
 from analisis_acciones.ui.import_trades_dialog import ImportTradesDialog
@@ -206,3 +207,26 @@ def test_references_are_saved(qtbot: QtBot, service: PaperPortfolioService,
     assert settings.portfolio_benchmarks() == ["SPY", "TEST", "A"]
     dialog.compare.setText("")
     assert dialog.references() == ["SPY"]
+
+
+def test_full_report_exports_to_pdf(qtbot: QtBot, service: PaperPortfolioService,
+                                    tmp_path: Path) -> None:  # fmt: skip
+    from analisis_acciones.portfolio.engine import DEPOSIT
+
+    (p,) = service.portfolios()
+    service.add_trade(p.id, "TEST", "buy", 10, trade_date=date(2024, 1, 15))
+    service.add_trade(p.id, "TEST", "sell", 4, trade_date=date(2024, 2, 15))
+    service.add_movement(p.id, service.make_movement(DEPOSIT, 1000, date(2024, 2, 1)))
+    dialog = PortfolioDialog(service, lambda: "SPY", "TEST")
+    qtbot.addWidget(dialog)
+    dialog.open_after_export = False
+    qtbot.waitUntil(lambda: dialog.report is not None and bool(dialog.report.movements),
+                    timeout=10000)  # fmt: skip
+    html = portfolio_html(dialog.report, datetime(2024, 3, 30))
+    for section in ("Rentabilidad por año", "Movimientos de efectivo", "Resultado de las ventas",
+                    "Estadísticas del diario", "Ajustes: comisión"):  # fmt: skip
+        assert section in html
+    target = tmp_path / "cartera.pdf"
+    dialog.export("pdf", target)
+    qtbot.waitUntil(lambda: dialog.last_export == target, timeout=30000)
+    assert target.read_bytes().startswith(b"%PDF")

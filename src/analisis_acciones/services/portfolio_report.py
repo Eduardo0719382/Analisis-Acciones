@@ -18,7 +18,7 @@ import pandas as pd
 from analisis_acciones.data.export import safe_cell
 from analisis_acciones.portfolio.engine import BUY, DIVIDEND, ClosedTrade, PaperTrade
 from analisis_acciones.services.journal_stats import journal_stats
-from analisis_acciones.services.paper_portfolio import PortfolioReport, yearly_returns
+from analisis_acciones.services.paper_portfolio import Portfolio, PortfolioReport, yearly_returns
 from analisis_acciones.services.scan_report import STYLE, num
 
 EXTRA_STYLE = """
@@ -52,6 +52,8 @@ td.up::before { content: "▲ "; color: var(--up); } td.down::before { content: 
   padding: 12px 16px; margin: 14px 0; break-inside: avoid; }
 .warn { color: var(--ink-2); font-size: 12px; }
 .review { color: var(--ink-2); font-size: 12px; margin-top: 2px; }
+tr { break-inside: avoid; }
+@media print { .panel { break-inside: auto; } .panel h3 { break-after: avoid; } }
 .pspark { width: 120px; height: 28px; display: block; }
 .pspark polyline { fill: none; stroke: var(--up); stroke-width: 1.6; }
 .review b { color: var(--ink); }
@@ -158,10 +160,10 @@ def curve_svg(
         f"{last:%d/%m/%Y}</text></svg>"
     )
     legend = ['<div class="chart-legend"><span><i style="background:var(--up)"></i>cartera</span>']
+    same = "con las mismas aportaciones y fechas" if len(steps) >= 2 else (
+        "con el mismo capital inicial")  # fmt: skip
     for k, name in enumerate(shown):
-        legend.append(
-            f'<span><i class="sw{k}"></i>{escape(name)} con el mismo capital inicial</span>'
-        )
+        legend.append(f'<span><i class="sw{k}"></i>{escape(name)} {same}</span>')
     legend.append(
         '<span><i style="background:repeating-linear-gradient(90deg,var(--flat) 0 4px,'
         'transparent 4px 7px)"></i>'
@@ -231,6 +233,25 @@ MOVEMENT_LABELS = {
     "interest": "Interés",
     "fee": "Comisión / gasto",
 }
+
+
+def settings_line(p: Portfolio) -> str:
+    """The portfolio's settings, so a printed report explains its own numbers."""
+    fee = []
+    if p.commission_fixed:
+        fee.append(f"{num(p.commission_fixed)} $")
+    if p.commission_pct:
+        fee.append(f"{num(p.commission_pct, 3).rstrip('0').rstrip(',')} %")
+    commission = " + ".join(fee) or "sin comisión"
+    if p.commission_min:
+        commission += f" (mínimo {num(p.commission_min)} $)"
+    parts = [
+        f"Ajustes: comisión {commission}",
+        "dividendos automáticos " + ("sí" if p.apply_dividends else "no"),
+        f"retención sobre dividendos {num(p.dividend_withholding_pct, 1)} %",
+        f"impuesto estimado sobre ganancias {num(p.capital_gains_tax_pct, 1)} %",
+    ]
+    return " · ".join(parts) + "."
 
 
 def movements_panel(report: PortfolioReport) -> str:
@@ -551,6 +572,7 @@ se convierten con el tipo de cambio de cada día.
 <table><thead><tr><th>Fecha</th><th>Activo</th><th>Operación</th><th>Cantidad</th><th>Precio</th>
 <th>Comisión ($)</th><th>Importe ($)</th><th>Diario (motivo y revisión)</th></tr></thead>
 <tbody>{trades}</tbody></table>
+<p class="muted small">{settings_line(p)}</p>
 <footer>Análisis de Acciones · Cartera simulada: importes en dólares (otras divisas convertidas);
 impuestos simplificados (retención fija sobre dividendos e impuesto estimado sobre las ganancias
 netas de cada año, sin compensar pérdidas entre años). Los splits se aplican a la cantidad de

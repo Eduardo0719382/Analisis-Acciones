@@ -935,3 +935,12 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
 - The drawdown alert uses the time-weighted curve so that a withdrawal is not a "fall".
 - Importing a broker file with dividends switches off the automatic dividends of that
   portfolio (the preview says so) so they are never counted twice.
+
+## D-060 — Complete portfolio PDF
+
+- The PDF is the same HTML as the window (one source of truth), printed by Chromium. Checked
+  with a portfolio that uses every section (references, yearly returns, cash movements,
+  sales, journal statistics, corporate events, trades). Table rows do not split across pages,
+  section titles stay with their content, and long panels may continue on the next page.
+- The footer line lists the portfolio's settings (commissions, automatic dividends,
+  withholding, gains tax) so a printed report explains its own numbers.
