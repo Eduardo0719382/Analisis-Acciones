@@ -3,8 +3,11 @@
 The rate of a day is the last daily close of the pair on or before that day
 (the same "last close" rule as prices). Sub-unit quotes are handled: London
 prices in pence (GBp/GBX), Johannesburg in cents (ZAc) and Tel Aviv in agorot
-(ILA). Rates are data from the source, never estimated: a missing rate is an
-error reported to the user.
+(ILA). Crypto pairs quoted in another coin or a stablecoin (``ETH-BTC``,
+``SOL-USDT``) are converted with that coin's dollar pair (``BTC-USD``,
+``USDT-USD``); stablecoins are not assumed to be worth exactly one dollar.
+Rates are data from the source, never estimated: a missing rate is an error
+reported to the user.
 """
 
 from __future__ import annotations
@@ -15,6 +18,7 @@ from datetime import date
 
 import pandas as pd
 
+from analisis_acciones.data.freshness import crypto_quote
 from analisis_acciones.models.errors import AppError, UserError
 from analisis_acciones.models.market import Interval
 from analisis_acciones.services.market_data_service import MarketDataService
@@ -25,6 +29,8 @@ BASE = "USD"
 # Case matters: "GBP" is pounds, "GBp" pence.
 SUBUNITS = {"GBp": "GBP", "GBX": "GBP", "ZAc": "ZAR", "ILA": "ILS"}
 PRICE_COLUMNS = ("open", "high", "low", "close", "adj_close", "dividends")
+#: Crypto "currencies" a pair can be quoted in; converted with their own dollar pair.
+CRYPTO_QUOTES = ("BTC", "ETH", "USDT", "USDC")
 
 
 def pair_for(currency: str) -> tuple[str | None, float]:
@@ -34,6 +40,8 @@ def pair_for(currency: str) -> tuple[str | None, float]:
     code = currency.upper()
     if code == BASE:
         return None, 1.0
+    if code in CRYPTO_QUOTES:
+        return f"{code}-{BASE}", 1.0
     return f"{code}{BASE}=X", 1.0
 
 
@@ -46,6 +54,9 @@ class FxConverter:
     _series: dict[str, pd.Series] = field(default_factory=dict)
 
     def currency_of(self, symbol: str) -> str:
+        quote = crypto_quote(symbol)
+        if quote is not None:
+            return quote  # the pair names it; no network needed
         currency = self.market.currency(symbol)
         if currency is None:
             note = f"{symbol}: divisa desconocida, se toma en dólares."

@@ -30,6 +30,11 @@ _QUOTES = ("USD", "EUR", "GBP", "JPY", "CAD", "AUD", "CHF", "CNY", "KRW", "INR",
 _CRYPTO = re.compile(rf"^[A-Z0-9]{{2,12}}-(?:{'|'.join(_QUOTES)})$")
 
 
+def crypto_quote(symbol: str) -> str | None:
+    """Currency a crypto pair is quoted in (``ETH-EUR`` -> ``EUR``); None if not a pair."""
+    return symbol.strip().upper().rsplit("-", 1)[1] if is_crypto(symbol) else None
+
+
 def is_crypto(symbol: str) -> bool:
     """Is ``symbol`` a Yahoo cryptocurrency pair (``BTC-USD``)? Decided by its form only."""
     return bool(_CRYPTO.match(symbol.strip().upper()))

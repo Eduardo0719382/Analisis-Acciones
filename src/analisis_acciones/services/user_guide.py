@@ -59,6 +59,9 @@ cerradas). Las velas intradía se muestran en hora UTC.</li>
 <li>Todas las herramientas de precio funcionan igual que con acciones. La volatilidad anualizada
 de la comparación usa 365 días.</li>
 <li>No hay datos fundamentales (beneficios, PER, dividendos): no son empresas.</li>
+<li>En la cartera simulada, los pares en otras divisas se convierten a dólares con el cambio de
+cada día: <b>ETH-EUR</b> con EURUSD=X, <b>ETH-BTC</b> con BTC-USD y <b>SOL-USDT</b> con
+USDT-USD.</li>
 <li>En el menú ⋯ de la lista de seguimiento, <b>Crear lista de criptomonedas de ejemplo</b>
 crea una lista con las principales y abre la comparación de agotamiento entre ellas.</li>
 <li><b>Altcoins:</b> <i>Crear lista de altcoins de ejemplo</i> crea una lista con 27 (ETH, SOL,

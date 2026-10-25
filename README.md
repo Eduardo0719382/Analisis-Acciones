@@ -104,7 +104,9 @@ blanco porque su motor se detuvo, se recarga automáticamente.
   (`UNI7083-USD` = Uniswap). Para ver una altcoin frente a Bitcoin, use el par en BTC
   (`ETH-BTC`) o ponga `BTC-USD` como referencia en *Comparar con*. En la cartera simulada se pueden
   comprar y vender; si la cartera tiene criptomonedas su valor se calcula todos los días
-  (las acciones mantienen el cierre del viernes durante el fin de semana).
+  (las acciones mantienen el cierre del viernes durante el fin de semana). Los pares en otras divisas
+  se convierten a dólares con el cambio de cada día: `ETH-EUR` con EURUSD=X, `ETH-BTC` con
+  BTC-USD y `SOL-USDT` con USDT-USD (no se supone que una moneda estable valga exactamente 1 $).
 - **Intervalo:** 15 minutos, 1 hora, Diario, Semanal o Mensual (los dos últimos se calculan a
   partir de los datos diarios). Intradía: solo horario regular (9:30–16:00 de Nueva York, que es
   la hora que muestra el gráfico); Yahoo ofrece unos 60 días de barras de 15 minutos y unos 2 años

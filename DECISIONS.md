@@ -1044,3 +1044,10 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   rules a crypto daily alert fires once 00:00 UTC closes the day, weekends included, and 1-hour
   / 15-minute alerts fire as each UTC bar closes. A test covers a Saturday case. The alerts
   note and the day summary say so.
+
+## D-070 — Crypto pairs in other currencies
+
+- The quote currency of a crypto pair is read from the ticker (`ETH-EUR` -> EUR), so it does
+  not depend on a network lookup. Fiat quotes use the usual `XXXUSD=X` pair; BTC, ETH, USDT
+  and USDC quotes use Yahoo's `XXX-USD` crypto pair. Stablecoins are converted with their
+  own market price rather than assumed to equal one dollar.

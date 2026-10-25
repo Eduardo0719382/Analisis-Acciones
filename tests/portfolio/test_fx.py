@@ -37,6 +37,11 @@ class MultiClient(FakeYahooClient):
                        "SPY": synthetic_daily(sessions=60)}  # fmt: skip
         self.currencies = {"SAP": "EUR", "VOD.L": "GBp", "SPY": "USD", "EURUSD=X": "USD",
                            "GBPUSD=X": "USD"}  # fmt: skip
+        btc = synthetic_daily(sessions=60, seed=5)
+        btc[["open", "high", "low", "close", "adj_close"]] = 50_000.0
+        self.frames["BTC-USD"] = btc
+        self.frames["ETH-BTC"] = synthetic_daily(sessions=60, seed=6) / 2000  # about 0.05 BTC
+        self.frames["ETH-EUR"] = synthetic_daily(sessions=60, seed=7) * 25
         self.known = set(self.frames) | {"NOCUR"}
         self.frames["NOCUR"] = synthetic_daily(sessions=60, seed=4)
 
@@ -99,6 +104,20 @@ def test_trades_in_other_currencies(service: PaperPortfolioService) -> None:
     weights = {h.symbol: h.weight_pct for h in after.holdings}
     assert weights["SAP"] == pytest.approx(50, abs=0.05)
     assert weights["VOD.L"] == pytest.approx(10, abs=0.05)
+
+
+def test_crypto_pairs_in_other_currencies(service: PaperPortfolioService) -> None:
+    assert pair_for("BTC") == ("BTC-USD", 1.0) and pair_for("USDT") == ("USDT-USD", 1.0)
+    (p,) = service.portfolios()
+    eth_btc = service.add_trade(p.id, "ETH-BTC", BUY, 1, trade_date=date(2024, 2, 1))
+    assert eth_btc.currency == "BTC" and eth_btc.fx_rate == pytest.approx(50_000)
+    eth_eur = service.add_trade(p.id, "ETH-EUR", BUY, 0.5, trade_date=date(2024, 3, 4))
+    assert eth_eur.currency == "EUR" and eth_eur.fx_rate == pytest.approx(1.2)
+    report = service.report(p.id)
+    assert any("BTC-USD" in n for n in report.fx_notes)
+    holding = next(h for h in report.valuation.holdings if h.symbol == "ETH-BTC")
+    last = float(service._market.load("ETH-BTC", Interval.D1).series.bars["close"].iloc[-1])
+    assert holding.price == pytest.approx(last * 50_000)  # in dollars
 
 
 def test_unknown_currency_is_noted(service: PaperPortfolioService) -> None:
