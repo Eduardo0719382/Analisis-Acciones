@@ -477,6 +477,7 @@ SCAN_FILTERS = {
     "bullish": "Con más señales alcistas que bajistas",
     "bearish": "Con más señales bajistas que alcistas",
     "elliott": "Con posible cuenta de Elliott en curso",
+    "exhaustion": "Con señales de agotamiento de la tendencia",
 }
 SCAN_COLUMNS = (
     "Ticker",
@@ -494,8 +495,14 @@ SCAN_COLUMNS = (
     "Cap. (mil M)",
     "Crec. ingr. %",
     "Margen %",
+    "Agotamiento",
 )
 SCAN_FUNDAMENTALS = "Incluir fundamentales"
+SCAN_EXH_UP = "subida {met}/{total}"
+SCAN_EXH_DOWN = "bajada {met}/{total}"
+SCAN_EXH_TIP = (
+    "Señales de agotamiento de la tendencia (pestaña Agotamiento): no indican cuándo terminará."
+)
 SCAN_FUNDAMENTALS_TIP = (
     "Descarga el PER y la rentabilidad por dividendo de cada activo (se guardan un día). "
     "El escaneo tarda más la primera vez."
@@ -764,6 +771,58 @@ RB_APPLY_CONFIRM = (
 RB_APPLYING = "Registrando las operaciones…"
 
 TAB_FUNDAMENTALS = "Fundamentales"
+TAB_EXHAUSTION = "Agotamiento"
+EXH_EMPTY = "Abra un activo para ver si su tendencia muestra señales de agotamiento."
+EXH_TITLE = "{symbol} · última barra cerrada del {when}"
+EXH_UP_SIGNAL = (
+    "▼ La subida muestra señales de agotamiento ({met} de {total}). Puede seguir subiendo: "
+    "las señales no dicen cuándo terminará."
+)
+EXH_UP_QUIET = "▲ Tendencia alcista sin señales claras de agotamiento ({met} de {total})."
+EXH_DOWN_SIGNAL = (
+    "▲ La bajada muestra señales de agotamiento ({met} de {total}). Puede seguir bajando: "
+    "las señales no dicen cuándo terminará."
+)
+EXH_DOWN_QUIET = "▼ Tendencia bajista sin señales claras de agotamiento ({met} de {total})."
+EXH_HISTORY_TITLE = "Qué pasó antes en este activo con {n} o más señales:"
+EXH_FELL = "bajó"
+EXH_ROSE = "subió"
+EXH_OUTCOME = (
+    "A {h} sesiones: {move} en {against} de {events} casos ({pct} %), variación mediana "
+    "{median} %. En cualquier día de la misma tendencia {move} el {base} %."
+)
+EXH_CHANCE = "Esa diferencia puede deberse al azar."
+EXH_NOT_CHANCE = "Es poco probable que esa diferencia se deba solo al azar."
+EXH_NO_CASES = "A {h} sesiones: no hubo casos anteriores comparables."
+EXH_READ_NONE = "Sin historial suficiente para comparar."
+EXH_READ_FEW = "Muy pocos casos: el historial no permite sacar conclusiones."
+EXH_READ_USEFUL_UP = (
+    "En este activo, estas señales han precedido bajadas bastante más a menudo que un día "
+    "cualquiera. Aun así, muchas veces la subida continuó."
+)
+EXH_READ_USEFUL_DOWN = (
+    "En este activo, estas señales han precedido rebotes bastante más a menudo que un día "
+    "cualquiera. Aun así, muchas veces la bajada continuó."
+)
+EXH_READ_CONTINUE_UP = (
+    "En este activo, tras estas señales la subida continuó incluso más a menudo de lo normal: "
+    "no han servido para anticipar bajadas."
+)
+EXH_READ_CONTINUE_DOWN = (
+    "En este activo, tras estas señales la bajada continuó incluso más a menudo de lo normal: "
+    "no han servido para anticipar rebotes."
+)
+EXH_READ_NO_EDGE = (
+    "En este activo estas señales no han anticipado los giros mejor que un día cualquiera "
+    "(la diferencia es pequeña o puede deberse al azar)."
+)
+EXH_READ_MIXED = (
+    "Resultados contradictorios según el plazo: el historial no permite sacar una conclusión."
+)
+EXH_NOTE = (
+    "Casos sin solapar, calculados solo con los datos que había en cada fecha. Es una "
+    "descripción del pasado, no una predicción ni una recomendación de compra o venta."
+)
 FUND_EMPTY = "Abra un activo para ver sus datos fundamentales."
 FUND_LOADING = "Cargando datos fundamentales de {symbol}…"
 FUND_UNAVAILABLE = "No hay datos fundamentales para series importadas de CSV."

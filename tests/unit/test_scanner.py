@@ -104,7 +104,7 @@ def test_scan_with_fundamentals_and_filter() -> None:
     assert L(20, min_profit_margin_pct=-5).describe() == "PER ≤ 20, margen neto ≥ -5 %"
     csv_text = scan_csv(ScanResult([row]))
     assert "per,rentabilidad_dividendo_pct,capitalizacion" in csv_text.splitlines()[0]
-    assert csv_text.splitlines()[1].endswith(",15.0,3.0,250000000000.0,8.0,21.0")
+    assert ",15.0,3.0,250000000000.0,8.0,21.0," in csv_text.splitlines()[1]
 
 
 def test_run_scan_can_be_cancelled(market: MarketDataService) -> None:
@@ -113,3 +113,13 @@ def test_run_scan_can_be_cancelled(market: MarketDataService) -> None:
                       cancelled=lambda: len(seen) >= 1)  # fmt: skip
     assert result.cancelled and [r.symbol for r in result.rows] == ["AAA"]
     assert not run_scan(market, ["AAA"]).cancelled
+
+
+def test_exhaustion_in_scan_rows_and_daily_items() -> None:
+    from analisis_acciones.services.daily_scan import notable_items
+    from tests.unit.test_exhaustion import bars_from, rally
+
+    row = scan_bars("RUN", bars_from(rally()))
+    assert row.exhaustion >= 3 and row.exhaustion_total == 5
+    assert "Señales de agotamiento de la subida (ver pestaña Agotamiento)" in notable_items(row)
+    assert scan_csv(ScanResult([row])).splitlines()[1].endswith(f",subida {row.exhaustion}/5")

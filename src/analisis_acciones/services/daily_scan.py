@@ -47,6 +47,11 @@ def notable_items(row: ScanRow) -> dict[str, int]:
     for note in row.pattern_notes:
         state = "ruptura" if note.state == BREAKOUT_NOTE else "en formación"
         items[f"Patrón {note.name} ({state})"] = note.bias
+    # Without the count, so a change from 3 to 4 signs is not reported again.
+    if row.exhaustion > 0:
+        items["Señales de agotamiento de la subida (ver pestaña Agotamiento)"] = -1
+    elif row.exhaustion < 0:
+        items["Señales de agotamiento de la bajada (ver pestaña Agotamiento)"] = 1
     return items
 
 

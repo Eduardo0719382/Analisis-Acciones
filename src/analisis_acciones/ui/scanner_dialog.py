@@ -73,6 +73,16 @@ def pct(fraction: float | None) -> float | None:
     return None if fraction is None else fraction * 100
 
 
+def exhaustion_item(row: ScanRow) -> _Item:
+    if not row.exhaustion:
+        return _Item("—", 0)
+    text = strings.SCAN_EXH_UP if row.exhaustion > 0 else strings.SCAN_EXH_DOWN
+    item = _Item(text.format(met=abs(row.exhaustion), total=row.exhaustion_total),
+                 abs(row.exhaustion))  # fmt: skip
+    item.setToolTip(strings.SCAN_EXH_TIP)
+    return item
+
+
 def matches(row: ScanRow, mode: str) -> bool:
     if mode == "patterns":
         return bool(row.patterns)
@@ -82,6 +92,8 @@ def matches(row: ScanRow, mode: str) -> bool:
         return len(row.bearish) > len(row.bullish)
     if mode == "elliott":
         return bool(row.elliott)
+    if mode == "exhaustion":
+        return row.exhaustion != 0
     return True
 
 
@@ -334,6 +346,7 @@ class ScannerDialog(QDialog):
                 num(pct(row.dividend_yield), 2),
                 num(None if row.market_cap is None else row.market_cap / 1e9, 1),
                 num(pct(row.revenue_growth), 1, sign=True), num(pct(row.profit_margin), 1),
+                exhaustion_item(row),
             ]  # fmt: skip
             for c, item in enumerate(cells):
                 self.table.setItem(r, c, item)

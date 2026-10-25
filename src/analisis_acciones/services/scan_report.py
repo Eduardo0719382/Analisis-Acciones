@@ -259,7 +259,7 @@ def position_meter(row: ScanRow) -> str:
 
 
 def _pattern_chips(row: ScanRow) -> str:
-    if not row.pattern_notes and not row.elliott:
+    if not row.pattern_notes and not row.elliott and not row.exhaustion:
         return '<div class="muted small">Sin patrones activos ni cuenta de Elliott en curso.</div>'
     chips = []
     for note in row.pattern_notes:
@@ -267,6 +267,12 @@ def _pattern_chips(row: ScanRow) -> str:
         icon = UP_ICON if note.bias > 0 else DOWN_ICON if note.bias < 0 else FLAT_ICON
         state = "ruptura reciente" if note.state == BREAKOUT_NOTE else "en formación"
         chips.append(f'<span class="chip {css}">{icon} {escape(note.name)} · {state}</span>')
+    if row.exhaustion:
+        rising = row.exhaustion > 0
+        icon = DOWN_ICON if rising else UP_ICON
+        what = "la subida" if rising else "la bajada"
+        chips.append(f'<span class="chip flat">{icon} Señales de agotamiento de {what} '
+                     f"({abs(row.exhaustion)}/{row.exhaustion_total})</span>")  # fmt: skip
     if row.elliott:
         icon = UP_ICON if row.elliott_direction > 0 else DOWN_ICON
         css = "up" if row.elliott_direction > 0 else "down"
@@ -550,7 +556,7 @@ def scan_csv(result: ScanResult) -> str:
         "senales_bajistas", "balance", "detalle_alcistas", "detalle_bajistas", "patrones",
         "elliott", "soporte", "dist_soporte_pct", "resistencia", "dist_resistencia_pct",
         "per", "rentabilidad_dividendo_pct", "capitalizacion", "crecimiento_ingresos_pct",
-        "margen_neto_pct",
+        "margen_neto_pct", "agotamiento",
     ])  # fmt: skip
     for row in sorted(result.rows, key=lambda r: r.symbol):
         _css, _icon, sentence = verdict(row)
@@ -564,9 +570,17 @@ def scan_csv(result: ScanResult) -> str:
             _round(row.market_cap),
             _round(None if row.revenue_growth is None else row.revenue_growth * 100),
             _round(None if row.profit_margin is None else row.profit_margin * 100),
+            _exhaustion_text(row),
         ]  # fmt: skip
         writer.writerow([safe_cell(c) for c in cells])
     return buffer.getvalue()
+
+
+def _exhaustion_text(row: ScanRow) -> str:
+    if not row.exhaustion:
+        return ""
+    what = "subida" if row.exhaustion > 0 else "bajada"
+    return f"{what} {abs(row.exhaustion)}/{row.exhaustion_total}"
 
 
 def _round(value: float | None) -> float | str:

@@ -88,6 +88,13 @@ franja de precio, con el POC (precio con más volumen) y la zona de valor.</li>
 <p>Reglas fijas y explicables sobre la última barra cerrada (tendencia con medias, RSI, cruces,
 volumen, volatilidad, rupturas). Cada señal indica la regla y los valores que la producen. Son
 descripciones de los datos, no recomendaciones.</p>
+<h3>Agotamiento</h3>
+<p>Cuando hay tendencia, cuenta cuántas de 6 señales de agotamiento aparecen (sobrecompra,
+divergencia del RSI, precio muy alejado de su media, volumen que se apaga, cierre fuera de la
+banda de Bollinger, movimiento demasiado rápido) y muestra qué pasó antes en ese activo con la
+misma situación, comparado con un día cualquiera y diciendo si la diferencia puede ser azar.
+Una tendencia puede seguir mucho tiempo «agotada»: no es una señal de compra ni de venta. El
+escaneo diario avisa cuando aparecen estas señales.</p>
 <h3>Proyección</h3>
 <p>Rangos estadísticos para las próximas barras (cono de volatilidad o canal de regresión) con
 percentiles P5–P95. Incluye una <b>calibración histórica</b>: cuántas veces el precio real acabó

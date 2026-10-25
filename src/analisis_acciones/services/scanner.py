@@ -18,6 +18,8 @@ import numpy as np
 import pandas as pd
 
 from analisis_acciones.analysis.engine import analyze as analyze_signals
+from analisis_acciones.analysis.exhaustion import UP as EXH_UP
+from analisis_acciones.analysis.exhaustion import assess as assess_exhaustion
 from analisis_acciones.analysis.model import Direction
 from analisis_acciones.indicators.functions import rsi, sma
 from analisis_acciones.models.errors import AppError
@@ -77,6 +79,9 @@ class ScanRow:
     fundamentals_checked: bool = False
     pe: float | None = None  # trailing P/E
     dividend_yield: float | None = None  # fraction (0.02 = 2 %)
+    #: Exhaustion signs at the last bar: +n (rise showing n signs), -n (fall), 0 none.
+    exhaustion: int = 0
+    exhaustion_total: int = 0
     market_cap: float | None = None  # in the listing currency
     revenue_growth: float | None = None  # fraction, year over year
     profit_margin: float | None = None  # fraction
@@ -140,7 +145,13 @@ def scan_bars(symbol: str, bars: pd.DataFrame) -> ScanRow:
         for o, h, lo, c, v in zip(tail["open"], tail["high"], tail["low"], tail["close"],
                                   tail["volume"], strict=True)
     )  # fmt: skip
+    tiredness = assess_exhaustion(bars)
+    exhaustion = 0
+    if tiredness.signalled:
+        exhaustion = tiredness.met if tiredness.direction == EXH_UP else -tiredness.met
     return ScanRow(
+        exhaustion=exhaustion,
+        exhaustion_total=tiredness.available,
         symbol=symbol,
         close=last,
         change_pct=change if np.isfinite(change) else None,

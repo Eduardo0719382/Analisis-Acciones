@@ -122,6 +122,16 @@ blanco porque su motor se detuvo, se recarga automáticamente.
   EMA 20/50 y MACD/señal recientes (5 barras), volumen > 2× su media de 20, cambio de ATR
   ±30 % en 20 barras y rupturas del máximo/mínimo de 20 barras. Cada señal muestra la regla y
   los valores que la producen. Son descripciones de los datos, no recomendaciones.
+- **Agotamiento (pestaña del panel derecho):** si el activo está en tendencia, indica cuántas
+  señales de agotamiento muestra (de 6, cada una con sus valores): RSI en sobrecompra o
+  sobreventa, divergencia del RSI, precio a más de 3 ATR de su media de 50, volumen que se
+  apaga, cierre fuera de la banda de Bollinger y movimiento de 20 sesiones inusualmente rápido.
+  Con 3 o más habla de «señales de agotamiento». Debajo muestra **qué pasó antes en ese mismo
+  activo** con esa situación (a 10 y 20 sesiones: cuántas veces giró y la variación mediana)
+  frente a un día cualquiera de la misma tendencia, con una prueba estadística que indica si la
+  diferencia puede deberse al azar. No dice cuándo terminará una tendencia ni es una
+  recomendación. El escáner tiene la columna y el filtro «Agotamiento», y el escaneo diario
+  avisa cuando aparecen estas señales en un activo de la lista.
 - **Proyección (pestaña del panel derecho):** rangos estadísticos para las próximas N barras,
   dibujados sobre el gráfico (P5, P25, mediana, P75, P95). *Cono de volatilidad*: parte del
   último cierre, sin tendencia supuesta, con la volatilidad de la ventana elegida. *Canal de

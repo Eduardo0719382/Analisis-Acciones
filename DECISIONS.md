@@ -899,3 +899,22 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
 - Yearly return = last value of the year / last value of the previous year (the initial cash
   for the first year) − 1. With no deposits or withdrawals in the simulation this is the
   return. The first and last years are marked partial when not fully covered.
+
+## D-058 — Trend exhaustion signs and their record
+
+- The user asked for something that says when it is "a good moment to enter or exit". A
+  timing signal presented as such would be a recommendation with no proven accuracy, so the
+  feature describes and measures instead. It lists explainable exhaustion conditions of the
+  current trend, and shows how often similar situations in the same asset were followed by a
+  reversal, compared with any bar of the same trend.
+- Six conditions per direction (see `analysis/exhaustion.py`), counted only in a trend
+  (close vs a rising/falling SMA 50). Three or more = "signs of exhaustion". Volume is "not
+  evaluable" when the source has none.
+- The record uses only trailing indicators (a test checks that changing later bars does not
+  change earlier signals). Events are counted without overlap at 10 and 20 bars, and the
+  baseline is every bar of the same trend.
+- The reading only claims an effect with ≥ 10 events, ≥ 10 points of difference and an exact
+  one-sided binomial test below 5 %. Horizons pointing in opposite ways are "mixed". On random
+  walks (tests and screenshots) the reading correctly says the signs do not beat chance.
+- Notified through the daily scan as a new item without the count, so a 3→4 change is not
+  re-announced.

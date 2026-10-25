@@ -78,6 +78,7 @@ from analisis_acciones.ui.day_summary_dialog import DaySummaryDialog
 from analisis_acciones.ui.details_panel import DetailsPanel
 from analisis_acciones.ui.disclaimer import DisclaimerDialog
 from analisis_acciones.ui.elliott_panel import ElliottPanel, ElliottView
+from analisis_acciones.ui.exhaustion_panel import ExhaustionPanel
 from analisis_acciones.ui.fundamentals_panel import FundamentalsPanel
 from analisis_acciones.ui.guide_dialog import GuideDialog
 from analisis_acciones.ui.indicator_dialog import IndicatorDialog
@@ -285,6 +286,9 @@ class MainWindow(QMainWindow):
         self.right_tabs.addTab(self.patterns_panel, strings.TAB_PATTERNS)
         self.fundamentals_panel = FundamentalsPanel(self.market.service if self.market else None)
         self.right_tabs.addTab(self.fundamentals_panel, strings.TAB_FUNDAMENTALS)
+        self.exhaustion_panel = ExhaustionPanel()
+        self.right_tabs.insertTab(self.right_tabs.indexOf(self.analysis_panel) + 1,
+                                  self.exhaustion_panel, strings.TAB_EXHAUSTION)  # fmt: skip
         self.right_tabs.currentChanged.connect(self._on_right_tab_changed)
         self.alerts_panel: AlertsPanel | None = None
         if self._alert_service is not None:
@@ -1188,6 +1192,7 @@ class MainWindow(QMainWindow):
         self.chart.show_series(series, f"{series.symbol} · {interval_label}")
         self._refresh_drawings()
         self.projection_panel.set_series(series)
+        self.exhaustion_panel.set_series(series, result.session_in_progress)
         self.elliott_panel.set_series(series)
         self.patterns_panel.set_series(series)
         self._draw_volume_profile()
