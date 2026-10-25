@@ -807,3 +807,12 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   sees the file change. The staged file is validated again. The current database (with its WAL
   files) is kept as `*.antes-de-restaurar`, and migrations then bring the restored copy up to
   date.
+
+## D-051 — Journal statistics
+
+- Computed from the sales only, each against the average cost (the same numbers as "Resultado
+  de las ventas"), so the statistics and the sale table always agree.
+- Holding time is counted from the purchase that opened the position (from zero shares) to the
+  sale. With average-cost accounting there are no individual lots, so this is a "position age",
+  not a per-lot holding period.
+- Fewer than 10 sales shows an explicit warning: such figures can come from chance.

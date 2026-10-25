@@ -16,7 +16,8 @@ from html import escape
 import pandas as pd
 
 from analisis_acciones.data.export import safe_cell
-from analisis_acciones.portfolio.engine import BUY, DIVIDEND
+from analisis_acciones.portfolio.engine import BUY, DIVIDEND, ClosedTrade
+from analisis_acciones.services.journal_stats import journal_stats
 from analisis_acciones.services.paper_portfolio import PortfolioReport
 from analisis_acciones.services.scan_report import STYLE, num
 
@@ -197,6 +198,83 @@ def closed_panel(report: PortfolioReport) -> str:
     )
 
 
+def stats_panel(report: PortfolioReport) -> str:
+    """Journal statistics: how the sales went, in plain words."""
+    st = journal_stats(report.closed, report.trades)
+    if not st.sales:
+        return ""
+
+    def tile(big: str, label: str, detail: str = "", css: str = "") -> str:
+        return (
+            f'<div class="tile {css}"><div class="big">{big}</div><div>{label}</div>'
+            f'<div class="muted small">{detail}</div></div>'
+        )
+
+    pf = st.profit_factor
+    tiles = "".join(
+        [
+            tile(
+                f"{num(st.win_rate, 0)} %",
+                "ventas con ganancia",
+                f"{st.winners} de {st.sales} ({st.losers} con pérdida)",
+            ),
+            tile(
+                num(pf, 2) if pf is not None else "—",
+                "factor de beneficio",
+                "ganancias / pérdidas; >1 = se ganó más de lo que se perdió"
+                if pf is not None
+                else "sin ventas con pérdida",
+            ),
+            tile(
+                f"{num(st.average_gain, 2, sign=True)} / {num(st.average_loss, 2, sign=True)}",
+                "ganancia media / pérdida media",
+                f"relación {num(st.payoff_ratio, 2)}" if st.payoff_ratio is not None else "",
+            ),
+            tile(
+                f"{num(st.average_days_held, 0)} días" if st.average_days_held is not None else "—",
+                "tiempo medio mantenida",
+                "desde la primera compra hasta la venta",
+            ),
+        ]
+    )
+    extremes = ""
+    pairs: list[tuple[str, ClosedTrade | None]] = [("Mejor venta", st.best),
+                                                    ("Peor venta", st.worst)]  # fmt: skip
+    if st.sales == 1:
+        pairs = [("Única venta", st.best)]
+    for label, c in pairs:
+        if c is not None:
+            css = "up" if c.result > 0 else "down" if c.result < 0 else ""
+            extremes += (
+                f"<li><b>{label}:</b> {escape(c.trade.symbol)} el {c.trade.trade_date:%d/%m/%Y} · "
+                f'<span class="{css}">{num(c.result, 2, sign=True)} '
+                f"({num(c.result_pct, 1, sign=True)} %)</span></li>"
+            )
+    rows = "".join(
+        f"<tr><td><b>{escape(s.symbol)}</b></td><td class=n>{s.sales}</td>"
+        f"<td class=n>{num(s.winners / s.sales * 100, 0)} %</td>{_signed_cell(s.result)}</tr>"
+        for s in st.by_symbol
+    )
+    journal = (
+        f"Diario: {num(st.with_reason_pct, 0)} % de las operaciones tienen motivo escrito y "
+        f"{num(st.with_review_pct, 0)} % tienen revisión."
+    )
+    warning = (
+        f'<p class="warn">Solo {st.sales} venta{"s" if st.sales != 1 else ""}: con tan '
+        "pocas operaciones estas cifras pueden deberse al azar y no son representativas.</p>"
+        if st.small_sample
+        else ""
+    )
+    return (
+        '<div class="panel"><h3>Estadísticas del diario</h3><p class="muted small">Calculadas '
+        "con las ventas de esta cartera simulada. Describen lo ocurrido, no lo que pasará."
+        f'</p><div class="tiles">{tiles}</div><ul>{extremes}</ul>'
+        "<table><thead><tr><th>Activo</th><th>Ventas</th><th>Con ganancia</th>"
+        f"<th>Resultado</th></tr></thead><tbody>{rows}</tbody></table>"
+        f'<p class="muted small">{journal}</p>{warning}</div>'
+    )
+
+
 def _events_panel(report: PortfolioReport) -> str:
     """Dividends and splits that affected the portfolio, newest first."""
     if not report.events:
@@ -349,6 +427,7 @@ diario · generado el {generated:%d/%m/%Y %H:%M}. Los importes se suman sin conv
 </tr></thead>
 <tbody>{rows}</tbody></table></div>
 {closed_panel(report)}
+{stats_panel(report)}
 {events}
 <h2 class="section-title">Operaciones</h2>
 <table><thead><tr><th>Fecha</th><th>Activo</th><th>Operación</th><th>Cantidad</th><th>Precio</th>

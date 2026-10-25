@@ -73,6 +73,7 @@ class ClosedTrade:
     trade: PaperTrade  # in the units used by the replay
     cost: float  # average cost of the shares sold, purchase commissions included
     proceeds: float  # sale value minus its commission
+    opened_on: date | None = None  # when the position was opened (from zero shares)
 
     @property
     def result(self) -> float:
@@ -127,6 +128,7 @@ class Position:
     cost_basis: float = 0.0  # total cost of the shares held, commissions included
     realized: float = 0.0
     dividends: float = 0.0
+    opened_on: date | None = None  # first purchase since the position was last empty
 
     @property
     def average_cost(self) -> float:
@@ -222,6 +224,8 @@ def _apply_trade(state: PortfolioState, trade: PaperTrade) -> None:
                 ),
             )
         state.cash -= cost
+        if position.quantity <= EPSILON:
+            position.opened_on = trade.trade_date
         position.quantity += trade.quantity
         position.cost_basis += cost
         return
@@ -239,7 +243,7 @@ def _apply_trade(state: PortfolioState, trade: PaperTrade) -> None:
     cost_out = position.average_cost * quantity
     proceeds = trade.value - trade.commission
     position.realized += proceeds - cost_out
-    state.closed.append(ClosedTrade(trade, cost_out, proceeds))
+    state.closed.append(ClosedTrade(trade, cost_out, proceeds, position.opened_on))
     position.quantity -= quantity
     position.cost_basis -= cost_out
     if position.quantity <= 1e-6:

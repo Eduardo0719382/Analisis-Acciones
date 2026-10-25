@@ -354,7 +354,7 @@ class PaperPortfolioService:
         if f == 1.0:
             return closed
         real = replace(t, quantity=t.quantity / f, price=t.price * f, split_factor=1.0)
-        return ClosedTrade(real, closed.cost, closed.proceeds)
+        return ClosedTrade(real, closed.cost, closed.proceeds, closed.opened_on)
 
     @staticmethod
     def _as_quoted(applied: AppliedEvent, splits: dict[str, pd.Series]) -> AppliedEvent:
