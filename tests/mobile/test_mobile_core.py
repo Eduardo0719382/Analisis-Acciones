@@ -69,7 +69,8 @@ def test_scan_cards(session: MobileSession) -> None:
     session.add("ZZZ")
     cards, problems = session.scan()
     assert [c.symbol for c in cards] == ["TEST"]
-    assert cards[0].details[0].startswith("Cierre ")
+    assert cards[0].details[0][1].startswith("Cierre ")
+    assert {tone for tone, _ in cards[0].details} <= {"", "up", "down"}
     assert problems and problems[0].startswith("ZZZ")
 
 

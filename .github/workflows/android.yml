@@ -1,0 +1,144 @@
+name: Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["claude/bold-knuth-wbixh5", "main"]
+    paths:
+      - "src/**"
+      - "mobile/**"
+      - "pyproject.toml"
+      - ".github/workflows/android.yml"
+
+permissions:
+  contents: write  # to publish the APK in the "movil" release
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    outputs:
+      signed: ${{ steps.signing.outputs.signed }}
+      apk: ${{ steps.rename.outputs.apk }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Install Flet
+        run: python -m pip install "flet[all]==1.0.5" mypy pandas-stubs pandas numpy platformdirs tzdata certifi ruff
+      - name: Check the screens (lint and types)
+        run: |
+          ruff check mobile
+          cd mobile/src && MYPYPATH=../../src mypy main.py --ignore-missing-imports --python-version 3.12
+      - name: Prepare app sources
+        run: |
+          cp -r src/analisis_acciones mobile/src/
+          # Desktop-only parts (Qt) are not needed on the phone.
+          rm -rf mobile/src/analisis_acciones/ui mobile/src/analisis_acciones/app mobile/src/analisis_acciones/charts
+          echo "{\"build\": ${{ github.run_number }}, \"commit\": \"${{ github.sha }}\"}" \
+            > mobile/src/analisis_acciones/mobile/build_info.json
+          python -c "import sys; sys.path.insert(0, 'mobile/src'); import analisis_acciones.mobile.session"
+      - name: Signing key
+        id: signing
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::Faltan los secretos de firma (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD). Se compila y prueba el APK, pero no se publica: sin una firma fija, las actualizaciones no se podrían instalar encima."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build APK
+        working-directory: mobile
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          VERSION=$(python -c "import sys; sys.path.insert(0, 'src'); import analisis_acciones; print(analisis_acciones.__version__)")
+          ARGS=(apk --yes --no-rich-output --build-number "${{ github.run_number }}" --build-version "$VERSION")
+          if [ "${{ steps.signing.outputs.signed }}" = "true" ]; then
+            ARGS+=(--android-signing-key-store "$RUNNER_TEMP/upload.jks"
+                   --android-signing-key-store-password "$KEYSTORE_PASSWORD"
+                   --android-signing-key-password "$KEYSTORE_PASSWORD"
+                   --android-signing-key-alias analisis)
+          fi
+          flet build "${ARGS[@]}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+      - name: Name the APK
+        id: rename
+        run: |
+          mkdir -p dist
+          SRC=$(find mobile/build/apk -name '*.apk' | head -1)
+          NAME="AnalisisAcciones-${VERSION}-build${{ github.run_number }}.apk"
+          cp "$SRC" "dist/$NAME"
+          ls -la dist
+          echo "apk=$NAME" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apk
+          path: dist/*.apk
+          if-no-files-found: error
+
+  smoke-test:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: apk
+          path: dist
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Open the app on an Android emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: bash mobile/ci/smoke.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-test
+          path: smoke/
+
+  publish:
+    needs: [build, smoke-test]
+    if: needs.build.outputs.signed == 'true' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: apk
+          path: dist
+      - name: Publish in the "movil" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          NOTES="Última versión de la app para Android: compilación ${{ github.run_number }} (commit ${GITHUB_SHA::7}).
+          Descárguela desde el celular, ábrala y confirme la instalación. Si Android lo pide, permita instalar apps de esta fuente."
+          if ! gh release view movil >/dev/null 2>&1; then
+            gh release create movil --title "App para Android" --notes "$NOTES" --prerelease --target "$GITHUB_SHA"
+          fi
+          for asset in $(gh release view movil --json assets -q '.assets[].name'); do
+            gh release delete-asset movil "$asset" -y
+          done
+          gh release upload movil dist/*.apk --clobber
+          gh release edit movil --notes "$NOTES"

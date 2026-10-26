@@ -1,0 +1,30 @@
+# Android app (Flet). Built in GitHub Actions (.github/workflows/android.yml), which first
+# copies the shared package src/analisis_acciones into mobile/src/.
+[project]
+name = "analisis-acciones-movil"
+version = "0.1.0"
+description = "Análisis técnico de acciones y criptomonedas para Android."
+requires-python = ">=3.12"
+dependencies = [
+    "flet==1.0.5",
+    "pandas",
+    "numpy",
+    "platformdirs",
+    "tzdata",
+    "certifi",
+]
+
+[tool.flet]
+org = "io.github.eduardo0719382"
+product = "Análisis de Acciones"
+company = "Análisis de Acciones"
+copyright = "Uso personal"
+
+[tool.flet.app]
+path = "src"
+
+[tool.flet.android]
+split_per_abi = false
+
+[tool.flet.android.permission]
+"android.permission.INTERNET" = true

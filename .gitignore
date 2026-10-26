@@ -13,3 +13,7 @@ dist/
 *.log
 /dist/
 /build/
+# Android app: the shared package is copied in by the build, never committed.
+/mobile/src/analisis_acciones/
+*.jks
+*.keystore

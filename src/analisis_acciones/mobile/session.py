@@ -59,12 +59,12 @@ EXAMPLES = {
 }
 #: Alert conditions offered on the phone (value = the number the user types).
 PHONE_ALERTS = {
-    AlertKind.PRICE_ABOVE: "El cierre sube por encima de",
-    AlertKind.PRICE_BELOW: "El cierre baja por debajo de",
-    AlertKind.CHANGE_ABOVE: "El cambio diario supera (%)",
-    AlertKind.CHANGE_BELOW: "El cambio diario cae por debajo de (%)",
-    AlertKind.RSI_ABOVE: "El RSI 14 supera",
-    AlertKind.RSI_BELOW: "El RSI 14 cae por debajo de",
+    AlertKind.PRICE_ABOVE: "Cierre mayor que",
+    AlertKind.PRICE_BELOW: "Cierre menor que",
+    AlertKind.CHANGE_ABOVE: "Cambio del día mayor que %",
+    AlertKind.CHANGE_BELOW: "Cambio del día menor que %",
+    AlertKind.RSI_ABOVE: "RSI 14 mayor que",
+    AlertKind.RSI_BELOW: "RSI 14 menor que",
 }
 DISCLAIMER = (
     "Herramienta de análisis técnico. Describe lo que muestran los datos con reglas fijas; no "
@@ -120,7 +120,8 @@ class ScanCard:
     symbol: str
     tone: str
     sentence: str
-    details: list[str]
+    #: (tone, text): "up" / "down" for bullish / bearish signals, "" for plain facts.
+    details: list[tuple[str, str]]
 
 
 @dataclass(frozen=True)
@@ -285,21 +286,22 @@ class MobileSession:
         cards = []
         for row in sorted(result.rows, key=lambda r: r.symbol):
             tone, _icon, sentence = verdict(row)
-            details = [f"Cierre {price_text(row.close)} ({change_text(row.change_pct)})"]
+            details = [("", f"Cierre {price_text(row.close)} ({change_text(row.change_pct)})")]
             if row.rsi14 is not None:
-                details.append(f"RSI 14: {num(row.rsi14, 1)}")
-            details += [f"▲ {t}" for t in row.bullish] + [f"▼ {t}" for t in row.bearish]
+                details.append(("", f"RSI 14: {num(row.rsi14, 1)}"))
+            details += [("up", t) for t in row.bullish] + [("down", t) for t in row.bearish]
             if row.exhaustion:
                 what = "subida" if row.exhaustion > 0 else "bajada"
-                details.append(f"Agotamiento de la {what}: {abs(row.exhaustion)} de "
-                               f"{row.exhaustion_total} señales")  # fmt: skip
+                details.append(("", f"Agotamiento de la {what}: {abs(row.exhaustion)} de "
+                                    f"{row.exhaustion_total} señales"))  # fmt: skip
             cards.append(ScanCard(row.symbol, tone, sentence, details))
         return cards, list(result.problems)
 
     # Alerts -------------------------------------------------------------------------
     def alert_rows(self) -> list[AlertRow]:
         return [AlertRow(r.id or 0, r.description, r.enabled,
-                         f"{r.last_triggered_at:%d/%m %H:%M}" if r.last_triggered_at else "")
+                         f"{r.last_triggered_at.astimezone():%d/%m %H:%M}"
+                         if r.last_triggered_at else "")
                 for r in self.alerts.alerts()]  # fmt: skip
 
     def add_alert(self, symbol: str, kind: AlertKind, value: float,
