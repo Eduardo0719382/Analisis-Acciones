@@ -24,7 +24,13 @@ from analisis_acciones.models.errors import AppError
 from analisis_acciones.models.market import Interval
 from analisis_acciones.providers.yahoo import YahooFinanceProvider
 from analisis_acciones.services.api_keys import KeyringStore
-from analisis_acciones.services.autotrade import holdings_report, load_ledger, run
+from analisis_acciones.services.autotrade import (
+    holdings_report,
+    load_ledger,
+    render_state_md,
+    run,
+    valuation,
+)
 from analisis_acciones.services.forward_test import load_start, save_start
 
 
@@ -66,6 +72,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{mode} · {now:%Y-%m-%d %H:%M} UTC · inicio de la prueba {start:%Y-%m-%d %H:%M} UTC")
     print("\n".join(report.lines))
     print("\n".join(holdings_report(load_ledger(ledger_path))))
+    state = render_state_md(valuation(load_ledger(ledger_path), report.positions), now)
+    (folder / "autotrade_estado.md").write_text(state, encoding="utf-8")
+    with (folder / "autotrade_registro.md").open("a", encoding="utf-8") as log:
+        log.write(f"\n\n---\n\n## {mode} · {now:%Y-%m-%d %H:%M} UTC\n\n")
+        log.write("\n".join(f"- {line}" for line in report.lines) + f"\n\n{state}\n")
+    print(f"\nResultados anotados en {folder / 'autotrade_estado.md'} y autotrade_registro.md")
     if not args.send:
         print("\nPara enviar de verdad (a la cuenta de práctica): añada --send")
     return 0

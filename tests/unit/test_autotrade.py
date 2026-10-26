@@ -172,8 +172,9 @@ def test_send_buys_once_then_sells_and_never_repeats(monkeypatch: pytest.MonkeyP
     assert run(broker, fetch, NOW, path, send=True, now=NOW).sent == 0
     broker.held = {"QQQ": 0.4999}
     assert run(broker, fetch, NOW, path, send=True, now=NOW).sent == 1  # strategy says sell
-    slot = load_ledger(path)[slot_key(P.id, "QQQ")]
-    assert slot.qty == 0 and slot.cash == pytest.approx(49.99, abs=0.02)
+    ledger = load_ledger(path)
+    assert ledger[slot_key(P.id, "QQQ")].qty == 0
+    assert ledger[autotrade.cash_key(P.id)].cash == pytest.approx(99.99, abs=0.03)  # pool
     assert run(broker, fetch, NOW, path, send=True, now=NOW).sent == 0
     assert [o.side for o in broker.sent] == ["buy", "sell"]
 
