@@ -52,6 +52,31 @@ def trend_only(bars: pd.DataFrame, p: dict[str, Any]) -> pd.DataFrame:
     return _signals(crosses_above(close, average), crosses_below(close, average))
 
 
+def breakout(bars: pd.DataFrame, p: dict[str, Any]) -> pd.DataFrame:
+    """Donchian channel: buy a new ``entry_n``-bar high, sell a new ``exit_n``-bar low.
+
+    Both levels use only the bars before the current one, so the signal at bar t is known
+    at its close.
+    """
+    close = bars["close"]
+    high = bars["high"].rolling(int(p["entry_n"])).max().shift(1)
+    low = bars["low"].rolling(int(p["exit_n"])).min().shift(1)
+    return _signals(close > high, close < low)
+
+
+def pullback(bars: pd.DataFrame, p: dict[str, Any]) -> pd.DataFrame:
+    """Buy a dip inside an up-trend: close above its long average and RSI recovering.
+
+    Exit when RSI reaches the high level or the close falls below the trend average.
+    """
+    close = bars["close"]
+    trend = f.sma(close, int(p["trend"]))
+    rsi = f.rsi(close, int(p["period"]))
+    entry = crosses_above(rsi, float(p["low"])) & (close > trend)
+    exit_ = crosses_above(rsi, float(p["high"])) | crosses_below(close, trend)
+    return _signals(entry, exit_)
+
+
 def exhaustion_exit(bars: pd.DataFrame, p: dict[str, Any]) -> pd.Series:
     """Bars where the up-trend shows exhaustion signs (only data up to each bar is used)."""
     params = ExhaustionParams(rsi_high=float(p["rsi_high"]), threshold=int(p["conditions"]))
@@ -129,6 +154,32 @@ STRATEGIES: tuple[StrategySpec, ...] = (
             ParamSpec("high", "Nivel de salida", 70, 1, 99),
         ),
         signals=rsi_reversion,
+    ),
+    StrategySpec(
+        id="breakout",
+        name="Ruptura de máximos (canal de Donchian)",
+        entry_rule="Entrada: el cierre supera el máximo de las últimas {entry_n} barras",
+        exit_rule="Salida: el cierre pierde el mínimo de las últimas {exit_n} barras",
+        params=(
+            ParamSpec("entry_n", "Barras para el máximo", 20, 2, 400),
+            ParamSpec("exit_n", "Barras para el mínimo", 10, 2, 400),
+        ),
+        signals=breakout,
+    ),
+    StrategySpec(
+        id="pullback",
+        name="Retroceso en tendencia alcista",
+        entry_rule="Entrada: el RSI {period} cruza al alza {low} con el cierre sobre su media "
+        "de {trend}",
+        exit_rule="Salida: el RSI {period} cruza al alza {high}, o el cierre cae bajo su media "
+        "de {trend}",
+        params=(
+            ParamSpec("trend", "Media de tendencia", 100, 10, 400),
+            ParamSpec("period", "Periodo RSI", 14, 2, 200),
+            ParamSpec("low", "Nivel de entrada", 40, 1, 99),
+            ParamSpec("high", "Nivel de salida", 65, 1, 99),
+        ),
+        signals=pullback,
     ),
     StrategySpec(
         id="trend_exhaustion",
