@@ -53,7 +53,11 @@ reales:
     prudente. La revisión debe vigilar si la diferencia se acumula.
 - **Orden que nunca llegó** a Alpaca (rechazada por el mínimo de 10 USD): la reconciliación
   la marcó como «no enviada» y liberó lo reservado.
-- **Compra y venta de acciones:** pendiente, porque la bolsa estaba cerrada (ver la semana 1).
+- **Compra y venta de acciones (validado 2026-10-26, bolsa abierta, perfil P91, AAPL):**
+  - Compra 5 USD: filled, 0.014485517 acc. a 344.482 (bid/ask IEX 344.48/344.56); comisión 6.66e-07 USD; efectivo del libro 95.01.
+  - Venta (liquidar): filled, 0.014485517 acc. a 344.578 (bid/ask IEX 344.62/344.73); comisión/tasas del libro 0.00010348897760461561 USD (SEC + CAT); efectivo del libro 100.0. Ambas ejecuciones quedaron dentro del bid/ask (la venta a 0.042 por debajo del bid; la compra 0.078 por debajo del ask).
+  - Cuenta paper: efectivo 99943.47 antes y 99943.47 después (variación 0.00 a 2 decimales). Libro P91: 100.0 − 100 = 0.0. Diferencia cuenta/libro dentro del redondeo al centavo (las tasas del libro suman ≈0.0001 USD). Sin órdenes pendientes ni avisos.
+  - Nota: `estado` muestra `pnl_realizado: -0.0` y resultado −0.0 % aunque la diferencia de precios (≈ +0.0014 USD) menos tasas debería dar un pequeño positivo; con 2 decimales no se distingue. No se corrigió nada.
 - **Ejecución en seco** de los 11 perfiles: el análisis y la validación funcionan. Las
   órdenes de acciones se rechazaron con «mercado cerrado» y las de cripto se simularon.
 
