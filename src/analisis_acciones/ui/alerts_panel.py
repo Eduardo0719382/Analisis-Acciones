@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from pathlib import Path
 
 import shiboken6
 from PySide6.QtCore import Qt, QTimer, Signal
@@ -13,6 +14,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
+    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QHeaderView,
@@ -34,6 +36,8 @@ from analisis_acciones.ui import strings
 from analisis_acciones.ui.workers import Worker, start_worker
 
 logger = logging.getLogger(__name__)
+
+EXPORT_FILE = "alertas_analisis_acciones.json"
 
 CHECK_INTERVAL_MS = 15 * 60 * 1000
 #: With intraday alerts active the check runs this often (intraday data is cached for
@@ -151,10 +155,18 @@ class AlertsPanel(QWidget):
         self.delete_button.clicked.connect(self.delete_selected)
         self.check_button = QPushButton(strings.ALERT_CHECK_NOW)
         self.check_button.clicked.connect(self.check_now)
+        self.export_button = QPushButton(strings.ALERT_EXPORT)
+        self.export_button.setToolTip(strings.ALERT_EXCHANGE_TIP)
+        self.export_button.clicked.connect(lambda: self.export_alerts())
+        self.import_button = QPushButton(strings.ALERT_IMPORT)
+        self.import_button.setToolTip(strings.ALERT_EXCHANGE_TIP)
+        self.import_button.clicked.connect(lambda: self.import_alerts())
         buttons = QHBoxLayout()
         for b in (self.new_button, self.toggle_button, self.delete_button):
             buttons.addWidget(b)
         buttons.addStretch(1)
+        buttons.addWidget(self.export_button)
+        buttons.addWidget(self.import_button)
         buttons.addWidget(self.check_button)
 
         self.table = QTableWidget(0, 3)
@@ -239,6 +251,45 @@ class AlertsPanel(QWidget):
         self.check_button.setEnabled(True)
 
     # Table -------------------------------------------------------------------
+    # Exchange with the phone -------------------------------------------------
+    def export_alerts(self, path: Path | None = None) -> Path | None:
+        if path is None:
+            chosen, _ = QFileDialog.getSaveFileName(
+                self, strings.ALERT_EXPORT, str(Path.home() / EXPORT_FILE), strings.ALERT_FILES
+            )
+            if not chosen:
+                return None
+            path = Path(chosen)
+        try:
+            path.write_text(self._service.export_json(), encoding="utf-8")
+        except OSError as exc:
+            self.status.setText(strings.EXPORT_FAILED.format(error=exc))
+            return None
+        self.status.setText(strings.ALERT_EXPORTED.format(path=path))
+        return path
+
+    def import_alerts(self, path: Path | None = None) -> None:
+        if path is None:
+            chosen, _ = QFileDialog.getOpenFileName(self, strings.ALERT_IMPORT, str(Path.home()),
+                                                    strings.ALERT_FILES)  # fmt: skip
+            if not chosen:
+                return
+            path = Path(chosen)
+        try:
+            text = path.read_text(encoding="utf-8")
+            summary = self._service.import_json(text)
+        except (OSError, UnicodeDecodeError):
+            self.status.setText(strings.ALERT_IMPORT_UNREADABLE)
+            return
+        except UserError as exc:
+            self.status.setText(exc.user_message)
+            return
+        self.reload()
+        text = strings.ALERT_IMPORTED.format(added=summary.added, dup=summary.duplicates)
+        if summary.problems:
+            text += "\n" + "\n".join(summary.problems)
+        self.status.setText(text)
+
     def reload(self) -> None:
         try:
             rules = self._service.alerts()

@@ -148,3 +148,38 @@ def test_crypto_alerts_fire_on_weekends_once_the_utc_day_closes(
     clock.now = datetime(2023, 3, 19, 0, 30, tzinfo=UTC)
     fired = alerts.check_all().events
     assert len(fired) == 1 and fired[0].bar_date.isoformat() == "2023-03-18"
+
+
+def test_alerts_move_between_devices_as_a_file(alerts: AlertService, market: MarketDataService,
+                                               clock: Clock) -> None:  # fmt: skip
+    alerts.create("TEST", AlertKind.PRICE_ABOVE, {"value": 105}, note="resistencia")
+    off = alerts.create("TEST", AlertKind.RSI_BELOW, {"period": 14, "value": 30}, interval="1h")
+    assert off.id is not None
+    alerts.set_enabled(off.id, False)
+    exported = alerts.export_json()
+    other = AlertService(open_database(":memory:"), market, clock)
+    first = other.import_json(exported)
+    assert (first.added, first.duplicates, first.problems) == (2, 0, ())
+    copied = {r.description: r for r in other.alerts()}
+    assert copied["TEST: Cierre > 105.00 (resistencia)"].enabled
+    assert not copied["TEST (1 hora): RSI 14 < 30.0"].enabled
+    again = other.import_json(exported)
+    assert (again.added, again.duplicates) == (0, 2)  # no duplicates on a second import
+    other.close()
+
+
+def test_imported_alerts_are_validated_as_data(alerts: AlertService) -> None:
+    import json as _json
+
+    bad = _json.dumps({"format": "analisis_acciones.alertas", "version": 1, "alerts": [
+        {"symbol": "TEST", "kind": "price_above", "params": {"value": 1e12}},
+        {"symbol": "rm -rf /", "kind": "price_above", "params": {"value": 1}},
+        {"symbol": "TEST", "kind": "drop_table", "params": {}},
+        "nonsense",
+        {"symbol": "TEST", "kind": "price_below", "params": {"value": 90}},
+    ]})  # fmt: skip
+    summary = alerts.import_json(bad)
+    assert summary.added == 1 and len(summary.problems) == 4
+    for text in ("", "[]", '{"format": "otra cosa", "alerts": []}', "{" * 10):
+        with pytest.raises(UserError):
+            alerts.import_json(text)

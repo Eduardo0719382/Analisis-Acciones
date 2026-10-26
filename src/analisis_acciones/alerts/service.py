@@ -35,6 +35,17 @@ from analisis_acciones.storage.database import transaction
 logger = logging.getLogger(__name__)
 
 MAX_NOTE = 120
+EXPORT_FORMAT = "analisis_acciones.alertas"
+EXPORT_VERSION = 1
+MAX_IMPORT = 500
+MAX_IMPORT_BYTES = 1024 * 1024
+
+
+@dataclass(frozen=True)
+class ImportSummary:
+    added: int
+    duplicates: int
+    problems: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -147,6 +158,66 @@ class AlertService:
                 interval=row["interval"] if row["interval"] in ALERT_INTERVALS else "1D",
             ))  # fmt: skip
         return rules
+
+    # Exchange with another device ---------------------------------------------
+    def export_json(self) -> str:
+        """Every alert's definition (not its state) as JSON, to move it to another device."""
+        items = [{"symbol": r.symbol, "kind": r.kind.value, "params": r.params,
+                  "interval": r.interval, "note": r.note, "enabled": r.enabled}
+                 for r in self.alerts()]  # fmt: skip
+        return json.dumps({"format": EXPORT_FORMAT, "version": EXPORT_VERSION,
+                           "exported_at": self._clock().isoformat(), "alerts": items},
+                          ensure_ascii=False, indent=1)  # fmt: skip
+
+    def import_json(self, text: str) -> ImportSummary:
+        """Add the alerts of an exported file. The file is data: every field is validated
+        like a new alert; alerts that already exist (same symbol, condition, values and
+        interval) are skipped."""
+        if len(text.encode("utf-8")) > MAX_IMPORT_BYTES:
+            raise UserError("alerts file too large", user_message="El archivo es demasiado grande.")
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            data = None
+        if not isinstance(data, dict) or data.get("format") != EXPORT_FORMAT \
+                or not isinstance(data.get("alerts"), list):  # fmt: skip
+            raise UserError(
+                "not an alerts file", user_message="El archivo no es una exportación de alertas."
+            )
+        existing = {self._identity(r.symbol, r.kind.value, r.params, r.interval)
+                    for r in self.alerts()}  # fmt: skip
+        added, duplicates, problems = 0, 0, []
+        for n, item in enumerate(data["alerts"][:MAX_IMPORT], start=1):
+            if not isinstance(item, dict):
+                problems.append(f"Alerta {n}: formato no válido.")
+                continue
+            try:
+                kind = AlertKind(str(item.get("kind")))
+                params = validate_alert_params(kind, item.get("params") or {})
+                interval = str(item.get("interval") or "1D")
+                symbol = str(item.get("symbol") or "")
+                key = self._identity(symbol.strip().upper(), kind.value, params, interval)
+                if key in existing:
+                    duplicates += 1
+                    continue
+                rule = self.create(symbol, kind, params, str(item.get("note") or ""), interval)
+            except ValueError:
+                problems.append(f"Alerta {n}: condición desconocida.")
+                continue
+            except UserError as exc:
+                problems.append(f"Alerta {n}: {exc.user_message}")
+                continue
+            if item.get("enabled") is False and rule.id is not None:
+                self.set_enabled(rule.id, False)
+            existing.add(key)
+            added += 1
+        if len(data["alerts"]) > MAX_IMPORT:
+            problems.append(f"Solo se importan las primeras {MAX_IMPORT} alertas.")
+        return ImportSummary(added, duplicates, tuple(problems))
+
+    @staticmethod
+    def _identity(symbol: str, kind: str, params: dict[str, float], interval: str) -> str:
+        return json.dumps([symbol, kind, sorted(params.items()), interval])
 
     def delete(self, alert_id: int) -> None:
         with self._db() as db:

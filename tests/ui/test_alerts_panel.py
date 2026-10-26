@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -109,3 +110,19 @@ def test_dialog_interval_and_fast_schedule(
     panel.reload()
     assert panel.timer.interval() == INTRADAY_CHECK_INTERVAL_MS
     assert "(15 min)" in panel.table.item(0, 0).text()
+
+
+def test_export_and_import_buttons(
+    qtbot: QtBot, services: tuple[MarketDataService, AlertService], tmp_path: Path
+) -> None:
+    _, alerts = services
+    panel = AlertsPanel(alerts)
+    qtbot.addWidget(panel)
+    alerts.create("TEST", AlertKind.PRICE_ABOVE, {"value": 105})
+    path = panel.export_alerts(tmp_path / "alertas.json")
+    assert path is not None and "price_above" in path.read_text(encoding="utf-8")
+    panel.import_alerts(path)
+    assert "0 alertas importadas; 1 ya existían" in panel.status.text()
+    (tmp_path / "otro.json").write_text("no es json", encoding="utf-8")
+    panel.import_alerts(tmp_path / "otro.json")
+    assert panel.status.text() == "El archivo no es una exportación de alertas."
