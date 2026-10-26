@@ -114,11 +114,54 @@ Ninguno.
 - Los perfiles con 0 operaciones no tendrán acierto ni muestra hasta que el mercado les dé
   señales. Para P01, P02 y P03 eso puede tardar semanas en un mercado cripto bajista. No es
   un fallo mientras sus motivos sigan siendo coherentes.
-- **Por verificar en la próxima revisión:**
-  1. El marco temporal de «20 barras» en P09 y la contradicción de tendencias P05/P11.
-  2. Si el límite de 3 operaciones al día de P07 vuelve a rechazar órdenes.
-  3. La comisión de cripto publicada frente a la estimada.
-  4. La diferencia de 1 centavo cuenta/libro observada en la Semana 0.
+### Verificación de los puntos abiertos (2026-10-26, ~21 h UTC)
+
+1. **P09, «20 barras»: aclarado.** Los perfiles semanales reciben velas semanales
+   (`TIMEFRAME` en `lab/profiles.py`: semanal → 1w). `lab analizar P09` da para BTC
+   `marco: 1w`, `rend_20_barras_pct: +26,46` y precio sobre SMA20/50/200, igual que su motivo.
+   El −6,6 % de P01 viene de las velas diarias. Los dos leyeron bien sus datos.
+2. **P05 frente a P11: aclarado, sin error de lectura.**
+   - P05 (diario, última vela del 23-oct): GOOGL y AMZN están bajo SMA50 y MSFT tiene un cruce
+     bajista del MACD.
+   - P11 (mensual): MSFT, GOOGL y AMZN están sobre SMA20/50/200 con tendencia alcista. Su
+     última vela completa es la de septiembre, porque solo usa velas cerradas, así que decide
+     con datos de hasta ~4 semanas.
+   - Matiz menor de P11: llamó «en tendencia» a SPY sin mencionar que su RSI mensual es 73,4
+     (sobrecompra).
+3. **P07, límite de operaciones: estructural, no es un fallo.**
+   - Un perfil semanal tiene un turno por semana ISO (`is_due`). Con 3 operaciones al día
+     compra como mucho 3 nombres por semana; el quinto llegará como pronto en su turno
+     siguiente (semana del 2-nov).
+   - Su pantalla de estado le daba `operaciones_restantes_hoy: 3` y aun así propuso 4: leyó
+     mal el límite (1 rechazo).
+   - Si en el próximo turno completa la cartera sin rechazos, no hay nada que ajustar.
+4. **Cuenta frente a libros:**
+   - **Posiciones:** coinciden **exactamente** con la suma de los libros en los 8 activos
+     (AMZN, BAC, BTC, GOOGL, JPM, MSFT, SPY y VZ). `invariant_issues` solo comprueba que los
+     libros no superen a la cuenta; esto lo comprueba en los dos sentidos.
+   - **Coste en los libros:** los 11 libros suman 894,36 en efectivo, es decir, 205,64
+     gastados. Los fills de Alpaca de esas órdenes suman 205,6285. Los libros redondean cada
+     compra de cripto al centavo hacia arriba: P04 9,81 frente a 9,8054, P09 44,13 frente a
+     44,125 y P11 11,77 frente a 11,7681. Es +0,0115 USD, del lado prudente.
+   - **Efectivo de la cuenta:** era 99 997,52 al empezar la Semana 0. Desde entonces, los fills
+     suman −205,68 y las comisiones en USD de las 2 ventas de validación −0,06, lo que da
+     99 791,78 esperado frente a 99 791,77 real. Es **1 centavo**, el mismo de la Semana 0:
+     no se acumula.
+   - En los fills aparece una venta de 0,719 LINK (+8,16 USD) a las 04:44 UTC, anterior al
+     primer turno del laboratorio y que no pertenece a ningún libro. Encaja con la cuenta «sin
+     posiciones al empezar» de la Semana 0.
+   - No hay en Windows ninguna tarea de `autotrade_cli` (D-077) que pueda operar en la misma
+     cuenta.
+5. **Comisiones de cripto: aún no se puede verificar.** Alpaca no ha publicado ninguna
+   actividad CFEE desde el 20-oct, tampoco las de las compras de validación. La estimación es
+   2,053e-06 BTC. Se comprueba en la revisión del sábado 31-oct.
+
+Queda para la próxima revisión:
+
+- la comisión CFEE publicada frente a la estimada;
+- el turno de P07 (sin rechazos y con 5 nombres o más);
+- que la diferencia cuenta/libro siga en ≤ 1–2 centavos con más órdenes de cripto (P01 puede
+  hacer 4 al día).
 
 ---
 
