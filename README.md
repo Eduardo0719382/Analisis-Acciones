@@ -53,6 +53,27 @@ tendencia, escáner de la lista y alertas (precio, cambio diario, RSI; vela diar
   APK*). En un PC con Flutter y el SDK de Android: copie `src/analisis_acciones` a
   `mobile/src/` y ejecute `flet build apk` dentro de `mobile`.
 
+## Órdenes automáticas en Alpaca (cuenta de práctica)
+
+Los 12 perfiles de estrategia (horas, días, semanas, meses × agresivo, equilibrado,
+conservador; solo compras) pueden enviar sus órdenes a la cuenta **paper** de Alpaca
+(dinero ficticio). Cada perfil tiene 100 USD: 50 en QQQ y 50 en BTC-USD.
+
+1. Guarde las claves de la cuenta paper en *Ver → Órdenes simuladas (Alpaca)…*.
+2. Ver qué haría, sin enviar nada: `python -m analisis_acciones.app.autotrade_cli`
+3. Enviar de verdad (a la cuenta de práctica): `… autotrade_cli --send`
+4. Ver lo que tiene cada perfil: `… autotrade_cli --status`
+
+Agendarlo cada hora en Windows (PowerShell; ajuste la carpeta):
+
+```powershell
+schtasks /Create /SC HOURLY /TN "AnalisisAcciones-Alpaca-Paper" /TR "C:\ruta\.venv\Scripts\python.exe -m analisis_acciones.app.autotrade_cli --send"
+```
+
+No hay opción para una cuenta de dinero real. Los perfiles de horas operan mucho y pierden
+con las comisiones; los de semanas y meses operan poco. Es una simulación, no asesoramiento
+financiero. Detalles en `DECISIONS.md` (D-077).
+
 ## Requisitos
 
 - Python 3.12 o superior

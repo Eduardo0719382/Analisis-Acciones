@@ -31,6 +31,7 @@ Transport = Callable[[str, str, Mapping[str, str], bytes | None], tuple[int, byt
 _STOCK = re.compile(r"^[A-Z]{1,5}$")
 _CRYPTO = re.compile(r"^([A-Z]{2,6})-USD$")
 _ORDER_ID = re.compile(r"^[0-9a-fA-F-]{8,64}$")
+_CLIENT_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 SIDES = ("buy", "sell")
 ORDER_TYPES = ("market", "limit")
 
@@ -75,15 +76,20 @@ class BrokerOrder:
     limit_price: float | None
     status: str
     filled_avg_price: float | None
+    filled_qty: float = 0.0
 
 
 @dataclass(frozen=True)
 class OrderRequest:
     symbol: str  # as the app writes it: AAPL or BTC-USD
     side: str
-    qty: float
+    qty: float  # ignored (may be 0) when ``notional`` is given
     type: str = "market"
     limit_price: float | None = None
+    #: Dollars to buy instead of a quantity (market buys only; Alpaca fills the fraction).
+    notional: float | None = None
+    #: Unique id chosen by the caller: Alpaca rejects a second order with the same one.
+    client_order_id: str | None = None
 
 
 def to_alpaca_symbol(symbol: str) -> tuple[str, bool]:
@@ -105,8 +111,17 @@ def validate_order(order: OrderRequest) -> None:
     to_alpaca_symbol(order.symbol)
     if order.side not in SIDES or order.type not in ORDER_TYPES:
         raise UserError("bad side/type", user_message="Lado o tipo de orden no válido.")
-    if not 0 < order.qty <= 1_000_000:
+    if order.notional is not None:
+        if order.side != "buy" or order.type != "market" or not 1 <= order.notional <= 1_000_000:
+            raise UserError(
+                "bad notional",
+                user_message="Una orden por monto solo puede ser una compra a mercado de "
+                "1 dólar o más.",
+            )
+    elif not 0 < order.qty <= 1_000_000:
         raise UserError("bad qty", user_message="La cantidad debe ser mayor que cero.")
+    if order.client_order_id is not None and not _CLIENT_ID.match(order.client_order_id):
+        raise UserError("bad client id", user_message="Identificador de orden no válido.")
     if order.type == "limit" and not (order.limit_price and order.limit_price > 0):
         raise UserError("bad limit", user_message="Indique un precio límite mayor que cero.")
 
@@ -125,6 +140,7 @@ def _order(d: Mapping[str, Any]) -> BrokerOrder:
         limit_price=number(d.get("limit_price")),
         status=str(d.get("status", "")),
         filled_avg_price=number(d.get("filled_avg_price")),
+        filled_qty=number(d.get("filled_qty")) or 0.0,
     )
 
 
@@ -231,12 +247,25 @@ class AlpacaPaperClient:
             "symbol": symbol,
             "side": order.side,
             "type": order.type,
-            "qty": _qty(order.qty),
             "time_in_force": "gtc" if crypto else "day",
         }
+        if order.notional is not None:
+            payload["notional"] = f"{order.notional:.2f}"
+        else:
+            payload["qty"] = _qty(order.qty)
+        if order.client_order_id:
+            payload["client_order_id"] = order.client_order_id
         if order.type == "limit":
             payload["limit_price"] = repr(float(order.limit_price or 0))
         d = self._request("POST", "/v2/orders", payload)
+        if not isinstance(d, dict):
+            raise ProviderError("alpaca: bad order response")
+        return _order(d)
+
+    def get_order(self, order_id: str) -> BrokerOrder:
+        if not _ORDER_ID.match(order_id):
+            raise UserError("bad order id", user_message="Identificador de orden no válido.")
+        d = self._request("GET", f"/v2/orders/{order_id}")
         if not isinstance(d, dict):
             raise ProviderError("alpaca: bad order response")
         return _order(d)

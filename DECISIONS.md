@@ -1159,3 +1159,24 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   journal; this one mirrors what the Alpaca account holds. Nothing is copied between them.
 - Not on the phone: the Android app has no simulated portfolio either.
 - Tests use an injected transport (no network); `broker` is a core layer without Qt.
+
+## D-077 — Automatic paper orders for the strategy profiles
+
+- **Paper only, run by the user.** `autotrade_cli` uses the same paper client as the Alpaca
+  window (fixed URL). It is a command the user runs or schedules (Windows Task Scheduler);
+  Claude's own scheduled task only simulates and never sends orders. Dry run is the default;
+  `--send` is needed to place anything.
+- Each profile owns two slots (QQQ and BTC-USD, 50 USD each). A local ledger
+  (`forward_test/autotrade.json`) records every slot's quantity and cash, because Alpaca only
+  keeps one position per symbol for the whole account.
+- Reconciliation, not events: each run compares what the strategy wants now (replay since
+  the test's start date, completed bars only) with the ledger and sends only the difference:
+  a market buy by dollar amount, or a market sell of the quantity the slot holds (capped by
+  the account's position). A missed run catches up; a repeated run sends nothing.
+- Orders carry a deterministic `client_order_id` (profile, bar, symbol, side), so Alpaca
+  rejects a duplicate even if the ledger were lost. The ledger is saved right after each
+  order and an unfinished order blocks its slot until it is seen as filled or dead.
+- Long only: a slot never sells what it does not hold. Fees on crypto are taken by Alpaca
+  from the asset, so sells use the smaller of the ledger and the account quantity.
+- Limits: slots buy late if the signal is older than the run (the price may be worse than
+  in the backtest); stock orders sent when the market is closed wait for the next session.
