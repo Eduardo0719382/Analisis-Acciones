@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
 from analisis_acciones import __version__
 from analisis_acciones.alerts.service import AlertEvent, AlertService
 from analisis_acciones.app.crash_guard import SessionGuard, SessionStart
+from analisis_acciones.broker.alpaca import AlpacaPaperClient
 from analisis_acciones.charts.chart_widget import ChartWidget
 from analisis_acciones.charts.overlays import (
     elliott_overlay,
@@ -72,6 +73,7 @@ from analisis_acciones.services.update_service import UpdateCheck, UpdateService
 from analisis_acciones.services.watchlist_service import WatchlistService
 from analisis_acciones.ui import strings
 from analisis_acciones.ui.alerts_panel import AlertsPanel
+from analisis_acciones.ui.alpaca_dialog import AlpacaDialog
 from analisis_acciones.ui.analysis_panel import AnalysisPanel
 from analisis_acciones.ui.backtest_dialog import BacktestDialog
 from analisis_acciones.ui.comparison_dialog import ComparisonDialog
@@ -142,6 +144,7 @@ class MainWindow(QMainWindow):
         super().__init__(parent)
         self._settings = settings
         self._key_store = key_store
+        self._alpaca_client: AlpacaPaperClient | None = None
         self._session_guard = session_guard
         self._backup_conn = backup_conn
         self._data_root = data_root
@@ -457,6 +460,9 @@ class MainWindow(QMainWindow):
         self.data_sources_action = QAction(strings.ACTION_DATA_SOURCES, self)
         self.data_sources_action.triggered.connect(lambda: self.open_data_sources())
         view_menu.addAction(self.data_sources_action)
+        self.alpaca_action = QAction(strings.ACTION_ALPACA, self)
+        self.alpaca_action.triggered.connect(lambda: self.open_alpaca())
+        view_menu.addAction(self.alpaca_action)
         self.benchmark_action = QAction(self)
         self.benchmark_action.setCheckable(True)
         self.benchmark_action.setChecked(self._settings.benchmark_on())
@@ -654,6 +660,19 @@ class MainWindow(QMainWindow):
             self._key_store = KeyringStore()
         dialog = DataSourcesDialog(self._settings, self._key_store, self)
         dialog.sources_changed.connect(self._on_sources_changed)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        dialog.open()
+        return dialog
+
+    def open_alpaca(self) -> AlpacaDialog:
+        if self._key_store is None:
+            self._key_store = KeyringStore()
+        if self._alpaca_client is None:
+            keys = self._key_store
+            self._alpaca_client = AlpacaPaperClient(
+                lambda: keys.get("alpaca_id"), lambda: keys.get("alpaca_secret")
+            )
+        dialog = AlpacaDialog(self._key_store, self._alpaca_client, self)
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         dialog.open()
         return dialog

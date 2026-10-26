@@ -28,6 +28,9 @@ SIGNUP_URLS = {
     "finnhub": "https://finnhub.io/register",
     "twelvedata": "https://twelvedata.com/register",
 }
+#: Alpaca paper-trading credentials (key id + secret). Kept apart from SERVICES so the
+#: data-source dialogs, which list SERVICES, do not offer them as price sources.
+BROKER_SERVICES = {"alpaca_id": "Alpaca (clave)", "alpaca_secret": "Alpaca (secreto)"}
 KEYRING_SERVICE = "AnalisisAcciones"
 _KEY = re.compile(r"^[A-Za-z0-9_\-]{8,128}$")
 
@@ -37,13 +40,14 @@ def env_name(service: str) -> str:
 
 
 def clean_key(service: str, raw: str) -> str:
-    if service not in SERVICES:
+    names = {**SERVICES, **BROKER_SERVICES}
+    if service not in names:
         raise UserError(f"unknown service {service!r}", user_message="Servicio desconocido.")
     key = raw.strip()
     if not _KEY.match(key):
         raise UserError(
             "malformed api key",
-            user_message=f"La clave de {SERVICES[service]} no tiene un formato válido "
+            user_message=f"La clave de {names[service]} no tiene un formato válido "
             "(solo letras, números, guiones; de 8 a 128 caracteres).",
         )
     return key

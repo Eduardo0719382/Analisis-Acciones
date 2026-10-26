@@ -1143,3 +1143,19 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   (401/403/429), obtains a session cookie and a "crumb" token as browsers and yfinance do;
   the crumb is validated against a strict pattern before it is ever sent back. In GitHub's
   runners Yahoo still refuses the plain client even with the crumb (see P-019).
+
+## D-076 — Simulated orders on Alpaca paper trading
+
+- **Paper only.** `broker/alpaca.py` talks to `paper-api.alpaca.markets` and nothing else; the
+  URL is a constant, not a setting, so the program cannot send orders with real money. The
+  window says so and every order asks for confirmation before it is sent.
+- Credentials (key id and secret) live in the same OS credential store as the data-source keys
+  (`BROKER_SERVICES` in `api_keys`, kept out of `SERVICES` so the data-source dialog does not
+  offer Alpaca as a price source). They travel in headers and never appear in errors or logs.
+- Scope: account, positions, recent orders, market/limit orders for US stocks (`AAPL`) and
+  crypto against USD (`BTC-USD` → `BTC/USD`, good-till-cancelled), and cancelling open
+  orders. Stocks use "day" orders. No shorting helpers, options or bracket orders.
+- Separate from the local paper portfolio (`portfolio/`): that one keeps the user's own
+  journal; this one mirrors what the Alpaca account holds. Nothing is copied between them.
+- Not on the phone: the Android app has no simulated portfolio either.
+- Tests use an injected transport (no network); `broker` is a core layer without Qt.
