@@ -45,6 +45,12 @@ reales:
     ejecución parcial.
   - La venta (0,000134376 a 80 030,17) pagó 0,03 USD.
   - Ida y vuelta: −0,07 USD, igual en la cuenta y en el libro.
+- **Segunda ida y vuelta de BTC** (10 USD, a petición del usuario):
+  - Compra: 0,000122586 BTC a 79 970,89, con una comisión de 0,000000307 BTC.
+  - Venta: 0,000122279 a 79 987,32, con una comisión de 0,03 USD.
+  - Resultado: la cuenta −0,05 USD y el libro −0,06. Es 1 centavo de diferencia, porque la
+    regla de redondeo de Alpaca no se puede fijar con dos muestras; el libro queda del lado
+    prudente. La revisión debe vigilar si la diferencia se acumula.
 - **Orden que nunca llegó** a Alpaca (rechazada por el mínimo de 10 USD): la reconciliación
   la marcó como «no enviada» y liberó lo reservado.
 - **Compra y venta de acciones:** pendiente, porque la bolsa estaba cerrada (ver la semana 1).
