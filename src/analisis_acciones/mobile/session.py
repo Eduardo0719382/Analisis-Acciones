@@ -35,6 +35,9 @@ from analisis_acciones.analysis.model import Direction
 from analisis_acciones.data.freshness import is_crypto
 from analisis_acciones.models.errors import AppError, UserError
 from analisis_acciones.models.market import Interval, SearchResult
+from analisis_acciones.providers.base import MarketDataProvider
+from analisis_acciones.providers.coingecko import CoinGeckoProvider
+from analisis_acciones.providers.routing import CryptoSourceRouter
 from analisis_acciones.providers.yahoo import YahooClient, YahooFinanceProvider
 from analisis_acciones.providers.yahoo_http import YahooHttpClient
 from analisis_acciones.services.market_data_service import MarketDataService
@@ -110,6 +113,7 @@ class AssetView:
     as_of: str
     bars: pd.DataFrame
     in_progress: bool
+    source: str
     signals: list[SignalLine]
     exhaustion: ExhaustionView
     notices: tuple[str, ...] = ()
@@ -208,22 +212,33 @@ def exhaustion_view(a: Assessment) -> ExhaustionView:
 # Session ---------------------------------------------------------------------------------
 class MobileSession:
     def __init__(self, root: Path, client: YahooClient | None = None,
-                 clock: Callable[[], datetime] = lambda: datetime.now(UTC)) -> None:  # fmt: skip
+                 clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+                 crypto_provider: MarketDataProvider | None = None) -> None:  # fmt: skip
         root.mkdir(parents=True, exist_ok=True)
         path = root / DATABASE
         self._conn = open_database(path)
-        self.market = MarketDataService(
-            YahooFinanceProvider(client or YahooHttpClient()), open_database(path), clock
+        self.settings = SettingsService(SettingsRepository(self._conn))
+        provider = CryptoSourceRouter(
+            YahooFinanceProvider(client or YahooHttpClient()),
+            crypto_provider or CoinGeckoProvider(),
+            lambda: self.settings.crypto_source() == "coingecko",
         )
+        self.market = MarketDataService(provider, open_database(path), clock)
         self.alerts = AlertService(open_database(path), self.market, clock)
         self.lists = WatchlistService(self._conn)
-        self.settings = SettingsService(SettingsRepository(self._conn))
         self._list_id = self.lists.lists()[0].id
 
     def close(self) -> None:
         self.alerts.close()
         self.market.close()
         self._conn.close()
+
+    # Crypto source ----------------------------------------------------------------------
+    def crypto_source(self) -> str:
+        return self.settings.crypto_source()
+
+    def set_crypto_source(self, source: str) -> None:
+        self.settings.set_crypto_source(source)
 
     # Watchlist ------------------------------------------------------------------------
     def symbols(self) -> list[str]:
@@ -269,6 +284,7 @@ class MobileSession:
         return AssetView(
             loaded.series.symbol, name, price_text(last), change_text(change), change,
             f"{pd.Timestamp(bars.index[-1]):%d/%m/%Y}", bars, loaded.session_in_progress,
+            loaded.series.source,
             signals, exhaustion_view(assess(closed, self.settings.exhaustion_params())),
             tuple(notices),
         )  # fmt: skip

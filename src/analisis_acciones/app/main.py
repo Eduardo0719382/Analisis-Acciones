@@ -22,6 +22,8 @@ from analisis_acciones.app.error_handler import install_excepthook
 from analisis_acciones.app.logging_setup import configure_logging
 from analisis_acciones.app.paths import APP_NAME, AppPaths
 from analisis_acciones.models.errors import AppError, user_message_for
+from analisis_acciones.providers.coingecko import CoinGeckoProvider
+from analisis_acciones.providers.routing import CryptoSourceRouter
 from analisis_acciones.providers.yahoo import YahooFinanceProvider
 from analisis_acciones.services.backup import apply_pending_restore
 from analisis_acciones.services.drawing_service import DrawingService
@@ -137,7 +139,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return 0
             settings.accept_disclaimer()
 
-        market = MarketDataService(YahooFinanceProvider(), market_conn)
+        provider = CryptoSourceRouter(
+            YahooFinanceProvider(),
+            CoinGeckoProvider(),
+            lambda: settings.crypto_source() == "coingecko",
+        )
+        market = MarketDataService(provider, market_conn)
         alerts = AlertService(alerts_conn, market)
         window = MainWindow(
             settings,

@@ -1081,3 +1081,21 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
 - Alerts move between devices as an exported JSON file (validated as data on import). Alerts
   are checked while the app is open (start, resume, every 15 minutes); background
   notifications need a Flet extension that is still young and are left for later.
+
+## D-073 — CoinGecko as an alternative crypto source
+
+- `CoinGeckoProvider` uses the free public API (no key): `/simple/price` for quotes,
+  `/coins/{id}/market_chart?interval=daily` for history (365 days) and `/search` for ids.
+  Ticker -> id: a table of frequent coins (checked by a live test) and otherwise the search
+  result with that symbol and the best market-cap rank. Yahoo's numbered tickers
+  (`UNI7083-USD`) are reduced to the coin symbol.
+- The daily point at 00:00 UTC of day D is stored as the close of D-1, matching Yahoo's
+  crypto day; the latest point is the close so far of the current day.
+- The free API has no daily open/high/low. Bars carry the close in all four price columns
+  (nothing is estimated) and every series from this source shows a notice saying so; the
+  desktop chart switches to a line and the phone draws a line instead of candles.
+- `CryptoSourceRouter` sends crypto pairs to the chosen source and everything else (and
+  crypto intraday, which CoinGecko does not offer for free) to Yahoo. The setting is read at
+  every call. `MarketDataService` refetches a cached series whose source differs from the
+  current one, so two sources are never mixed in one series.
+- Rate limits (HTTP 429): one retry after 20 s, then a clear message.

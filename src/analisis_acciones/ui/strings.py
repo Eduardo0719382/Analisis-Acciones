@@ -4,6 +4,20 @@ APP_TITLE = "Análisis de Acciones"
 
 SEARCH_PLACEHOLDER = "Buscar ticker, empresa o cripto (BTC-USD)…"
 SEARCH_CRYPTO = "criptomoneda"
+MENU_CRYPTO_SOURCE = "Fuente de &criptomonedas"
+CRYPTO_SOURCES = (
+    (
+        "yahoo",
+        "Yahoo Finance (recomendada)",
+        "Velas completas (apertura, máximo, mínimo y cierre), historia larga e intradía.",
+    ),
+    (
+        "coingecko",
+        "CoinGecko",
+        "Precio de CoinGecko: un cierre diario y 365 días de historia (sin velas). El intradía "
+        "sigue viniendo de Yahoo. Datos de CoinGecko (plan gratuito, pocas consultas por minuto).",
+    ),
+)
 SEARCH_NO_RESULTS = "Sin resultados"
 SEARCH_SEARCHING = "Buscando…"
 SEARCH_RECENT = "Recientes"

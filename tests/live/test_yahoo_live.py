@@ -175,3 +175,24 @@ def test_http_client_full_history_quote_and_search(http_provider: YahooFinancePr
     assert len(hourly) > 100
     with pytest.raises(UserError):
         http_provider.get_historical_data("ZZZZQQQX", Interval.D1)
+
+
+def test_coingecko_daily_history_and_known_ids() -> None:
+    """CoinGecko (free public API): BTC history and every id the program knows exist."""
+    import json as _json
+
+    from analisis_acciones.providers.coingecko import API, KNOWN_IDS, CoinGeckoProvider
+    from analisis_acciones.providers.yahoo_http import http_get
+
+    gecko = CoinGeckoProvider()
+    series = gecko.get_historical_data("BTC-USD", Interval.D1)
+    bars = series.bars
+    assert 300 <= len(bars) <= 370
+    assert series.last_date is not None and series.last_date >= date.today() - timedelta(days=2)
+    assert (bars["close"] > 0).all()
+    quote = gecko.get_quote("BTC-USD")
+    assert quote.price is not None and quote.price > 0
+    ids = ",".join(sorted(set(KNOWN_IDS.values())))
+    found = _json.loads(http_get(f"{API}/simple/price?ids={ids}&vs_currencies=usd"))
+    missing = sorted(set(KNOWN_IDS.values()) - set(found))
+    assert not missing, missing

@@ -65,6 +65,10 @@ class MarketDataProvider(ABC):
         """Trading currency of ``symbol`` (ISO code as the source reports it), None if unknown."""
         return None
 
+    def source_for(self, symbol: str, interval: Interval = Interval.D1) -> str:
+        """Name of the source that serves ``symbol`` (cached data from another is refetched)."""
+        return self.name
+
     @abstractmethod
     def get_available_intervals(self) -> list[Interval]:
         """Intervals this provider can return directly from get_historical_data()."""

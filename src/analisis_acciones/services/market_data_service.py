@@ -61,6 +61,8 @@ from analisis_acciones.models.market import (
     SearchResult,
 )
 from analisis_acciones.providers.base import MarketDataProvider, normalize_symbol
+from analisis_acciones.providers.coingecko import CLOSE_ONLY_NOTE
+from analisis_acciones.providers.coingecko import SOURCE_NAME as COINGECKO
 from analisis_acciones.storage.bar_repository import BarRepository
 from analisis_acciones.storage.intraday_repository import IntradayRepository
 from analisis_acciones.storage.recent_repository import RecentSymbolRepository
@@ -113,6 +115,10 @@ class WatchRow:
     as_of: date | None
     stale: bool = False
     error: str | None = None
+
+
+#: Notices shown with every series of a source (what it lacks), also when served from cache.
+SOURCE_NOTES = {COINGECKO: CLOSE_ONLY_NOTE}
 
 
 def is_csv_symbol(symbol: str) -> bool:
@@ -285,6 +291,10 @@ class MarketDataService:
             meta = self._bars.meta(symbol)
             cached = self._bars.load(symbol) if meta else None
 
+        if meta is not None and meta.source != self._provider.source_for(symbol):
+            # The source was changed (e.g. Yahoo -> CoinGecko for crypto): never mix the two.
+            logger.info("%s: source changed from %s; refetching", symbol, meta.source)
+            meta, cached = None, None
         if meta is not None and cached is not None and not cached.empty:
             if not needs_refresh(meta.fetched_at, now, is_crypto(symbol)):
                 return self._result(symbol, cached, meta.source, meta.fetched_at, now, True)
@@ -358,6 +368,9 @@ class MarketDataService:
         notices: tuple[str, ...] = (),
     ) -> LoadResult:
         last = None if bars.empty else bars.index[-1].date()
+        note = SOURCE_NOTES.get(source)
+        if note and note not in notices:
+            notices = (note, *notices)
         series = BarSeries(symbol, Interval.D1, bars, source, tuple(notices))
         return LoadResult(
             series,

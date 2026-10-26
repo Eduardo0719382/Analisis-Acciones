@@ -39,6 +39,9 @@ class ChartGeometry:
     sma20: list[tuple[float, float]] = field(default_factory=list)
     sma50: list[tuple[float, float]] = field(default_factory=list)
     volume: list[tuple[float, float, float, bool]] = field(default_factory=list)  # x, w, top, up
+    #: The source has closes only (no highs/lows): draw ``close_line`` instead of candles.
+    close_only: bool = False
+    close_line: list[tuple[float, float]] = field(default_factory=list)
     price_high: float = 0.0
     price_low: float = 0.0
     first: str = ""
@@ -99,6 +102,9 @@ def geometry(bars: pd.DataFrame, width: float, height: float, period: str = "6M"
                 volume.append((x(i), body, vol_top + vol_h * (1 - v / vmax), candle.up))
     line20 = [(x(i), y(v)) for i, v in enumerate(s20) if v == v]
     line50 = [(x(i), y(v)) for i, v in enumerate(s50) if v == v]
+    close_only = bool((cut["high"] == cut["low"]).all())
+    close_line = [(x(i), y(float(v))) for i, v in enumerate(cut["close"])] if close_only else []
     index = pd.DatetimeIndex(cut.index)
-    return ChartGeometry(width, height, candles, line20, line50, volume, float(high), float(low),
+    return ChartGeometry(width, height, [] if close_only else candles, line20, line50, volume,
+                         close_only, close_line, float(high), float(low),
                          f"{index[0]:%d/%m/%Y}", f"{index[-1]:%d/%m/%Y}")  # fmt: skip

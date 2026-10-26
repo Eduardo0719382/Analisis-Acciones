@@ -27,6 +27,7 @@ from analisis_acciones.mobile.updates import (
     latest_build,
     newer_than,
 )
+from analisis_acciones.models.errors import UserError
 from tests.synthetic import FakeYahooClient, synthetic_daily
 from tests.unit.test_exhaustion import bars_from, rally
 
@@ -147,3 +148,17 @@ def test_update_check() -> None:
     assert not newer_than(BuildInfo("0.1.0", 42), found)
     assert latest_build(lambda u: _release()) is None
     assert current_build().build == 0  # development copy: no build_info.json
+
+
+def test_close_only_series_is_drawn_as_a_line(session: MobileSession) -> None:
+    bars = synthetic_daily(sessions=200)
+    for col in ("open", "high", "low"):
+        bars[col] = bars["close"]
+    g = geometry(bars, 360, 240, "3M")
+    assert g.close_only and g.candles == [] and len(g.close_line) == PERIODS["3M"]
+    assert not geometry(synthetic_daily(sessions=200), 360, 240).close_only
+    assert session.crypto_source() == "yahoo"
+    session.set_crypto_source("coingecko")
+    assert session.crypto_source() == "coingecko"
+    with pytest.raises(UserError):
+        session.set_crypto_source("otra")

@@ -71,6 +71,12 @@ def chart_canvas(view: AssetView, width: float, period: str, dark: bool) -> ft.C
     height = 250.0
     g = geometry(view.bars, width, height, period)
     shapes: list[Any] = []
+    if g.close_only and len(g.close_line) > 1:
+        path: list[Any] = [cv.Path.MoveTo(*g.close_line[0])]
+        path += [cv.Path.LineTo(x, y) for x, y in g.close_line[1:]]
+        shapes.append(
+            cv.Path(path, paint=ft.Paint(color=UP, stroke_width=2, style=ft.PaintingStyle.STROKE))
+        )
     for c in g.candles:
         color = UP if c.up else DOWN
         shapes.append(cv.Line(c.x, c.high, c.x, c.low, paint=ft.Paint(color=color, stroke_width=1)))
@@ -413,7 +419,8 @@ class MobileApp:
                         else ""
                     )
                 ),
-                *[small(n, DOWN) for n in view.notices],
+                small(f"Fuente: {view.source}"),
+                *[small(n) for n in view.notices],
             ],
             spacing=2,
         )
@@ -806,6 +813,15 @@ class MobileApp:
             on_change=self.on_theme,
             show_selected_icon=False,
         )
+        crypto = ft.SegmentedButton(
+            segments=[
+                ft.Segment(value="yahoo", label=ft.Text("Yahoo Finance")),
+                ft.Segment(value="coingecko", label=ft.Text("CoinGecko")),
+            ],
+            selected=[self.session.crypto_source()],
+            on_change=self.on_crypto_source,
+            show_selected_icon=False,
+        )
         content = ft.ListView(
             [
                 section("Versión"),
@@ -825,6 +841,13 @@ class MobileApp:
                     "sola: la app la descarga y usted confirma la instalación."
                 ),
                 ft.Divider(),
+                section("Datos de criptomonedas"),
+                crypto,
+                small(
+                    "Yahoo Finance: velas completas e intradía. CoinGecko: un precio por día y "
+                    "365 días (el gráfico se ve como línea); las acciones siempre usan Yahoo."
+                ),
+                ft.Divider(),
                 section("Tema"),
                 theme,
                 ft.Divider(),
@@ -836,6 +859,12 @@ class MobileApp:
             expand=True,
         )
         self.set_body("Ajustes", content, actions=[])
+
+    def on_crypto_source(self, e: Any) -> None:
+        source = str((e.control.selected or ["yahoo"])[0])
+        self.session.set_crypto_source(source)
+        name = "CoinGecko" if source == "coingecko" else "Yahoo Finance"
+        self.toast(f"Las criptomonedas se cargarán desde {name}.")
 
     def on_theme(self, e: Any) -> None:
         mode = str((e.control.selected or ["system"])[0])

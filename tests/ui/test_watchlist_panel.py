@@ -186,3 +186,11 @@ def test_altcoin_example_list(
     assert panel.symbols() == list(ALTCOIN_EXAMPLE)
     assert "BTC-USD" not in ALTCOIN_EXAMPLE
     assert all(is_crypto(s) for s in ALTCOIN_EXAMPLE)
+
+
+def test_crypto_source_menu(window: MainWindow, settings: SettingsService) -> None:
+    assert window.crypto_source_actions["yahoo"].isChecked()
+    window.crypto_source_actions["coingecko"].trigger()
+    assert settings.crypto_source() == "coingecko"
+    assert window.crypto_source_actions["coingecko"].isChecked()
+    assert not window.crypto_source_actions["yahoo"].isChecked()

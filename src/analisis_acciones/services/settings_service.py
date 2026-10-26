@@ -47,6 +47,8 @@ KEY_CALENDAR_DAYS = "scanner.calendar_notice_days"
 KEY_CALENDAR_NOTIFIED = "scanner.calendar_notified"
 KEY_EXHAUSTION = "analysis.exhaustion_params"
 KEY_EXHAUSTION_MARKERS = "chart.exhaustion_markers"
+KEY_CRYPTO_SOURCE = "data.crypto_source"
+CRYPTO_SOURCES = ("yahoo", "coingecko")
 KEY_EXHAUSTION_PROVEN = "scanner.exhaustion_proven_only"
 DEFAULT_CALENDAR_DAYS = 3
 MAX_CALENDAR_DAYS = 30
@@ -253,6 +255,16 @@ class SettingsService:
 
     def set_exhaustion_proven_only(self, enabled: bool) -> None:
         self._repo.set(KEY_EXHAUSTION_PROVEN, bool(enabled))
+
+    def crypto_source(self) -> str:
+        """Price source for cryptocurrencies: "yahoo" (default) or "coingecko"."""
+        raw = self._repo.get(KEY_CRYPTO_SOURCE)
+        return raw if raw in CRYPTO_SOURCES else "yahoo"
+
+    def set_crypto_source(self, source: str) -> None:
+        if source not in CRYPTO_SOURCES:
+            raise UserError(f"unknown source {source!r}", user_message="Fuente no válida.")
+        self._repo.set(KEY_CRYPTO_SOURCE, source)
 
     def exhaustion_markers(self) -> bool:
         return self._repo.get(KEY_EXHAUSTION_MARKERS) is True

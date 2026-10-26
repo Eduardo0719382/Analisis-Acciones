@@ -13,7 +13,7 @@ from typing import Any
 import pandas as pd
 import shiboken6
 from PySide6.QtCore import QByteArray, QLocale, Qt, QTimer
-from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -48,6 +48,7 @@ from analisis_acciones.charts.overlays import (
 )
 from analisis_acciones.charts.payload import chart_times, future_times
 from analisis_acciones.data.export import bars_to_csv
+from analisis_acciones.data.freshness import is_crypto
 from analisis_acciones.indicators.functions import volume_profile
 from analisis_acciones.indicators.registry import IndicatorConfig
 from analisis_acciones.models.errors import AppError, UserError, user_message_for
@@ -450,6 +451,18 @@ class MainWindow(QMainWindow):
         self.volume_profile_action.setStatusTip(self.volume_profile_action.toolTip())
         self.volume_profile_action.toggled.connect(self._on_volume_profile_toggled)
         view_menu.addAction(self.volume_profile_action)
+        source_menu = view_menu.addMenu(strings.MENU_CRYPTO_SOURCE)
+        source_menu.setToolTipsVisible(True)
+        self.crypto_source_group = QActionGroup(self)
+        self.crypto_source_actions: dict[str, QAction] = {}
+        for key, label, tip in strings.CRYPTO_SOURCES:
+            action = QAction(label, self, checkable=True)
+            action.setToolTip(tip)
+            action.setChecked(self._settings.crypto_source() == key)
+            action.triggered.connect(lambda _c=False, k=key: self.set_crypto_source(k))
+            self.crypto_source_group.addAction(action)
+            source_menu.addAction(action)
+            self.crypto_source_actions[key] = action
         self.benchmark_action = QAction(self)
         self.benchmark_action.setCheckable(True)
         self.benchmark_action.setChecked(self._settings.benchmark_on())
@@ -641,6 +654,11 @@ class MainWindow(QMainWindow):
         self.chart_type_combo.setCurrentIndex(max(index, 0))
         self.chart.set_chart_type(self.chart_type_combo.currentData())
         self.chart_type_combo.currentIndexChanged.connect(self._on_chart_type_changed)
+
+    def set_crypto_source(self, source: str) -> None:
+        self._settings.set_crypto_source(source)
+        if self.current_result is not None and is_crypto(self.current_result.series.symbol):
+            self.refresh_current()
 
     def _on_chart_type_changed(self, _index: int) -> None:
         chart_type = str(self.chart_type_combo.currentData())
@@ -1290,6 +1308,12 @@ class MainWindow(QMainWindow):
         self._settings.set_last_opened(series.symbol, series.interval.value)
 
         interval_label = strings.INTERVAL_LABELS.get(series.interval.value, series.interval.value)
+        # A close-only source (CoinGecko) has no candle bodies: show it as a line.
+        bars = series.bars
+        close_only = not bars.empty and bool((bars["high"] == bars["low"]).all())
+        self.chart.set_chart_type(
+            "line" if close_only else str(self.chart_type_combo.currentData())
+        )
         self.chart.show_series(series, f"{series.symbol} · {interval_label}")
         self._refresh_drawings()
         self.projection_panel.set_series(series)
