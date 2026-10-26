@@ -1142,4 +1142,4 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
 - The same client keeps Yahoo's cookies and, the first time Yahoo refuses a plain request
   (401/403/429), obtains a session cookie and a "crumb" token as browsers and yfinance do;
   the crumb is validated against a strict pattern before it is ever sent back. In GitHub's
-  runners the plain client had always been refused (HTTP 429) while yfinance worked.
+  runners Yahoo still refuses the plain client even with the crumb (see P-019).

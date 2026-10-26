@@ -228,3 +228,19 @@
 - **Test-suite note:** one full test run during this work ended with a native crash dump. 9
   further full runs and 25 targeted runs did not reproduce it. This matches the known
   teardown crash P-015 (test-only).
+
+## P-019 — Yahoo refuses the phone's plain HTTPS client from GitHub's servers
+
+- **Symptom:** the live tests of `YahooHttpClient` (used by the Android app, where yfinance
+  cannot be installed) always get HTTP 429 in the GitHub Windows runner, while yfinance works
+  from the same machine at the same moment.
+- **Tried:** bounded back-off with the second Yahoo host (2 s, 6 s); Yahoo's session cookie
+  and crumb, obtained as browsers do. The request carrying a valid crumb is still refused.
+- **Likely cause:** Yahoo blocks by the connection's fingerprint, not by cookies; yfinance
+  avoids it with `curl_cffi` (browser impersonation), a native library not available on
+  Android. Datacenter addresses are treated more strictly than home or mobile connections, so
+  the app may work on the phone, but this could not be verified from here.
+- **Mitigation:** automatic fallback (D-075). On the phone, if Yahoo does not answer, crypto
+  goes to CoinGecko (no key) and stocks to Twelve Data / Alpha Vantage when a key is saved;
+  every series says which source was used.
+- **Status:** open. The live tests stay as an honest signal (that job is allowed to fail).
