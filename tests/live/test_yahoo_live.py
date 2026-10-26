@@ -141,3 +141,37 @@ def test_example_crypto_tickers_exist(provider: YahooFinanceProvider, symbol: st
     start = date.today() - timedelta(days=20)
     series = provider.get_historical_data(symbol, Interval.D1, start=start)
     assert len(series) >= 10, f"{symbol}: {len(series)} bars"
+
+
+@pytest.fixture(scope="module")
+def http_provider() -> YahooFinanceProvider:
+    from analisis_acciones.providers.yahoo_http import YahooHttpClient
+
+    return YahooFinanceProvider(YahooHttpClient())
+
+
+@pytest.mark.parametrize("symbol", ["AAPL", "BTC-USD"])
+def test_http_client_matches_yfinance(
+    provider: YahooFinanceProvider, http_provider: YahooFinanceProvider, symbol: str
+) -> None:
+    """The mobile client returns the same daily closes as yfinance for the same dates."""
+    start = date.today() - timedelta(days=60)
+    ours = http_provider.get_historical_data(symbol, Interval.D1, start=start).bars
+    theirs = provider.get_historical_data(symbol, Interval.D1, start=start).bars
+    common = ours.index.intersection(theirs.index)[:-1]  # the last bar may still be forming
+    assert len(common) >= 20
+    rel = (ours.loc[common, "close"] - theirs.loc[common, "close"]).abs() / theirs.loc[
+        common, "close"
+    ]
+    assert float(rel.max()) < 1e-6
+
+
+def test_http_client_full_history_quote_and_search(http_provider: YahooFinanceProvider) -> None:
+    bars = http_provider.get_historical_data("AAPL", Interval.D1).bars
+    assert len(bars) > 2000 and (bars["splits"] > 0).any() and (bars["dividends"] > 0).any()
+    assert http_provider.get_quote("AAPL").price > 0
+    assert any(r.symbol == "AAPL" for r in http_provider.search_symbol("apple"))
+    hourly = http_provider.get_historical_data("MSFT", Interval.H1).bars
+    assert len(hourly) > 100
+    with pytest.raises(UserError):
+        http_provider.get_historical_data("ZZZZQQQX", Interval.D1)
