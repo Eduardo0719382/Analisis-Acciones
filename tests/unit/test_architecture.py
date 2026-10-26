@@ -24,9 +24,11 @@ CORE_LAYERS = [
     "storage",
     "services",
     "utils",
+    "mobile",  # phone logic: no Qt and no Flet (the Flet screens live in mobile/ at the root)
 ]
 FORBIDDEN = (
     "PySide6",
+    "flet",
     "shiboken6",
     "analisis_acciones.ui",
     "analisis_acciones.charts",
