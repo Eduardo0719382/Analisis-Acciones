@@ -160,3 +160,44 @@ def test_too_many_requests_backs_off_then_reports_rate_limit(fake: Fake) -> None
             "MSFT", Interval.D1
         )
     assert waits == [2.0, 6.0]
+
+
+def test_session_gets_cookie_and_crumb_once_when_refused() -> None:
+    from analisis_acciones.providers.yahoo_http import YahooSession
+
+    seen: list[str] = []
+
+    class Response(io.BytesIO):
+        def __enter__(self) -> Response:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            self.close()
+
+    class Opener:
+        def __init__(self, crumb: bytes) -> None:
+            self.crumb = crumb
+
+        def open(self, request: Any, timeout: float) -> Response:
+            url = request.full_url
+            seen.append(url)
+            if "fc.yahoo.com" in url:
+                raise urllib.error.HTTPError(url, 404, "nf", {}, io.BytesIO(b""))  # type: ignore[arg-type]
+            if "getcrumb" in url:
+                return Response(self.crumb)
+            if "crumb=" not in url:
+                raise urllib.error.HTTPError(url, 429, "Too Many", {}, io.BytesIO(b""))  # type: ignore[arg-type]
+            return Response(json.dumps(chart("AAPL")).encode())
+
+    session = YahooSession()
+    session._opener = Opener(b"Ab1/cD.e")  # type: ignore[assignment]
+    bars = YahooFinanceProvider(YahooHttpClient(session)).get_historical_data("AAPL", Interval.D1)
+    assert len(bars.bars) == 4 and "crumb=Ab1/cD.e" not in seen[-1]  # quoted
+    assert "crumb=Ab1%2FcD.e" in seen[-1] and sum("getcrumb" in u for u in seen) == 1
+
+    seen.clear()
+    bad = YahooSession()
+    bad._opener = Opener(b"<html>not a crumb</html>")  # type: ignore[assignment]
+    with pytest.raises(urllib.error.HTTPError):
+        bad("https://query1.finance.yahoo.com/v8/finance/chart/AAPL?x=1")
+    assert not any("crumb=" in u for u in seen)  # garbage is never sent back

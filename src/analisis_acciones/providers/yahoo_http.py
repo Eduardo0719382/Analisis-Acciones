@@ -16,9 +16,13 @@ listed here are read, with numbers checked by the provider.
 
 from __future__ import annotations
 
+import contextlib
+import http.cookiejar
 import json
 import math
+import re
 import ssl
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -74,6 +78,74 @@ def http_get(url: str, headers: Mapping[str, str] | None = None) -> bytes:
     return body
 
 
+COOKIE_URL = "https://fc.yahoo.com"
+CRUMB_URL = "https://query1.finance.yahoo.com/v1/test/getcrumb"
+_CRUMB = re.compile(r"^[A-Za-z0-9./_\-]{4,40}$")
+
+
+class YahooSession:
+    """Fetcher that keeps Yahoo's cookies and, once Yahoo refuses a plain request
+    (401/403/429), obtains its session cookie and "crumb" token the way a browser does and
+    adds the crumb to later requests. The crumb is checked against a strict pattern."""
+
+    def __init__(self, timeout: float = TIMEOUT_S) -> None:
+        self._jar = http.cookiejar.CookieJar()
+        self._opener = urllib.request.build_opener(
+            urllib.request.HTTPSHandler(context=_ssl_context()),
+            urllib.request.HTTPCookieProcessor(self._jar),
+        )
+        self._timeout = timeout
+        self._crumb: str | None = None
+        self._tried = False
+        self._lock = threading.Lock()
+
+    def _get(self, url: str) -> bytes:
+        request = urllib.request.Request(
+            url, headers={"User-Agent": USER_AGENT, "Accept": "application/json,text/plain,*/*"}
+        )
+        try:
+            with self._opener.open(request, timeout=self._timeout) as resp:
+                body: bytes = resp.read(MAX_BYTES + 1)
+        except urllib.error.HTTPError as exc:
+            exc.url = exc.filename = url.split("?")[0]
+            raise
+        except (urllib.error.URLError, OSError) as exc:
+            raise ConnectionError(f"{url.split('?')[0]}: {exc}") from exc
+        if len(body) > MAX_BYTES:
+            raise ValueError("response too large")
+        return body
+
+    def _with_crumb(self, url: str) -> str:
+        if self._crumb is None:
+            return url
+        return f"{url}{'&' if '?' in url else '?'}crumb={urllib.parse.quote(self._crumb, safe='')}"
+
+    def _handshake(self) -> None:
+        with contextlib.suppress(urllib.error.HTTPError):
+            self._get(COOKIE_URL)  # answers 404 but sets the session cookie
+        crumb = self._get(CRUMB_URL).decode("utf-8", "replace").strip()
+        if _CRUMB.match(crumb):
+            self._crumb = crumb
+
+    def __call__(self, url: str) -> bytes:
+        try:
+            return self._get(self._with_crumb(url))
+        except urllib.error.HTTPError as exc:
+            if exc.code not in (401, 403, 429):
+                raise
+            with self._lock:
+                if self._tried:
+                    raise
+                self._tried = True
+                try:
+                    self._handshake()
+                except (urllib.error.HTTPError, ConnectionError, ValueError):
+                    raise exc from None
+            if self._crumb is None:
+                raise
+            return self._get(self._with_crumb(url))
+
+
 def _epoch(day: date) -> int:
     return int(datetime(day.year, day.month, day.day, tzinfo=UTC).timestamp())
 
@@ -99,9 +171,9 @@ def _number(value: Any) -> float | None:
 class YahooHttpClient:
     """``YahooClient`` over HTTPS with the standard library."""
 
-    def __init__(self, fetch: Fetcher = http_get,
+    def __init__(self, fetch: Fetcher | None = None,
                  sleep: Callable[[float], None] = time.sleep) -> None:  # fmt: skip
-        self._fetch = fetch
+        self._fetch = fetch or YahooSession()
         self._sleep = sleep
 
     def _get(self, url: str) -> bytes:

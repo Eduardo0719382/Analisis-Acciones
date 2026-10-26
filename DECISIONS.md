@@ -1139,3 +1139,7 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
 - **Yahoo HTTP client (phone):** after HTTP 429 it waits 2 s and retries on the second Yahoo
   host, then waits 6 s once more; after that the rate-limit error goes up (and the fallback
   can take over). Bounded so the app never hangs.
+- The same client keeps Yahoo's cookies and, the first time Yahoo refuses a plain request
+  (401/403/429), obtains a session cookie and a "crumb" token as browsers and yfinance do;
+  the crumb is validated against a strict pattern before it is ever sent back. In GitHub's
+  runners the plain client had always been refused (HTTP 429) while yfinance worked.
