@@ -341,7 +341,8 @@ def cmd_analizar(lab: Lab, args: argparse.Namespace) -> int:
 
 
 def _read_decision(path: str) -> dict[str, Any]:
-    text = sys.stdin.read() if path == "-" else Path(path).read_text(encoding="utf-8")
+    # utf-8-sig: files written by PowerShell start with a BOM
+    text = sys.stdin.read() if path == "-" else Path(path).read_text(encoding="utf-8-sig")
     try:
         data = json.loads(text)
     except ValueError as exc:
