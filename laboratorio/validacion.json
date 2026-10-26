@@ -1,0 +1,35 @@
+{
+  "nota": "Perfiles de VALIDACIÓN (no forman parte del experimento): se usan con ANALISIS_LAB_CONFIG y un ANALISIS_ACCIONES_HOME aparte para comprobar fills y costes reales sin tocar los libros de los perfiles.",
+  "perfiles": [
+    {
+      "id": "P91",
+      "nombre": "Validación acciones",
+      "frecuencia": "1h",
+      "universo": [
+        "AAPL"
+      ],
+      "herramientas": [],
+      "limites": {
+        "max_pct_activo": 100,
+        "stop_posicion_pct": 50,
+        "stop_perfil_pct": 50,
+        "max_operaciones_dia": 5
+      }
+    },
+    {
+      "id": "P93",
+      "nombre": "Validación cripto",
+      "frecuencia": "1h",
+      "universo": [
+        "ETH-USD"
+      ],
+      "herramientas": [],
+      "limites": {
+        "max_pct_activo": 100,
+        "stop_posicion_pct": 50,
+        "stop_perfil_pct": 50,
+        "max_operaciones_dia": 5
+      }
+    }
+  ]
+}
