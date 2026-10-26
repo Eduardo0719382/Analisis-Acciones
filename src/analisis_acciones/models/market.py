@@ -61,6 +61,8 @@ class Quote:
     currency: str | None = None
     market_state: str | None = None
     as_of: datetime | None = None
+    #: Name of the source that gave the quote (set by the source router).
+    source: str | None = None
 
     @property
     def change(self) -> float | None:

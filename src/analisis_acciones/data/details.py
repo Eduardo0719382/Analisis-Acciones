@@ -40,6 +40,8 @@ class AssetDetails:
     #: Date of the last bar, or the quote timestamp.
     as_of: date | datetime | None = None
     market_state: str | None = None
+    #: Source of the live quote (e.g. "Finnhub"), when known.
+    quote_source: str | None = None
     #: Reason live data could not be fetched (shown to the user), if any.
     notice: str | None = None
 
@@ -112,6 +114,7 @@ def build_details(
             price_source="quote",
             as_of=quote.as_of,
             market_state=quote.market_state,
+            quote_source=quote.source,
         )
 
     if daily.empty:

@@ -45,6 +45,10 @@ SOURCES = (
                "Gratis con clave: 60 consultas por minuto."),
 )  # fmt: skip
 SOURCE_BY_KEY = {s.key: s for s in SOURCES}
+#: Tried after Yahoo when the chosen source fails (sources without a saved key are skipped
+#: at once, without a request). Finnhub is left out: its free plan rarely has candles.
+STOCK_FALLBACKS = ("twelvedata", "alphavantage")
+CRYPTO_FALLBACKS = ("coingecko", "twelvedata", "alphavantage")
 
 
 def build_router(yahoo: MarketDataProvider, settings: SettingsService,
@@ -55,4 +59,11 @@ def build_router(yahoo: MarketDataProvider, settings: SettingsService,
         "finnhub": FinnhubProvider(lambda: keys.get("finnhub")),
         "twelvedata": TwelveDataProvider(lambda: keys.get("twelvedata")),
     }
-    return SourceRouter(yahoo, sources, settings.stock_source, settings.crypto_source)
+    return SourceRouter(
+        yahoo, sources, settings.stock_source, settings.crypto_source,
+        fallback=settings.auto_fallback,
+        stock_fallbacks=STOCK_FALLBACKS,
+        crypto_fallbacks=CRYPTO_FALLBACKS,
+        quote_source=lambda: "finnhub" if settings.realtime_quotes() and keys.get("finnhub")
+        else None,
+    )  # fmt: skip

@@ -60,6 +60,7 @@ from analisis_acciones.models.market import (
     Quote,
     SearchResult,
 )
+from analisis_acciones.providers.alphavantage import SOURCE_NAME as ALPHAVANTAGE
 from analisis_acciones.providers.base import MarketDataProvider, normalize_symbol
 from analisis_acciones.providers.coingecko import CLOSE_ONLY_NOTE
 from analisis_acciones.providers.coingecko import SOURCE_NAME as COINGECKO
@@ -85,6 +86,8 @@ INTRADAY_OVERLAP_DAYS = 3
 
 
 FUNDAMENTALS_TTL = timedelta(hours=24)
+#: After a fallback, how long the other source's series is used before retrying the chosen one.
+FALLBACK_RETRY = timedelta(hours=1)
 
 
 @dataclass(frozen=True)
@@ -119,6 +122,13 @@ class WatchRow:
 
 #: Notices shown with every series of a source (what it lacks), also when served from cache.
 SOURCE_NOTES = {COINGECKO: CLOSE_ONLY_NOTE}
+#: Sources with a tiny free quota are asked again at most this often (crypto would otherwise
+#: be refreshed every hour; stocks are refreshed once per session anyway).
+SOURCE_MIN_REFRESH = {ALPHAVANTAGE: timedelta(hours=6)}
+
+
+def fallback_held(chosen: str, used: str) -> str:
+    return f"Datos de {used}: {chosen} no respondió hace poco; se volverá a probar en una hora."
 
 
 def is_csv_symbol(symbol: str) -> bool:
@@ -141,6 +151,8 @@ class MarketDataService:
         self._conn = conn
         self._closed = False
         self._search_cache: dict[str, tuple[datetime, list[SearchResult]]] = {}
+        #: symbol -> (chosen source that failed, when another source answered instead)
+        self._fallbacks: dict[str, tuple[str, datetime]] = {}
 
     @contextmanager
     def _db(self) -> Iterator[None]:
@@ -291,12 +303,34 @@ class MarketDataService:
             meta = self._bars.meta(symbol)
             cached = self._bars.load(symbol) if meta else None
 
-        if meta is not None and meta.source != self._provider.source_for(symbol):
-            # The source was changed (e.g. Yahoo -> CoinGecko for crypto): never mix the two.
-            logger.info("%s: source changed from %s; refetching", symbol, meta.source)
-            meta, cached = None, None
+        chosen = self._provider.source_for(symbol)
+        if meta is not None and meta.source != chosen:
+            # Another source than the chosen one: the user switched sources, or the chosen
+            # one failed and another answered (fallback). The whole history is fetched again
+            # (two sources are never mixed in one series), except while a recent fallback
+            # holds: the chosen source is retried at most once every FALLBACK_RETRY.
+            have = cached is not None and not cached.empty
+            held = self._fallbacks.get(symbol)
+            if have and cached is not None and held is not None and held[0] == chosen \
+                    and now - held[1] < FALLBACK_RETRY \
+                    and not needs_refresh(meta.fetched_at, now, is_crypto(symbol)):  # fmt: skip
+                return self._result(symbol, cached, meta.source, meta.fetched_at, now, True,
+                                    notices=(fallback_held(chosen, meta.source),))  # fmt: skip
+            logger.info("%s: cached from %s, chosen %s; refetching", symbol, meta.source, chosen)
+            try:
+                return self._fetch_full(symbol, chosen, now)
+            except (NetworkError, ProviderError, DataError) as exc:
+                if not have or cached is None:
+                    raise
+                logger.warning("Refetch of %s failed, serving cache: %s", symbol, exc)
+                return self._result(
+                    symbol, cached, meta.source, meta.fetched_at, now, True,
+                    stale=True, notices=(exc.user_message,),
+                )  # fmt: skip
         if meta is not None and cached is not None and not cached.empty:
-            if not needs_refresh(meta.fetched_at, now, is_crypto(symbol)):
+            if not needs_refresh(
+                meta.fetched_at, now, is_crypto(symbol)
+            ) or now - meta.fetched_at < SOURCE_MIN_REFRESH.get(meta.source, timedelta()):
                 return self._result(symbol, cached, meta.source, meta.fetched_at, now, True)
             try:
                 bars, source = self._refresh(symbol, cached, now)
@@ -307,10 +341,16 @@ class MarketDataService:
                     stale=True, notices=(exc.user_message,),
                 )  # fmt: skip
             return self._result(symbol, bars, source, now, now, False)
+        return self._fetch_full(symbol, chosen, now)
 
+    def _fetch_full(self, symbol: str, chosen: str, now: datetime) -> LoadResult:
         series = self._provider.get_historical_data(symbol, Interval.D1)
         with self._db():
             self._bars.replace(symbol, series.source, series.bars, now)
+            if series.source != chosen:
+                self._fallbacks[symbol] = (chosen, now)
+            else:
+                self._fallbacks.pop(symbol, None)
         return self._result(
             symbol, series.bars, series.source, now, now, False, notices=series.warnings
         )

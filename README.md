@@ -154,6 +154,15 @@ blanco porque su motor se detuvo, se recarga automáticamente.
   `…_TWELVEDATA_KEY`. Al cambiar de fuente, los datos guardados de la anterior se descargan
   de nuevo (nunca se mezclan dos fuentes en un mismo gráfico). Datos de cripto de CoinGecko
   por cortesía de [CoinGecko](https://www.coingecko.com).
+
+  - **Cambio automático** (activado por defecto, se puede desactivar): si la fuente elegida
+    no da el historial (sin conexión, consultas agotadas, activo que no tiene), se usa Yahoo u
+    otra fuente con clave, y el gráfico avisa de cuál se usó y por qué. La elegida se vuelve a
+    probar como mucho una vez por hora.
+  - **Alpha Vantage** gasta poco: cuenta las consultas del día y deja de pedir al llegar a 25,
+    y sus datos se actualizan como mucho cada 6 horas.
+  - **Cotización en tiempo real:** con clave de Finnhub, el precio actual de las acciones de
+    EE. UU. en *Detalles* viene de Finnhub (se indica la fuente).
 - **Intervalo:** 15 minutos, 1 hora, Diario, Semanal o Mensual (los dos últimos se calculan a
   partir de los datos diarios). Intradía: solo horario regular (9:30–16:00 de Nueva York, que es
   la hora que muestra el gráfico); Yahoo ofrece unos 60 días de barras de 15 minutos y unos 2 años

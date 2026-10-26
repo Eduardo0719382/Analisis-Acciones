@@ -132,7 +132,11 @@ class DetailsPanel(QFrame):
         else:
             stamp = UNKNOWN
         if details.price_source == "quote":
-            text = strings.DETAILS_SOURCE_QUOTE.format(when=stamp)
+            text = (
+                strings.DETAILS_SOURCE_QUOTE_FROM.format(source=details.quote_source, when=stamp)
+                if details.quote_source
+                else strings.DETAILS_SOURCE_QUOTE.format(when=stamp)
+            )
             if details.market_state:
                 state = strings.MARKET_STATES.get(details.market_state, details.market_state)
                 text += f" · {state}"

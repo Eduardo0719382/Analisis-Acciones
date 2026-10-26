@@ -861,6 +861,11 @@ class MobileApp:
                 self.stock_source,
                 self.crypto_source,
                 self.source_info,
+                ft.Switch(
+                    label="Si la fuente elegida falla, usar otra automáticamente (y avisar)",
+                    value=self.session.auto_fallback(),
+                    on_change=lambda e: self.session.set_auto_fallback(bool(e.control.value)),
+                ),
                 section("Claves"),
                 small(
                     "Se guardan solo en este celular, en el espacio privado de la app. Nunca "

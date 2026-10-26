@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -34,7 +35,7 @@ class DataSourcesDialog(QDialog):
         self._settings = settings
         self._keys = keys
         self.setWindowTitle(strings.DS_TITLE)
-        self.resize(640, 560)
+        self.resize(640, 620)
 
         intro = QLabel(strings.DS_INTRO)
         intro.setWordWrap(True)
@@ -59,6 +60,12 @@ class DataSourcesDialog(QDialog):
         form.addRow("", self.stock_info)
         form.addRow(strings.DS_CRYPTO, self.crypto)
         form.addRow("", self.crypto_info)
+        self.auto_fallback = QCheckBox(strings.DS_AUTO_FALLBACK)
+        self.auto_fallback.setChecked(settings.auto_fallback())
+        self.realtime = QCheckBox(strings.DS_REALTIME)
+        self.realtime.setChecked(settings.realtime_quotes())
+        form.addRow("", self.auto_fallback)
+        form.addRow("", self.realtime)
 
         keys_box = QGroupBox(strings.DS_KEYS)
         keys_layout = QVBoxLayout(keys_box)
@@ -149,6 +156,8 @@ class DataSourcesDialog(QDialog):
                                       self._settings.crypto_source())  # fmt: skip
         self._settings.set_stock_source(stock)
         self._settings.set_crypto_source(crypto)
+        self._settings.set_auto_fallback(self.auto_fallback.isChecked())
+        self._settings.set_realtime_quotes(self.realtime.isChecked())
         if changed:
             self.sources_changed.emit()
         super().accept()

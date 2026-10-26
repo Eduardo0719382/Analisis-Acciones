@@ -1115,3 +1115,27 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   such instead of an empty chart. No source falls back silently to another.
 - Keys pasted in chats or tickets are not used by the program or the tests; live tests run
   only when a key is provided through the environment.
+
+## D-075 — Automatic fallback, Alpha Vantage savings, real-time quotes, Yahoo back-off
+
+- **Fallback (on by default, can be switched off on PC and phone).** When a whole daily
+  history cannot be loaded from the chosen source, `SourceRouter` tries Yahoo and then the
+  configured alternatives (stocks: Twelve Data, Alpha Vantage; crypto: CoinGecko, Twelve
+  Data, Alpha Vantage; sources without a saved key are skipped without a request; Finnhub is
+  left out because its free plan rarely has candles). It is never silent: the series says
+  which source failed, why, and which one answered (this refines D-074).
+- Any failure of an optional source falls back; Yahoo itself only on transient failures
+  (network, rate limit, bad data) — a ticker Yahoo does not know would only spend the user's
+  free quotas elsewhere. Partial refreshes never fall back, so a cached series is never
+  built from two sources. After a fallback, the other source's series is kept and the chosen
+  source is retried at most once an hour (`FALLBACK_RETRY`); if a switch of source fails, the
+  previous cache is served marked as stale instead of an error.
+- **Alpha Vantage** (~25 requests/day): requests are counted per UTC day and none are sent
+  once the budget is spent or Alpha Vantage reports it; its series are refreshed at most every
+  6 hours (`SOURCE_MIN_REFRESH`), so crypto does not spend one request an hour. The count is
+  kept in memory (it restarts with the program): a saving, not a guarantee.
+- **Real-time quotes:** with a Finnhub key (and the option on), the live quote of US stocks in
+  the details panel comes from Finnhub and says so; if Finnhub fails, the regular quote is used.
+- **Yahoo HTTP client (phone):** after HTTP 429 it waits 2 s and retries on the second Yahoo
+  host, then waits 6 s once more; after that the rate-limit error goes up (and the fallback
+  can take over). Bounded so the app never hangs.

@@ -30,6 +30,10 @@ from typing import Any
 import pandas as pd
 
 CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/"
+#: Yahoo serves the same API from a second host; a retry after "too many requests" uses it.
+ALT_HOST = ("://query1.", "://query2.")
+#: Waits (seconds) before each retry after HTTP 429; then the error goes up as a rate limit.
+RETRY_WAITS = (2.0, 6.0)
 SEARCH_URL = "https://query2.finance.yahoo.com/v1/finance/search"
 USER_AGENT = (
     "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -95,11 +99,26 @@ def _number(value: Any) -> float | None:
 class YahooHttpClient:
     """``YahooClient`` over HTTPS with the standard library."""
 
-    def __init__(self, fetch: Fetcher = http_get) -> None:
+    def __init__(self, fetch: Fetcher = http_get,
+                 sleep: Callable[[float], None] = time.sleep) -> None:  # fmt: skip
         self._fetch = fetch
+        self._sleep = sleep
+
+    def _get(self, url: str) -> bytes:
+        """GET with a short, bounded back-off when Yahoo answers "too many requests"."""
+        for attempt, wait in enumerate((*RETRY_WAITS, None)):
+            try:
+                return self._fetch(url)
+            except urllib.error.HTTPError as exc:
+                if exc.code != 429 or wait is None:
+                    raise
+            self._sleep(wait)
+            if attempt == 0:
+                url = url.replace(*ALT_HOST, 1)
+        raise AssertionError("unreachable")  # pragma: no cover
 
     def _json(self, url: str) -> dict[str, Any]:
-        data = json.loads(self._fetch(url).decode("utf-8"))
+        data = json.loads(self._get(url).decode("utf-8"))
         if not isinstance(data, dict):
             raise ValueError("unexpected response")
         return data

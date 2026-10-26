@@ -205,5 +205,8 @@ def test_data_sources_dialog(qtbot: QtBot, window: MainWindow, settings: Setting
     assert dialog.key_status["twelvedata"].text() == "Clave guardada (ABC…890)."
     assert dialog.key_fields["twelvedata"].text() == ""
     dialog.stock.setCurrentIndex(dialog.stock.findData("twelvedata"))
+    assert dialog.auto_fallback.isChecked() and dialog.realtime.isChecked()  # defaults
+    dialog.auto_fallback.setChecked(False)
     dialog.accept()
     assert settings.crypto_source() == "twelvedata" and settings.stock_source() == "twelvedata"
+    assert not settings.auto_fallback() and settings.realtime_quotes()

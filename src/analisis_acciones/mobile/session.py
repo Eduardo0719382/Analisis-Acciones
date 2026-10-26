@@ -245,6 +245,12 @@ class MobileSession:
     def set_stock_source(self, source: str) -> None:
         self.settings.set_stock_source(source)
 
+    def auto_fallback(self) -> bool:
+        return self.settings.auto_fallback()
+
+    def set_auto_fallback(self, enabled: bool) -> None:
+        self.settings.set_auto_fallback(enabled)
+
     def has_key(self, service: str) -> bool:
         return bool(self.keys.get(service))
 

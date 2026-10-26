@@ -6,7 +6,7 @@ import io
 import json
 import sqlite3
 import urllib.error
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -107,7 +107,7 @@ def test_alpha_vantage_compact_fallback_and_limits() -> None:
         av.get_historical_data("AAPL", Interval.D1)
     fake.routes["TIME_SERIES_DAILY"] = {"Error Message": "Invalid API call."}
     with pytest.raises(UserError):
-        av.get_historical_data("AAPL", Interval.D1)
+        AlphaVantageProvider(lambda: KEY, fake).get_historical_data("AAPL", Interval.D1)
     with pytest.raises(UserError, match="key"):
         AlphaVantageProvider(lambda: None, fake).get_historical_data("AAPL", Interval.D1)
 
@@ -224,3 +224,125 @@ def test_market_service_uses_the_chosen_stock_source(conn: sqlite3.Connection) -
     result = market.load("AAPL", Interval.D1)
     assert result.series.source == "Alpha Vantage" and len(result.series.bars) == 3
     assert result.series.last_date == date(2026, 1, 4)
+
+
+# Automatic fallback, Alpha Vantage savings, real-time quotes --------------------------------
+def _settings(conn: sqlite3.Connection) -> SettingsService:
+    from analisis_acciones.storage.settings_repository import SettingsRepository
+
+    return SettingsService(SettingsRepository(conn))
+
+
+def test_failed_source_falls_back_and_is_retried_hourly(conn: sqlite3.Connection) -> None:
+    settings = _settings(conn)
+    settings.set_stock_source("twelvedata")
+    fake = Fake()
+    fake.error = http_error(429)
+    keys = MemoryKeyStore()
+    keys.set("twelvedata", KEY)
+    yahoo_client = FakeYahooClient()
+    router = build_router(YahooFinanceProvider(yahoo_client), settings, keys)
+    router._sources["twelvedata"] = TwelveDataProvider(lambda: KEY, fake)
+    now = [datetime(2026, 1, 8, 22, tzinfo=UTC)]
+    market = MarketDataService(router, conn, lambda: now[0])
+
+    first = market.load("TEST", Interval.D1)
+    assert first.series.source == "Yahoo Finance" and len(fake.calls) == 1
+    assert any("Twelve Data no pudo" in n and "Yahoo Finance" in n for n in first.notices)
+    held = market.load("TEST", Interval.D1)  # within the hour: no new request to Twelve Data
+    assert held.from_cache and len(fake.calls) == 1
+    assert any("se volverá a probar" in n for n in held.notices)
+    now[0] += timedelta(hours=2)
+    market.load("TEST", Interval.D1)
+    assert len(fake.calls) == 2  # retried, still failing, Yahoo again
+
+    settings.set_auto_fallback(False)
+    with pytest.raises(ProviderError):
+        router.get_historical_data("TEST", Interval.D1)
+    settings.set_auto_fallback(True)
+    with pytest.raises(ProviderError):  # partial refreshes never mix sources
+        router.get_historical_data("TEST", Interval.D1, start=date(2026, 1, 1))
+
+
+def test_yahoo_falls_back_only_on_transient_failures(conn: sqlite3.Connection) -> None:
+    settings = _settings(conn)
+    fake = Fake()
+    fake.routes["TIME_SERIES_DAILY"] = av_daily()
+    yahoo_client = FakeYahooClient()
+    router = SourceRouter(
+        YahooFinanceProvider(yahoo_client),
+        {"alphavantage": AlphaVantageProvider(lambda: KEY, fake)},
+        settings.stock_source, settings.crypto_source,
+        fallback=settings.auto_fallback, stock_fallbacks=("alphavantage",),
+    )  # fmt: skip
+    yahoo_client.error = ConnectionError("offline")
+    series = router.get_historical_data("TEST", Interval.D1)
+    assert series.source == "Alpha Vantage" and "Yahoo Finance no pudo" in series.warnings[0]
+    yahoo_client.error = None
+    calls = len(fake.calls)
+    with pytest.raises(UserError):  # unknown at Yahoo: no quota spent elsewhere
+        router.get_historical_data("NOPE", Interval.D1)
+    assert len(fake.calls) == calls
+    assert router.alternatives("^GSPC", Interval.D1, router._primary) == []
+
+
+def test_alpha_vantage_daily_budget_and_slow_refresh(conn: sqlite3.Connection) -> None:
+    now = [datetime(2026, 1, 8, 12, tzinfo=UTC)]
+    fake = Fake()
+    fake.routes["TIME_SERIES_DAILY"] = av_daily()
+    av = AlphaVantageProvider(lambda: KEY, fake, clock=lambda: now[0], budget=2)
+    av.get_historical_data("AAPL", Interval.D1)
+    av.get_historical_data("MSFT", Interval.D1)
+    assert av.requests_left() == 0
+    with pytest.raises(ProviderError, match="rate limit"):
+        av.get_historical_data("IBM", Interval.D1)
+    assert len(fake.calls) == 2  # the third request was never sent
+    now[0] += timedelta(days=1)
+    assert av.requests_left() == 2
+    fake.routes = {"function": {"Information": "We have detected your API key ... 25 requests "
+                                "per day."}}  # fmt: skip
+    with pytest.raises(ProviderError):
+        av.get_historical_data("IBM", Interval.D1)
+    assert av.requests_left() == 0  # Alpha Vantage said so: nothing more today
+
+    settings = _settings(conn)
+    settings.set_crypto_source("alphavantage")
+    fake2 = Fake()
+    fake2.routes["DIGITAL_CURRENCY_DAILY"] = av_daily(3, crypto=True)
+    router = SourceRouter(YahooFinanceProvider(FakeYahooClient()),
+                          {"alphavantage": AlphaVantageProvider(lambda: KEY, fake2)},
+                          settings.stock_source, settings.crypto_source)  # fmt: skip
+    market = MarketDataService(router, conn, lambda: now[0])
+    market.load("BTC-USD", Interval.D1)
+    now[0] += timedelta(hours=2)  # crypto is normally refreshed every hour
+    assert market.load("BTC-USD", Interval.D1).from_cache and len(fake2.calls) == 1
+    now[0] += timedelta(hours=5)
+    market.load("BTC-USD", Interval.D1)
+    assert len(fake2.calls) == 2
+
+
+def test_real_time_quote_from_finnhub(conn: sqlite3.Connection) -> None:
+    settings = _settings(conn)
+    keys = MemoryKeyStore()
+    yahoo_client = FakeYahooClient()
+    yahoo_client.info_payload = {"regularMarketPrice": 5.0, "currency": "USD"}
+    router = build_router(YahooFinanceProvider(yahoo_client), settings, keys)
+    fake = Fake()
+    fake.routes["/quote"] = {"c": 101.5, "pc": 100.0, "o": 100.2, "h": 102, "l": 99,
+                             "t": 1767900000}  # fmt: skip
+    router._sources["finnhub"] = FinnhubProvider(lambda: KEY, fake)
+    assert router.get_quote("TEST").source == "Yahoo Finance"  # no key yet
+    keys.set("finnhub", KEY)
+    quote = router.get_quote("TEST")
+    assert quote.source == "Finnhub" and quote.price == 101.5
+    assert router.get_quote("BTC-USD").source == "Yahoo Finance"  # stocks only
+    settings.set_realtime_quotes(False)
+    assert router.get_quote("TEST").source == "Yahoo Finance"
+    settings.set_realtime_quotes(True)
+    fake.error = http_error(429)
+    assert router.get_quote("TEST").source == "Yahoo Finance"  # Finnhub failing: regular quote
+    from analisis_acciones.data.details import build_details
+
+    fake.error = None
+    details = build_details("TEST", FakeYahooClient().bars.iloc[:0], router.get_quote("TEST"))
+    assert details.quote_source == "Finnhub" and details.price == 101.5

@@ -134,3 +134,29 @@ def test_garbage_is_rejected_not_invented(fake: Fake, provider: YahooFinanceProv
     fake.responses["/chart/TEST"] = payload
     bars = provider.get_historical_data("TEST", Interval.D1).bars
     assert bars["close"].tolist() == [103.5]
+
+
+def test_too_many_requests_backs_off_then_reports_rate_limit(fake: Fake) -> None:
+    waits: list[float] = []
+    calls = {"n": 0}
+
+    def flaky(url: str) -> bytes:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            fake.urls.append(url)
+            raise urllib.error.HTTPError(url, 429, "Too Many", {}, io.BytesIO(b""))  # type: ignore[arg-type]
+        return fake(url)
+
+    fake.responses["/chart/AAPL"] = chart("AAPL")
+    provider = YahooFinanceProvider(YahooHttpClient(flaky, sleep=waits.append))
+    bars = provider.get_historical_data("AAPL", Interval.D1).bars
+    assert len(bars) == 4 and waits == [2.0]
+    assert "query1." in fake.urls[0] and "query2." in fake.urls[1]  # second host on retry
+
+    always = urllib.error.HTTPError("u", 429, "Too Many", {}, io.BytesIO(b""))  # type: ignore[arg-type]
+    fake.error, waits[:] = always, []
+    with pytest.raises(Exception, match="rate limit"):
+        YahooFinanceProvider(YahooHttpClient(fake, sleep=waits.append)).get_historical_data(
+            "MSFT", Interval.D1
+        )
+    assert waits == [2.0, 6.0]

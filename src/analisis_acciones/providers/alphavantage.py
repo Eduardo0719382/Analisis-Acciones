@@ -7,12 +7,18 @@
 * Search ``SYMBOL_SEARCH`` (US listings) and quote ``GLOBAL_QUOTE``.
 
 The free plan allows about 25 requests a day; the program keeps what it downloads, so each
-symbol costs one request per day at most.
+symbol costs one request per day at most (cryptocurrencies: one every few hours, see
+``MarketDataService``). The requests of each UTC day are counted: once the budget is spent
+(or Alpha Vantage says so) no more are sent that day and the stored data is used, or
+another source when automatic fallback is on. The count starts again when the program
+restarts, so it is a saving, not a guarantee.
 """
 
 from __future__ import annotations
 
 import re
+import threading
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -29,7 +35,8 @@ from analisis_acciones.models.market import (
     empty_bars,
 )
 from analisis_acciones.providers.base import normalize_symbol
-from analisis_acciones.providers.keyed import KeyedProvider, bars_frame, number
+from analisis_acciones.providers.keyed import KeyedFetcher, KeyedProvider, bars_frame, number
+from analisis_acciones.providers.yahoo_http import http_get
 
 SOURCE_NAME = "Alpha Vantage"
 API = "https://www.alphavantage.co/query"
@@ -39,17 +46,52 @@ STOCK_NOTE = (
 )
 COMPACT_NOTE = "Su plan de Alpha Vantage solo permite las últimas 100 sesiones."
 _STOCK = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
+DAILY_BUDGET = 25
 
 
 class AlphaVantageProvider(KeyedProvider):
     name = SOURCE_NAME
     service = "alphavantage"
 
+    def __init__(
+        self,
+        key: Callable[[], str | None],
+        fetch: KeyedFetcher = http_get,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        budget: int = DAILY_BUDGET,
+    ) -> None:
+        super().__init__(key, fetch)
+        self._clock = clock
+        self._budget = budget
+        self._count_lock = threading.Lock()
+        self._day: date | None = None
+        self._used = 0
+
+    def requests_left(self) -> int:
+        with self._count_lock:
+            today = self._clock().astimezone(UTC).date()
+            return self._budget - (self._used if self._day == today else 0)
+
+    def _spend(self) -> None:
+        with self._count_lock:
+            today = self._clock().astimezone(UTC).date()
+            if self._day != today:
+                self._day, self._used = today, 0
+            if self._used >= self._budget:
+                raise self.rate_limited()
+            self._used += 1
+
+    def _exhausted(self) -> None:
+        with self._count_lock:
+            self._day, self._used = self._clock().astimezone(UTC).date(), self._budget
+
     def get_available_intervals(self) -> list[Interval]:
         return [Interval.D1]
 
     def _query(self, params: dict[str, str | int]) -> dict[str, Any]:
-        data = self.get_json(API, {**params, "apikey": self.api_key()})
+        key = self.api_key()
+        self._spend()
+        data = self.get_json(API, {**params, "apikey": key})
         if not isinstance(data, dict):
             raise UserError(
                 f"{self.name}: unexpected response",
@@ -70,6 +112,7 @@ class AlphaVantageProvider(KeyedProvider):
                 or "requests per day" in lowered
                 or "call frequency" in lowered
             ):
+                self._exhausted()
                 raise self.rate_limited()
             if "apikey" in lowered or "api key" in lowered:
                 raise UserError(

@@ -48,6 +48,8 @@ KEY_CALENDAR_NOTIFIED = "scanner.calendar_notified"
 KEY_EXHAUSTION = "analysis.exhaustion_params"
 KEY_EXHAUSTION_MARKERS = "chart.exhaustion_markers"
 KEY_CRYPTO_SOURCE = "data.crypto_source"
+KEY_AUTO_FALLBACK = "data.auto_fallback"
+KEY_REALTIME_QUOTES = "data.realtime_quotes"
 KEY_STOCK_SOURCE = "data.stock_source"
 CRYPTO_SOURCES = ("yahoo", "coingecko", "twelvedata", "alphavantage", "finnhub")
 STOCK_SOURCES = ("yahoo", "twelvedata", "alphavantage", "finnhub")
@@ -277,6 +279,20 @@ class SettingsService:
         if source not in CRYPTO_SOURCES:
             raise UserError(f"unknown source {source!r}", user_message="Fuente no válida.")
         self._repo.set(KEY_CRYPTO_SOURCE, source)
+
+    def auto_fallback(self) -> bool:
+        """When the chosen source fails, load the data from another one (default on)."""
+        return self._repo.get(KEY_AUTO_FALLBACK) is not False
+
+    def set_auto_fallback(self, enabled: bool) -> None:
+        self._repo.set(KEY_AUTO_FALLBACK, bool(enabled))
+
+    def realtime_quotes(self) -> bool:
+        """Use Finnhub's real-time quote for US stocks when its key is saved (default on)."""
+        return self._repo.get(KEY_REALTIME_QUOTES) is not False
+
+    def set_realtime_quotes(self, enabled: bool) -> None:
+        self._repo.set(KEY_REALTIME_QUOTES, bool(enabled))
 
     def exhaustion_markers(self) -> bool:
         return self._repo.get(KEY_EXHAUSTION_MARKERS) is True
