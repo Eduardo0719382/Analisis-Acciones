@@ -36,10 +36,18 @@ class Sleeve:
     label: str
     commission_pct: float  # percent of each order's value
 
+    @property
+    def is_crypto(self) -> bool:
+        return self.symbol.endswith("-USD")
 
+
+_STOCKS = ("QQQ", "AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA")
+_CRYPTOS = ("BTC-USD", "ETH-USD", "SOL-USD", "LINK-USD", "AVAX-USD", "LTC-USD")
+#: Each profile splits its budget equally among these (stocks: 0 % commission as on Alpaca;
+#: crypto: 0.25 %, Alpaca's taker fee).
 SLEEVES = (
-    Sleeve("QQQ", "Acciones (QQQ)", 0.0),
-    Sleeve("BTC-USD", "Cripto (BTC-USD)", 0.25),
+    *(Sleeve(sym, sym, 0.0) for sym in _STOCKS),
+    *(Sleeve(sym, sym, 0.25) for sym in _CRYPTOS),
 )
 
 #: (symbol, interval) -> bars. Daily bars are resampled for weekly and monthly profiles.
@@ -164,8 +172,10 @@ def render_report(results: list[ProfileResult], start: datetime, now: datetime,
     lines = [
         f"# {kind} de los 12 perfiles — {BUDGET:,.0f} USD virtuales cada uno",
         f"Inicio: {start:%Y-%m-%d %H:%M} UTC · Corte: {now:%Y-%m-%d %H:%M} UTC · "
-        f"{len(SLEEVES)} tramos por perfil: "
-        + ", ".join(f"{s.label} (comisión {s.commission_pct:g} %)" for s in SLEEVES)
+        f"{len(SLEEVES)} tramos iguales por perfil. Acciones (sin comisión): "
+        + ", ".join(s.symbol for s in SLEEVES if not s.is_crypto)
+        + ". Cripto (comisión 0,25 %): "
+        + ", ".join(s.symbol for s in SLEEVES if s.is_crypto)
         + ".",
         "Solo compras y ventas de lo comprado; sin dinero real ni órdenes en ningún broker.",
         "",
@@ -175,8 +185,8 @@ def render_report(results: list[ProfileResult], start: datetime, now: datetime,
     ]
     for r in results:
         closed = sum(s.closed_trades for s in r.sleeves)
-        held = "; ".join(s.open_position for s in r.sleeves if s.open_position) or "en efectivo"
-        nxt = "; ".join(f"{'comprar' if s.pending == 'buy' else 'vender'} {s.sleeve.symbol}"
+        held = ", ".join(s.sleeve.symbol for s in r.sleeves if s.open_position) or "en efectivo"
+        nxt = ", ".join(f"{'comprar' if s.pending == 'buy' else 'vender'} {s.sleeve.symbol}"
                         for s in r.sleeves if s.pending) or "—"  # fmt: skip
         lines.append(f"| {r.profile.name} | {r.value:,.2f} | {r.return_pct:+.1f} % | {closed} | "
                      f"{held} | {nxt} |")  # fmt: skip

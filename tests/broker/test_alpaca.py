@@ -137,3 +137,18 @@ def test_connection_failure_is_a_network_error() -> None:
     with pytest.raises(NetworkError) as info:
         AlpacaPaperClient(lambda: KEY, lambda: SECRET, broken).account()
     assert KEY not in str(info.value)
+
+
+def test_clock_and_tradable_assets() -> None:
+    t = FakeTransport(body={"is_open": True})
+    assert client(t).market_open() is True
+    t.body = {"is_open": False}
+    assert client(t).market_open() is False
+    assert client(FakeTransport(body={"status": "active", "tradable": True})).is_tradable("SOL-USD")
+    assert not client(FakeTransport(body={"status": "active", "tradable": False})).is_tradable("A")
+    t = FakeTransport(status=404, body={"message": "asset not found"})
+    assert client(t).is_tradable("ZZZZ") is False
+    assert t.calls[0][1].endswith("/v2/assets/ZZZZ")
+    tc = FakeTransport(body={"status": "active", "tradable": True})
+    client(tc).is_tradable("BTC-USD")
+    assert tc.calls[0][1].endswith("/v2/assets/BTC%2FUSD")

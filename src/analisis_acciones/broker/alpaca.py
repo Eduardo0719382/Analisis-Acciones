@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -261,6 +262,20 @@ class AlpacaPaperClient:
         if not isinstance(d, dict):
             raise ProviderError("alpaca: bad order response")
         return _order(d)
+
+    def market_open(self) -> bool:
+        """Whether the US stock exchange is open right now (Alpaca's clock)."""
+        d = self._request("GET", "/v2/clock")
+        return bool(d.get("is_open")) if isinstance(d, dict) else False
+
+    def is_tradable(self, symbol: str) -> bool:
+        """Whether Alpaca lists ``symbol`` (AAPL, BTC-USD) as active and tradable."""
+        alpaca_symbol, _crypto = to_alpaca_symbol(symbol)
+        try:
+            d = self._request("GET", "/v2/assets/" + urllib.parse.quote(alpaca_symbol, safe=""))
+        except ProviderError:  # 404: unknown symbol
+            return False
+        return isinstance(d, dict) and d.get("status") == "active" and d.get("tradable") is True
 
     def get_order(self, order_id: str) -> BrokerOrder:
         if not _ORDER_ID.match(order_id):

@@ -57,7 +57,11 @@ tendencia, escáner de la lista y alertas (precio, cambio diario, RSI; vela diar
 
 Los 12 perfiles de estrategia (horas, días, semanas, meses × agresivo, equilibrado,
 conservador; solo compras) pueden enviar sus órdenes a la cuenta **paper** de Alpaca
-(dinero ficticio). Cada perfil tiene 100 USD: 50 en QQQ y 50 en BTC-USD.
+(dinero ficticio). Cada perfil tiene 100 USD repartidos a partes iguales en 13 activos:
+acciones QQQ, AAPL, MSFT, GOOGL, AMZN, META y NVDA, y cripto BTC, ETH, SOL, LINK, AVAX y LTC.
+Las acciones solo se operan con la bolsa de EE. UU. abierta (si está cerrada, la orden espera a
+la próxima ejecución con la bolsa abierta); la cripto opera 24 horas. Antes de ordenar, el
+comando comprueba en Alpaca que el activo sea operable en la cuenta paper.
 
 1. Guarde las claves de la cuenta paper en *Ver → Órdenes simuladas (Alpaca)…*.
 2. Ver qué haría, sin enviar nada: `python -m analisis_acciones.app.autotrade_cli`

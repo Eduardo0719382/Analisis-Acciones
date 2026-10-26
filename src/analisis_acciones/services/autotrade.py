@@ -53,6 +53,8 @@ class Broker(Protocol):
     def positions(self) -> list[BrokerPosition]: ...
     def place_order(self, order: OrderRequest) -> BrokerOrder: ...
     def get_order(self, order_id: str) -> BrokerOrder: ...
+    def market_open(self) -> bool: ...
+    def is_tradable(self, symbol: str) -> bool: ...
 
 
 @dataclass
@@ -88,8 +90,15 @@ def bar_tag(last_bar: str) -> str:
 
 
 def plan(results: list[ProfileResult], ledger: dict[str, Slot],
-         account_qty: Callable[[str], float]) -> list[Action]:  # fmt: skip
-    """Orders that bring every slot to what its profile wants. Pure: nothing is sent."""
+         account_qty: Callable[[str], float],
+         blocked: Callable[[str], str | None] = lambda _s: None,
+         deferred: list[str] | None = None) -> list[Action]:  # fmt: skip
+    """Orders that bring every slot to what its profile wants. Pure: nothing is sent.
+
+    ``blocked(symbol)`` gives the reason an order for that symbol cannot be sent now (stock
+    exchange closed, asset not tradable); those orders are left out and, with ``deferred``,
+    their slots are listed as "<slot>: <reason>".
+    """
     actions: list[Action] = []
     for result in results:
         for sleeve in result.sleeves:
@@ -101,6 +110,12 @@ def plan(results: list[ProfileResult], ledger: dict[str, Slot],
             held = slot.qty > 0
             want = wants_position(sleeve)
             tag = f"aa-{result.profile.id}-{bar_tag(sleeve.last_bar)}-{bar_tag(symbol)}"
+            would_act = (want and not held and slot.cash >= MIN_ORDER_USD) or (held and not want)
+            reason = blocked(symbol) if would_act else None
+            if reason:
+                if deferred is not None:
+                    deferred.append(f"{key}: {reason}")
+                continue
             if want and not held and slot.cash >= MIN_ORDER_USD:
                 order = OrderRequest(symbol, "buy", 0, notional=round(slot.cash - 0.005, 2),
                                      client_order_id=f"{tag}-buy")  # fmt: skip
@@ -185,8 +200,22 @@ def run(broker: Broker, fetch: Callable[[str, Interval], pd.DataFrame], start: d
     def account_qty(symbol: str) -> float:
         return held.get(to_alpaca_symbol(symbol)[0].replace("/", ""), 0.0)
 
+    market_open = broker.market_open()
+    tradable: dict[str, bool] = {}
+
+    def blocked(symbol: str) -> str | None:
+        if symbol not in tradable:
+            tradable[symbol] = broker.is_tradable(symbol)
+        if not tradable[symbol]:
+            return "Alpaca no permite operar este activo en la cuenta paper"
+        if not to_alpaca_symbol(symbol)[1] and not market_open:
+            return "bolsa cerrada: la orden espera a la próxima apertura"
+        return None
+
     results = run_all(fetch, start, now)
-    actions = plan(results, ledger, account_qty)
+    deferred: list[str] = []
+    actions = plan(results, ledger, account_qty, blocked, deferred)
+    lines += [f"[en espera] {d}" for d in deferred]
     sent = 0
     for action in actions:
         o = action.order
@@ -207,7 +236,7 @@ def run(broker: Broker, fetch: Callable[[str, Interval], pd.DataFrame], start: d
         save_ledger(ledger_path, ledger)  # right away: never lose track of a sent order
         sent += 1
         lines.append(f"{action.key}: enviada {what} ({placed.status}) — {action.reason}")
-    if not actions:
+    if not actions and not deferred:
         lines.append("Sin órdenes nuevas: cada perfil ya tiene lo que su estrategia pide.")
     if send:
         save_ledger(ledger_path, ledger)

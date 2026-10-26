@@ -1166,7 +1166,11 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   window (fixed URL). It is a command the user runs or schedules (Windows Task Scheduler);
   Claude's own scheduled task only simulates and never sends orders. Dry run is the default;
   `--send` is needed to place anything.
-- Each profile owns two slots (QQQ and BTC-USD, 50 USD each). A local ledger
+- Each profile owns one slot per asset (7 stocks: QQQ, AAPL, MSFT, GOOGL, AMZN, META, NVDA;
+  6 crypto: BTC, ETH, SOL, LINK, AVAX, LTC), the 100 USD split equally (about 7.69 each).
+  Stock orders go out only while Alpaca's clock says the exchange is open, otherwise they
+  are listed as waiting and sent by the first run after the open; crypto is 24/7. Each
+  symbol is checked with Alpaca's asset endpoint (active and tradable) before ordering. A local ledger
   (`forward_test/autotrade.json`) records every slot's quantity and cash, because Alpaca only
   keeps one position per symbol for the whole account.
 - Reconciliation, not events: each run compares what the strategy wants now (replay since
