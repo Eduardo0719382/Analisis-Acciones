@@ -487,6 +487,23 @@ EXC_COLUMNS = [
     "Subidas: casos", "Subidas: % que bajó", "Subidas: p (azar)", "Subidas: lectura",
     "Bajadas: casos", "Bajadas: % que subió", "Bajadas: p (azar)", "Bajadas: lectura",
 ]  # fmt: skip
+ACTION_WEEKLY_SUMMARY = "Resumen &semanal de agotamiento…"
+WEEK_TITLE = "Resumen semanal de agotamiento"
+WEEK_INTRO = (
+    "Señales de agotamiento que empezaron en los últimos 7 días en los {count} activos de la "
+    "lista, con lo que pasó tras las mismas señales en el pasado de cada uno. Exporte el informe "
+    "en PDF o HTML."
+)
+WEEK_COLUMNS = ["Activo", "Señal", "Desde", "Estado", "Semana", "Lectura", "Historial"]
+WEEK_RISE = "▼ Agotamiento de la subida"
+WEEK_FALL = "▲ Agotamiento de la bajada"
+WEEK_ACTIVE = "Sigue activa"
+WEEK_ENDED = "Ya no activa"
+WEEK_DONE = "{signals} señales nuevas en {analysed} activos ({start} – {end})."
+WEEK_NOTE = (
+    "Velas diarias cerradas y los umbrales de la pestaña Agotamiento. Describe el pasado: no es "
+    "una predicción ni una recomendación. Doble clic abre el activo."
+)
 EXC_TAB_RECORD = "Historial de las señales"
 EXC_TAB_EXITS = "¿Compensó salir?"
 EXC_EXIT_NAMES = {

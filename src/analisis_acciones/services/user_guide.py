@@ -134,6 +134,8 @@ donde anticipó giros</i> (activado por defecto) el escaneo diario solo avisa en
 el historial muestra que las señales precedieron giros.
 Ajustar los umbrales hasta que el pasado «salga
 bien» es engañoso: con pocos casos el resultado puede ser casualidad.</p>
+<p><i>Herramientas → Resumen semanal de agotamiento…</i> reúne las señales que empezaron en
+los últimos 7 días en su lista, con su historial, y lo guarda en PDF o HTML.</p>
 <p><i>Herramientas → Agotamiento en varios activos…</i> hace la misma medición en toda la lista:
 para cada activo, cuántas veces aparecieron las señales, en qué % el precio giró después frente
 a un día normal y si la diferencia puede ser azar, con una lectura en palabras. Se exporta como

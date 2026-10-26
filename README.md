@@ -210,6 +210,10 @@ blanco porque su motor se detuvo, se recarga automáticamente.
   La pestaña **¿Compensó salir?** ejecuta en cada activo la estrategia de tendencia sin salida
   por agotamiento, con salida y con salida y re-entrada (mismos costes) y cuenta en cuántos
   activos salir acabó con más dinero o con menos caída máxima.
+- **Resumen semanal de agotamiento:** *Herramientas → Resumen semanal de agotamiento…* lista
+  las señales de agotamiento que empezaron en los últimos 7 días en la lista de seguimiento
+  (si siguen activas, cuánto se movió el activo en la semana y qué pasó tras las mismas señales
+  en su pasado) y lo exporta como informe PDF o HTML.
 - **Backtesting:** *Herramientas → Backtesting…* (Ctrl+B) sobre el activo e intervalo del
   gráfico. Estrategias: cruce de EMAs y reversión con RSI, con parámetros editables, capital,
   comisión (% y fija) y deslizamiento. Muestra capital final, rentabilidad, operaciones,

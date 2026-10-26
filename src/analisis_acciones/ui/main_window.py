@@ -96,6 +96,7 @@ from analisis_acciones.ui.search_box import SearchBox
 from analisis_acciones.ui.theme import apply_theme, tokens_for
 from analisis_acciones.ui.update_dialog import UpdateDialog
 from analisis_acciones.ui.watchlist_panel import WatchlistPanel
+from analisis_acciones.ui.weekly_summary_dialog import WeeklySummaryDialog
 from analisis_acciones.ui.workers import Worker, start_worker
 
 logger = logging.getLogger(__name__)
@@ -375,6 +376,9 @@ class MainWindow(QMainWindow):
         self.exhaustion_compare_action = QAction(strings.ACTION_EXHAUSTION_COMPARE, self)
         self.exhaustion_compare_action.triggered.connect(lambda: self.open_exhaustion_compare())
         tools_menu.addAction(self.exhaustion_compare_action)
+        self.weekly_summary_action = QAction(strings.ACTION_WEEKLY_SUMMARY, self)
+        self.weekly_summary_action.triggered.connect(self.open_weekly_summary)
+        tools_menu.addAction(self.weekly_summary_action)
         self.daily_scan_action = QAction(strings.ACTION_DAILY_SCAN, self)
         self.daily_scan_action.setCheckable(True)
         self.daily_scan_action.setChecked(self._settings.daily_scan_enabled())
@@ -1052,6 +1056,16 @@ class MainWindow(QMainWindow):
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         if symbols:
             dialog.run()
+
+    def open_weekly_summary(self) -> None:
+        if self.market is None:
+            return
+        dialog = WeeklySummaryDialog(self.market.service, self._watchlist_symbols(), date.today,
+                                     self._settings.exhaustion_params(), self)  # fmt: skip
+        dialog.symbol_activated.connect(self.open_symbol)
+        dialog.show()
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        dialog.run()
 
     # Daily scan ----------------------------------------------------------------
     def _watchlist_symbols(self) -> list[str]:

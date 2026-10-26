@@ -1051,3 +1051,10 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   not depend on a network lookup. Fiat quotes use the usual `XXXUSD=X` pair; BTC, ETH, USDT
   and USDC quotes use Yahoo's `XXX-USD` crypto pair. Stablecoins are converted with their
   own market price rather than assumed to equal one dollar.
+
+## D-071 — Weekly exhaustion summary
+
+- A sign "appears" on the first bar of a run (same rule as the chart markers) within the 7
+  calendar days up to today; only bars up to that day are used. Signs with a supporting record
+  (`READ_USEFUL`) are listed first. Window plus PDF/HTML export; no scheduling, the user opens
+  it when wanted.
