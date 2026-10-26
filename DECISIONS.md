@@ -1058,3 +1058,26 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   calendar days up to today; only bars up to that day are used. Signs with a supporting record
   (`READ_USEFUL`) are listed first. Window plus PDF/HTML export; no scheduling, the user opens
   it when wanted.
+
+## D-072 — Android app
+
+- Built with Flet 1.0 (Python + Flutter): the shared Qt-free core runs unchanged on the phone,
+  and Flet ships Android builds of pandas and numpy. The desktop UI (PySide6/QtWebEngine)
+  cannot run on Android, so the phone has its own screens (`mobile/src/main.py`) over a
+  Flet-free logic layer (`analisis_acciones.mobile`, covered by the architecture test and by
+  normal pytest tests).
+- Prices come from `YahooHttpClient` (standard library HTTPS against Yahoo's chart and
+  search endpoints) because yfinance depends on curl_cffi, which has no Android build. A live
+  CI test checks it returns the same closes as yfinance.
+- The chart is drawn with Flet's canvas from pure geometry (`mobile/chart.py`); the SVG used in
+  the desktop reports relies on CSS that Flutter does not render.
+- Updates: every push builds the APK in GitHub Actions, opens it on an Android emulator
+  (the job fails if the first screen does not appear or Python logs a traceback) and replaces
+  the asset of the `movil` release. The app compares its build number with the published
+  one and offers the download; Android always asks the user to confirm.
+- All APKs must be signed with the same key or Android refuses to update. The key lives only
+  in the repository's Actions secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`);
+  without them the APK is built and tested but not published.
+- Alerts move between devices as an exported JSON file (validated as data on import). Alerts
+  are checked while the app is open (start, resume, every 15 minutes); background
+  notifications need a Flet extension that is still young and are left for later.

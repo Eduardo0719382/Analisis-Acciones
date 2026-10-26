@@ -25,6 +25,34 @@ La versión instalada se actualiza instalando el nuevo instalador encima.
 Windows puede mostrar el aviso de SmartScreen porque el instalador no está firmado
 digitalmente: «Más información» → «Ejecutar de todas formas».
 
+## App para Android (celular)
+
+Versión del programa diseñada para el celular, con los mismos cálculos: lista de seguimiento
+con búsqueda (acciones, fondos, criptomonedas y altcoins), página de cada activo con gráfico
+de velas (1M a 5A, medias de 20 y 50, volumen), análisis por reglas y agotamiento de la
+tendencia, escáner de la lista y alertas (precio, cambio diario, RSI; vela diaria o de
+1 hora). Descarga los precios de Yahoo Finance por su cuenta: no necesita el PC encendido.
+
+- **Instalar:** en el celular, abra
+  <https://github.com/Eduardo0719382/Analisis-Acciones/releases/tag/movil>, descargue
+  `AnalisisAcciones-…-build….apk` y ábralo. Android pedirá permiso para instalar apps de esa
+  fuente (navegador o «Archivos»): concédalo y confirme.
+- **Actualizar:** cada cambio del programa genera también una app nueva. En la app,
+  *Ajustes → Buscar actualización* la descarga; Android pide confirmar la instalación (no
+  permite que una app se reinstale sola). Los datos del celular se conservan.
+- **Alertas entre el PC y el celular:** en el PC, pestaña *Alertas → Exportar…* guarda un
+  archivo; envíelo al celular (correo, WhatsApp, Drive) y en la app use *Alertas → Importar
+  del PC*. Al revés: *Enviar al PC* en la app y *Importar…* en el PC. No se duplican.
+- **Cuándo avisan las alertas en el celular:** al abrir la app, al volver a ella y cada
+  15 minutos mientras está abierta (con vibración y aviso en pantalla). Con la app cerrada no
+  hay notificaciones en esta versión.
+- **Limitaciones:** sin datos fundamentales de empresa, sin cartera simulada ni backtesting
+  (siguen en el PC). La lista y las alertas del celular son independientes de las del PC
+  (las alertas se pasan con el archivo).
+- **Compilar uno mismo (opcional):** el APK se construye en GitHub Actions (flujo *Android
+  APK*). En un PC con Flutter y el SDK de Android: copie `src/analisis_acciones` a
+  `mobile/src/` y ejecute `flet build apk` dentro de `mobile`.
+
 ## Requisitos
 
 - Python 3.12 o superior
