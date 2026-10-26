@@ -77,9 +77,16 @@ def _floats(values: Any, n: int) -> list[float]:
     items = values if isinstance(values, list) else []
     for i in range(n):
         v = items[i] if i < len(items) else None
-        ok = isinstance(v, int | float) and not isinstance(v, bool) and math.isfinite(v)
-        out.append(float(v) if ok else math.nan)
+        number = _number(v)
+        out.append(number if number is not None else math.nan)
     return out
+
+
+def _number(value: Any) -> float | None:
+    """A finite JSON number, or None."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value) if math.isfinite(value) else None
 
 
 class YahooHttpClient:
@@ -193,30 +200,33 @@ def _add_events(frame: pd.DataFrame, events: Any) -> None:
     """Dividends and split ratios on the row of their (exchange-local) date."""
     if not isinstance(events, dict):
         return
-    days = pd.DatetimeIndex(frame.index).normalize()
-    tz = pd.DatetimeIndex(frame.index).tz
+    index = pd.DatetimeIndex(frame.index)
+    days = index.normalize()
 
     def row_of(stamp: Any) -> int | None:
-        if not isinstance(stamp, int | float) or isinstance(stamp, bool):
+        seconds = _number(stamp)
+        if seconds is None:
             return None
-        day = pd.Timestamp(int(stamp), unit="s", tz="UTC").tz_convert(tz).normalize()
-        pos = days.get_indexer([day])[0]
-        return int(pos) if pos >= 0 else None
+        day = pd.Timestamp(int(seconds), unit="s", tz="UTC").tz_convert(index.tz).normalize()
+        pos = int(days.get_indexer(pd.DatetimeIndex([day]))[0])
+        return pos if pos >= 0 else None
 
-    dividends = events.get("dividends")
-    for item in dividends.values() if isinstance(dividends, dict) else []:
+    dividends = [0.0] * len(frame)
+    splits = [0.0] * len(frame)
+    raw_dividends = events.get("dividends")
+    for item in raw_dividends.values() if isinstance(raw_dividends, dict) else []:
         if not isinstance(item, dict):
             continue
-        amount, pos = item.get("amount"), row_of(item.get("date"))
-        if pos is not None and isinstance(amount, int | float) and math.isfinite(amount) \
-                and amount > 0:  # fmt: skip
-            frame.iloc[pos, frame.columns.get_loc("Dividends")] += float(amount)
-    splits = events.get("splits")
-    for item in splits.values() if isinstance(splits, dict) else []:
+        amount, pos = _number(item.get("amount")), row_of(item.get("date"))
+        if pos is not None and amount is not None and amount > 0:
+            dividends[pos] += amount
+    raw_splits = events.get("splits")
+    for item in raw_splits.values() if isinstance(raw_splits, dict) else []:
         if not isinstance(item, dict):
             continue
-        num, den, pos = item.get("numerator"), item.get("denominator"), row_of(item.get("date"))
-        if pos is None or not all(isinstance(v, int | float) and math.isfinite(v) and v > 0
-                                  for v in (num, den)):  # fmt: skip
-            continue
-        frame.iloc[pos, frame.columns.get_loc("Stock Splits")] = float(num) / float(den)
+        num, den = _number(item.get("numerator")), _number(item.get("denominator"))
+        pos = row_of(item.get("date"))
+        if pos is not None and num is not None and den is not None and num > 0 and den > 0:
+            splits[pos] = num / den
+    frame["Dividends"] = dividends
+    frame["Stock Splits"] = splits
