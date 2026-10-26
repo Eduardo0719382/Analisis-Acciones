@@ -1184,3 +1184,184 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   from the asset, so sells use the smaller of the ledger and the account quantity.
 - Limits: slots buy late if the signal is older than the run (the price may be worse than
   in the backtest); stock orders sent when the market is closed wait for the next session.
+
+## D-078 — Experiment lab: agents decide, the executor enforces (replaces part of D-077)
+
+- **Chosen.** Each profile is a Claude Sonnet agent with its own personality and hypothesis
+  (`laboratorio/perfiles.json`). It reads its book and the program's analysis through
+  `lab_cli`, decides, and writes a decision (JSON). `lab_cli ejecutar` validates it against
+  the profile's hard limits and sends it to the **paper** account. Claude does send the
+  orders, as the user asked: D-077's line "Claude's own scheduled task only simulates" was
+  a misunderstanding and no longer applies.
+- **Considered and rejected:**
+  - The agent ordering through the Alpaca MCP: the limits would live only in a prompt, and
+    the MCP's keys were rejected (HTTP 401) while the program's own keys work (P-020).
+  - Windows Task Scheduler running `autotrade_cli --send`: no agent judgement.
+- The 12 rule profiles (D-077) are retired: `autotrade_cli --send` refuses and points to the
+  lab, and its dry run still works. The pending refactor (one cash pool per profile) was
+  committed first.
+- Paper only, in depth:
+  - `PAPER_URL` is fixed.
+  - The client refuses any non-GET to anything but the paper URL, and any request outside
+    the paper and data URLs.
+  - **Before every order**, the executor checks that the account number starts with "PA" and
+    that the account is active, and aborts otherwise.
+
+## D-079 — One virtual book per profile, rebuilt from real fills
+
+- The lab's SQLite file (`%LOCALAPPDATA%\AnalisisAcciones\laboratorio\lab.sqlite3`) holds
+  orders, decisions, equity snapshots, prices and notes. Rows are only added or updated, never
+  deleted, so eliminated profiles keep their history.
+- The book is **derived** from the filled orders every time: cash, positions, average cost
+  with fees, realized and unrealized P&L, and fees paid. It uses Alpaca's `filled_qty` and
+  `filled_avg_price`, never the price the agent expected. Example seen on the account: an
+  11 USD notional buy filled 10.78 USD worth, and that is what the book charged.
+- Open orders reserve their dollars (buys) or quantity (sells).
+- Each order is saved as "sending" **before** it leaves. Its `client_order_id` names the
+  profile, minute, symbol, side and number (`P07-2610261430-BTCUSD-B1`). If the run dies, the
+  next `reconcile` finds the order by that id. If Alpaca never got it, the order is marked
+  "not sent" after 2 minutes and its reservation is released (seen live with the first
+  validation order).
+- One account, many books:
+  - A profile sells at most its own quantity, capped by what the account holds.
+  - `reconciliar` flags any symbol whose books add up to more than the account holds.
+- **Considered:**
+  - A mutable JSON ledger (D-077): it can drift from Alpaca.
+  - Keeping the state in the repository with a commit per run: dozens of commits a day.
+
+  The review exports the store to `experimentos/datos/<date>/` once a week instead.
+
+## D-080 — Costs charged to the books (looked up 2026-10-26, not assumed)
+
+- **Crypto** (Alpaca, 30-day volume tier 1): taker 0.25 %, maker 0.15 % ([Alpaca crypto
+  fees](https://docs.alpaca.markets/us/docs/crypto-fees)).
+  - Confirmed on this account: buys keep 0.25 % of the coin, rounded up to 9 decimals **per
+    partial fill** and taken at once. Sells pay dollars rounded up to the cent.
+  - Alpaca posts the fees the next day as `CFEE` activities without an order id, so they
+    cannot be matched order by order. `reconciliar` compares the totals (report only).
+- **Stocks**: no commission. The paper account does not charge the regulatory fees; the books
+  do, from dated tables in `lab/costs.py`.
+  - SEC Section 31: 20.60 USD per million sold from 2026-04-04 ([SEC
+    advisory](https://www.sec.gov/rules-regulations/fee-rate-advisories/2026-2)).
+  - FINRA TAF: 0.000195 USD per share sold, capped at 9.79 per trade. It is **paused from
+    2026-10-01 to 2026-12-31** (SR-FINRA-2026-021) and returns on 2027-01-01.
+  - CAT: 0.000046 USD per share on both sides (effective rate in Alpaca's regulatory-fee
+    docs).
+- **Cash in cents**, as the account does it: buys debit the amount rounded up, sells credit it
+  rounded down. With this the validation round trip matched the account to the cent
+  (−0.07 USD in both).
+- **Spread and slippage** are not a fee line, because the real fill price contains them. The
+  executor saves the quote at decision time next to each fill, so the review can measure
+  slippage.
+  - Stock quotes come from IEX (the free feed, one exchange).
+  - When the IEX spread is missing or above 0.5 %, the cost check uses 0.10 % instead and
+    marks it as not measured. This is an assumption; the review checks it against the fills.
+- **Minimums**:
+  - Crypto buys start at 10 USD. Alpaca answered 403 "minimal amount of order 10"; smaller
+    sells are accepted.
+  - Stock buys start at the profile's `min_orden_usd` (fractional, market, day orders).
+  - Quantities are rounded down to 9 decimals.
+
+## D-081 — Hard limits and turns
+
+- The executor enforces these limits, whatever the agent writes:
+  - only symbols in the profile's universe;
+  - one order per asset per run;
+  - spending only free virtual cash, and never more than the account's cash (no margin);
+  - `max_pct_activo` of the profile's value in any one asset;
+  - `max_operaciones_dia` orders per UTC day;
+  - the minimum order size;
+  - a buy's `objetivo_pct` must exceed 1.5 × its round-trip cost (fees + spread);
+  - sells only of the profile's own holdings.
+- Stops:
+  - The executor itself sells a position whose loss reaches `stop_posicion_pct`. These sales
+    do not count toward the daily limit.
+  - A profile that has lost `stop_perfil_pct` of its capital, or is paused, can only sell.
+- Stocks trade only while Alpaca's clock says the exchange is open: nothing is queued blind.
+  - A stock-only profile whose turn finds the market closed records "sin acción" and keeps
+    its turn.
+  - A mixed profile sends its crypto orders; its stock orders are refused.
+- Turns depend on the frequency and count from the last real decision:
+
+  | Frequency | Next turn |
+  |---|---|
+  | 1h | after 54 minutes |
+  | 2h | after 1 h 54 min |
+  | 4h | after 3 h 48 min |
+  | daily | once per New York day |
+  | weekly | once per ISO week |
+  | monthly | once per month |
+
+  Dry runs, "not due", "market closed" and errors do not use up a turn. The first
+  `ejecutar --send` of a turn does, so a rejected idea cannot be retried with another one in
+  the same turn.
+- Every call leaves a decision row and a line in `registro.jsonl`, including "nada". The line
+  holds the date, profile, decision, reason, orders with their real fills and fees,
+  refusals, cash and value.
+
+## D-082 — Scheduled tasks on the PC
+
+- The lab runs as four tasks in the Claude desktop app:
+
+  | Task | Schedule | Runs |
+  |---|---|---|
+  | `lab-1h` | hourly | 1h and 2h profiles |
+  | `lab-4h` | every 4 hours | 4h profiles |
+  | `lab-diario` | weekdays 10:00 local (11:00 ET until 1 Nov, 10:00 ET after) | daily, weekly and monthly profiles |
+  | `lab-revision-semanal` | Saturday 10:00 | the Opus review; can also be started by hand |
+
+  The weekly and monthly profiles act only when their turn comes, so a Monday holiday cannot
+  make them miss the week. The user's PC is UTC−5 without daylight saving.
+- **The tasks need the PC on and the app open.** A missed run is caught up by the next one,
+  which reconciles first.
+- **Considered: cloud routines.** Rejected for the prototype:
+  - the keys live in the Windows credential store;
+  - Yahoo is blocked from cloud containers (P-004);
+  - the lab's data cache is local.
+
+  Moving the tasks to the cloud would need the keys as cloud secrets and Alpaca-only data.
+- The task tool has no model setting. The prompts name the model, and the user must check
+  each task's model in the app: Sonnet for the three trading tasks, Opus for the review.
+
+## D-083 — Weekly review by Opus
+
+- The criteria are written beforehand in `laboratorio/revision_opus.md`:
+  - **Minimum sample before eliminating:** 2 weeks and 10 real decisions; 5 decisions for
+    weekly profiles; 3 months for monthly ones.
+  - **Eliminate** when the profile meets its own failure criterion; or it loses more than
+    15 % net and trails all three references 3 weeks in a row; or its costs exceed half its
+    gross gain 3 weeks in a row.
+  - **Pause** on unexplained reconciliation gaps, repeated malformed decisions, or the
+    profile stop.
+  - **Adjust** for inconsistent judgement, overtrading or panic sales.
+- At most 1–2 changes per profile per week.
+- An eliminated profile is marked `"estado": "eliminado"` and never deleted. The next daily
+  run sells what it holds (`lab grupo` lists it under `liquidar`), and its 100 USD are free
+  for a new profile (P12…).
+- Changes go to the `lab/experimentos` branch with a descriptive commit, never to the
+  default branch. The review exports the data and updates `EXPERIMENTOS.md`.
+
+## D-084 — The initial 11 profiles
+
+| Profile | Frequency | Style | Universe |
+|---|---|---|---|
+| P01 | 1h | momentum | crypto |
+| P02 | 4h | momentum | memecoins: DOGE, SHIB, PEPE, BONK, WIF, TRUMP |
+| P03 | 4h | mean reversion | crypto |
+| P04 | weekly | DCA | BTC, ETH |
+| P05 | daily | trend | the Magnificent 7 |
+| P06 | daily | Elliott / patterns | stocks and crypto |
+| P07 | weekly | Graham value | 13 large caps |
+| P08 | daily | exhaustion, contrarian | ETFs |
+| P09 | weekly | relative-momentum rotation | SPY, QQQ, GLD, TLT, BTC, ETH |
+| P10 | daily | skeptic: acts only on confluence | mixed |
+| P11 | monthly | long-term growth | mixed |
+
+- All 41 symbols were checked as active and tradable on the paper account (stocks also
+  fractionable).
+- Fee warning (measured 2026-10-26):
+  - A crypto round trip costs 0.52 % (BTC) to 1.5 % (BONK), spread included.
+  - ETFs and large stocks cost about 0.02 % plus the spread.
+  - P01 (up to 4 orders a day) and P02/P03 (up to 3) are the profiles that costs can eat.
+- The memecoins are in the universe only because Alpaca lists them as tradable. Their
+  spreads are 0.3–1 %.

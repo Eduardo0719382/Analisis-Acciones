@@ -42,6 +42,11 @@ def main(argv: list[str] | None = None) -> int:
     )  # fmt: skip
     parser.add_argument("--status", action="store_true", help="mostrar lo que tiene cada perfil")
     args = parser.parse_args(argv)
+    if args.send:
+        print("Los 12 perfiles de reglas están retirados (D-078): las órdenes las envía ahora el "
+              "laboratorio (python -m analisis_acciones.app.lab_cli). Este comando solo simula.",
+              file=sys.stderr)  # fmt: skip
+        return 1
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")  # the Windows console defaults to cp1252
 

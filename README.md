@@ -53,30 +53,32 @@ tendencia, escáner de la lista y alertas (precio, cambio diario, RSI; vela diar
   APK*). En un PC con Flutter y el SDK de Android: copie `src/analisis_acciones` a
   `mobile/src/` y ejecute `flet build apk` dentro de `mobile`.
 
-## Órdenes automáticas en Alpaca (cuenta de práctica)
+## Laboratorio de perfiles en Alpaca (cuenta de práctica)
 
-Los 12 perfiles de estrategia (horas, días, semanas, meses × agresivo, equilibrado,
-conservador; solo compras) pueden enviar sus órdenes a la cuenta **paper** de Alpaca
-(dinero ficticio). Cada perfil tiene 100 USD repartidos a partes iguales en 13 activos:
-acciones QQQ, AAPL, MSFT, GOOGL, AMZN, META y NVDA, y cripto BTC, ETH, SOL, LINK, AVAX y LTC.
-Las acciones solo se operan con la bolsa de EE. UU. abierta (si está cerrada, la orden espera a
-la próxima ejecución con la bolsa abierta); la cripto opera 24 horas. Antes de ordenar, el
-comando comprueba en Alpaca que el activo sea operable en la cuenta paper.
+Once perfiles de 100 USD **virtuales** cada uno operan dentro de la cuenta **paper** de Alpaca
+(dinero ficticio). Cada perfil es un agente de Claude (Sonnet) con su propia personalidad e
+hipótesis; decide comprar, vender, mantener o no hacer nada con las herramientas del programa
+(análisis por reglas, agotamiento, Elliott, patrones, proyección, fundamentales, noticias).
+Las órdenes las envía el ejecutor del laboratorio, que impone los límites de cada perfil y
+solo habla con la cuenta paper. Cada sábado una revisión (Claude Opus) evalúa el criterio de
+cada agente, ajusta, pausa o elimina perfiles y lo anota en `EXPERIMENTOS.md`.
 
-1. Guarde las claves de la cuenta paper en *Ver → Órdenes simuladas (Alpaca)…*.
-2. Ver qué haría, sin enviar nada: `python -m analisis_acciones.app.autotrade_cli`
-3. Enviar de verdad (a la cuenta de práctica): `… autotrade_cli --send`
-4. Ver lo que tiene cada perfil: `… autotrade_cli --status`
+- Perfiles, límites y personalidades: `laboratorio/perfiles.json`.
+- Protocolos: `laboratorio/agente_sonnet.md` (cada ejecución) y `laboratorio/revision_opus.md`.
+- Libro, órdenes y decisiones: `%LOCALAPPDATA%\AnalisisAcciones\laboratorio\lab.sqlite3`
+  (registro línea a línea en `registro.jsonl`); copia semanal en `experimentos/datos/`.
 
-Agendarlo cada hora en Windows (PowerShell; ajuste la carpeta):
+Comandos (`python -m analisis_acciones.app.lab_cli …`): `verificar`, `grupo 1h`,
+`estado P01`, `analizar P01`, `ejecutar P01 --decision archivo.json [--send]`, `reconciliar`,
+`informe`, `decisiones P01`, `exportar carpeta`, `liquidar P01 [--send]`. Sin `--send` no se
+envía nada.
 
-```powershell
-schtasks /Create /SC HOURLY /TN "AnalisisAcciones-Alpaca-Paper" /TR "C:\ruta\.venv\Scripts\python.exe -m analisis_acciones.app.autotrade_cli --send"
-```
-
-No hay opción para una cuenta de dinero real. Los perfiles de horas operan mucho y pierden
-con las comisiones; los de semanas y meses operan poco. Es una simulación, no asesoramiento
-financiero. Detalles en `DECISIONS.md` (D-077).
+Las tareas programadas (`lab-1h`, `lab-4h`, `lab-diario`, `lab-revision-semanal`) corren en la
+app de escritorio de Claude: el PC debe estar encendido y la app abierta; una ejecución
+perdida se recupera en la siguiente, que primero reconcilia con Alpaca. Los 12 perfiles de
+reglas anteriores están retirados (`autotrade_cli` ya no envía órdenes). No hay opción para
+una cuenta de dinero real. Es un experimento, no asesoramiento financiero. Detalles en
+`DECISIONS.md` (D-078 a D-084).
 
 ## Requisitos
 

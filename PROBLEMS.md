@@ -244,3 +244,35 @@
   goes to CoinGecko (no key) and stocks to Twelve Data / Alpha Vantage when a key is saved;
   every series says which source was used.
 - **Status:** open. The live tests stay as an honest signal (that job is allowed to fail).
+
+## P-020 — The Alpaca MCP rejects its keys
+
+- **Symptom:** every call of the Alpaca MCP (account, clock, positions, orders, assets)
+  answers HTTP 401 "unauthorized". The program's own client, with the keys saved in the
+  Windows credential store, works.
+- **Cause:** the MCP server is configured with other keys (old or wrong).
+- **Solution:**
+  - The lab does not depend on the MCP: it uses the program's client for orders, fills,
+    activities, the clock and market data.
+  - The MCP stays usable for documentation searches.
+  - Entering the paper keys again in the MCP configuration would fix the MCP itself.
+
+## P-021 — Crypto buy refused, reported as "keys rejected"
+
+- **Symptom:** the first validation buy (5 USD of BTC) failed with "Alpaca rechazó las
+  claves".
+- **Cause:** Alpaca answered HTTP 403 with "cost basis must be >= minimal amount of order
+  10", and the client turned every 403 into the credentials message.
+- **Solution:**
+  - Only a 401, or a 403 without a message, is reported as a key problem. Any other 403
+    shows Alpaca's message.
+  - The executor refuses crypto buys under 10 USD before sending them.
+  - P04's DCA changed from 5 + 5 USD to 10 USD a week, alternating BTC and ETH.
+
+## P-022 — Weekly and monthly crypto analysis failed
+
+- **Symptom:** `lab analizar` stopped with `KeyError: ['adj_close', 'dividends', 'splits']`
+  for the weekly and monthly profiles that hold crypto.
+- **Cause:** Alpaca's bars have only OHLCV, and `resample_daily` expects the program's full
+  bar schema.
+- **Solution:** Alpaca bars get `adj_close = close` and zero dividends and splits.

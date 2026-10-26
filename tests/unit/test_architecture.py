@@ -21,7 +21,7 @@ CORE_LAYERS = [
     "forecast",
     "portfolio",
     "broker",
-    "broker",
+    "lab",
     "patterns",
     "storage",
     "services",
