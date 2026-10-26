@@ -196,3 +196,24 @@ def test_coingecko_daily_history_and_known_ids() -> None:
     found = _json.loads(http_get(f"{API}/simple/price?ids={ids}&vs_currencies=usd"))
     missing = sorted(set(KNOWN_IDS.values()) - set(found))
     assert not missing, missing
+
+
+@pytest.mark.parametrize("service", ["alphavantage", "finnhub", "twelvedata"])
+def test_keyed_source_with_a_real_key(service: str) -> None:
+    """Runs only when ANALISIS_ACCIONES_<SERVICE>_KEY is set (never with keys in the code)."""
+    import os
+
+    from analisis_acciones.services.api_keys import env_name
+    from analisis_acciones.services.data_sources import SOURCE_BY_KEY
+
+    key = os.environ.get(env_name(service))
+    if not key:
+        pytest.skip(f"no {SOURCE_BY_KEY[service].name} key in the environment")
+    from analisis_acciones.providers.alphavantage import AlphaVantageProvider
+    from analisis_acciones.providers.finnhub import FinnhubProvider
+    from analisis_acciones.providers.twelvedata import TwelveDataProvider
+
+    cls = {"alphavantage": AlphaVantageProvider, "finnhub": FinnhubProvider,
+           "twelvedata": TwelveDataProvider}[service]  # fmt: skip
+    provider = cls(lambda: key)
+    assert (provider.get_quote("AAPL").price or 0) > 0

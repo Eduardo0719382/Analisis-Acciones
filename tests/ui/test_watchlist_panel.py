@@ -188,9 +188,22 @@ def test_altcoin_example_list(
     assert all(is_crypto(s) for s in ALTCOIN_EXAMPLE)
 
 
-def test_crypto_source_menu(window: MainWindow, settings: SettingsService) -> None:
-    assert window.crypto_source_actions["yahoo"].isChecked()
-    window.crypto_source_actions["coingecko"].trigger()
-    assert settings.crypto_source() == "coingecko"
-    assert window.crypto_source_actions["coingecko"].isChecked()
-    assert not window.crypto_source_actions["yahoo"].isChecked()
+def test_data_sources_dialog(qtbot: QtBot, window: MainWindow, settings: SettingsService) -> None:
+    from analisis_acciones.services.api_keys import MemoryKeyStore
+
+    window._key_store = MemoryKeyStore()
+    dialog = window.open_data_sources()
+    qtbot.addWidget(dialog)
+    dialog.crypto.setCurrentIndex(dialog.crypto.findData("twelvedata"))
+    dialog.accept()
+    assert "Twelve Data" in dialog.error.text() and settings.crypto_source() == "yahoo"
+    dialog.key_fields["twelvedata"].setText("NOT VALID!")
+    dialog.save_key("twelvedata")
+    assert "formato" in dialog.error.text()
+    dialog.key_fields["twelvedata"].setText("ABCDEF1234567890")
+    dialog.save_key("twelvedata")
+    assert dialog.key_status["twelvedata"].text() == "Clave guardada (ABC…890)."
+    assert dialog.key_fields["twelvedata"].text() == ""
+    dialog.stock.setCurrentIndex(dialog.stock.findData("twelvedata"))
+    dialog.accept()
+    assert settings.crypto_source() == "twelvedata" and settings.stock_source() == "twelvedata"

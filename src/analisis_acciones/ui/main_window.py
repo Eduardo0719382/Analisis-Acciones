@@ -13,7 +13,7 @@ from typing import Any
 import pandas as pd
 import shiboken6
 from PySide6.QtCore import QByteArray, QLocale, Qt, QTimer
-from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QKeySequence, QShortcut
+from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -48,12 +48,12 @@ from analisis_acciones.charts.overlays import (
 )
 from analisis_acciones.charts.payload import chart_times, future_times
 from analisis_acciones.data.export import bars_to_csv
-from analisis_acciones.data.freshness import is_crypto
 from analisis_acciones.indicators.functions import volume_profile
 from analisis_acciones.indicators.registry import IndicatorConfig
 from analisis_acciones.models.errors import AppError, UserError, user_message_for
 from analisis_acciones.models.market import Interval
 from analisis_acciones.providers.base import normalize_symbol
+from analisis_acciones.services.api_keys import KeyringStore, KeyStore
 from analisis_acciones.services.backup import (
     BackupInfo,
     create_backup,
@@ -76,6 +76,7 @@ from analisis_acciones.ui.analysis_panel import AnalysisPanel
 from analisis_acciones.ui.backtest_dialog import BacktestDialog
 from analisis_acciones.ui.comparison_dialog import ComparisonDialog
 from analisis_acciones.ui.daily_scan import DailyScanController
+from analisis_acciones.ui.data_sources_dialog import DataSourcesDialog
 from analisis_acciones.ui.day_summary_dialog import DaySummaryDialog
 from analisis_acciones.ui.details_panel import DetailsPanel
 from analisis_acciones.ui.disclaimer import DisclaimerDialog
@@ -136,9 +137,11 @@ class MainWindow(QMainWindow):
         session_guard: SessionGuard | None = None,
         backup_conn: sqlite3.Connection | None = None,
         data_root: Path | None = None,
+        key_store: KeyStore | None = None,
     ) -> None:
         super().__init__(parent)
         self._settings = settings
+        self._key_store = key_store
         self._session_guard = session_guard
         self._backup_conn = backup_conn
         self._data_root = data_root
@@ -451,18 +454,9 @@ class MainWindow(QMainWindow):
         self.volume_profile_action.setStatusTip(self.volume_profile_action.toolTip())
         self.volume_profile_action.toggled.connect(self._on_volume_profile_toggled)
         view_menu.addAction(self.volume_profile_action)
-        source_menu = view_menu.addMenu(strings.MENU_CRYPTO_SOURCE)
-        source_menu.setToolTipsVisible(True)
-        self.crypto_source_group = QActionGroup(self)
-        self.crypto_source_actions: dict[str, QAction] = {}
-        for key, label, tip in strings.CRYPTO_SOURCES:
-            action = QAction(label, self, checkable=True)
-            action.setToolTip(tip)
-            action.setChecked(self._settings.crypto_source() == key)
-            action.triggered.connect(lambda _c=False, k=key: self.set_crypto_source(k))
-            self.crypto_source_group.addAction(action)
-            source_menu.addAction(action)
-            self.crypto_source_actions[key] = action
+        self.data_sources_action = QAction(strings.ACTION_DATA_SOURCES, self)
+        self.data_sources_action.triggered.connect(lambda: self.open_data_sources())
+        view_menu.addAction(self.data_sources_action)
         self.benchmark_action = QAction(self)
         self.benchmark_action.setCheckable(True)
         self.benchmark_action.setChecked(self._settings.benchmark_on())
@@ -655,9 +649,17 @@ class MainWindow(QMainWindow):
         self.chart.set_chart_type(self.chart_type_combo.currentData())
         self.chart_type_combo.currentIndexChanged.connect(self._on_chart_type_changed)
 
-    def set_crypto_source(self, source: str) -> None:
-        self._settings.set_crypto_source(source)
-        if self.current_result is not None and is_crypto(self.current_result.series.symbol):
+    def open_data_sources(self) -> DataSourcesDialog:
+        if self._key_store is None:
+            self._key_store = KeyringStore()
+        dialog = DataSourcesDialog(self._settings, self._key_store, self)
+        dialog.sources_changed.connect(self._on_sources_changed)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        dialog.open()
+        return dialog
+
+    def _on_sources_changed(self) -> None:
+        if self.current_result is not None:
             self.refresh_current()
 
     def _on_chart_type_changed(self, _index: int) -> None:

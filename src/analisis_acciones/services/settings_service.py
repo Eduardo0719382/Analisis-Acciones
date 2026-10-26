@@ -48,7 +48,9 @@ KEY_CALENDAR_NOTIFIED = "scanner.calendar_notified"
 KEY_EXHAUSTION = "analysis.exhaustion_params"
 KEY_EXHAUSTION_MARKERS = "chart.exhaustion_markers"
 KEY_CRYPTO_SOURCE = "data.crypto_source"
-CRYPTO_SOURCES = ("yahoo", "coingecko")
+KEY_STOCK_SOURCE = "data.stock_source"
+CRYPTO_SOURCES = ("yahoo", "coingecko", "twelvedata", "alphavantage", "finnhub")
+STOCK_SOURCES = ("yahoo", "twelvedata", "alphavantage", "finnhub")
 KEY_EXHAUSTION_PROVEN = "scanner.exhaustion_proven_only"
 DEFAULT_CALENDAR_DAYS = 3
 MAX_CALENDAR_DAYS = 30
@@ -256,8 +258,18 @@ class SettingsService:
     def set_exhaustion_proven_only(self, enabled: bool) -> None:
         self._repo.set(KEY_EXHAUSTION_PROVEN, bool(enabled))
 
+    def stock_source(self) -> str:
+        """Price source for stocks and funds (one of STOCK_SOURCES; default "yahoo")."""
+        raw = self._repo.get(KEY_STOCK_SOURCE)
+        return raw if raw in STOCK_SOURCES else "yahoo"
+
+    def set_stock_source(self, source: str) -> None:
+        if source not in STOCK_SOURCES:
+            raise UserError(f"unknown source {source!r}", user_message="Fuente no válida.")
+        self._repo.set(KEY_STOCK_SOURCE, source)
+
     def crypto_source(self) -> str:
-        """Price source for cryptocurrencies: "yahoo" (default) or "coingecko"."""
+        """Price source for cryptocurrencies (one of CRYPTO_SOURCES; default "yahoo")."""
         raw = self._repo.get(KEY_CRYPTO_SOURCE)
         return raw if raw in CRYPTO_SOURCES else "yahoo"
 

@@ -135,16 +135,25 @@ blanco porque su motor se detuvo, se recarga automáticamente.
   (las acciones mantienen el cierre del viernes durante el fin de semana). Los pares en otras divisas
   se convierten a dólares con el cambio de cada día: `ETH-EUR` con EURUSD=X, `ETH-BTC` con
   BTC-USD y `SOL-USDT` con USDT-USD (no se supone que una moneda estable valga exactamente 1 $).
-- **Fuente de las criptomonedas:** *Ver → Fuente de criptomonedas* (en el celular,
-  *Ajustes → Datos de criptomonedas*) elige entre **Yahoo Finance** (por defecto: velas
-  completas, historia larga e intradía) y **CoinGecko** (API pública gratuita). CoinGecko da
-  un solo precio por día y 365 días de historia: no hay apertura, máximo ni mínimo, así que
-  el gráfico se muestra como línea, y los indicadores que usan máximos y mínimos (ATR,
-  estocástico, Ichimoku…) se calculan con el cierre; cada gráfico lo indica. El intradía y
-  las acciones siguen viniendo de Yahoo. Al cambiar de fuente, los datos guardados de la otra
-  se descargan de nuevo (nunca se mezclan). El plan gratuito admite pocas consultas por
-  minuto: con listas largas puede pedir esperar. Datos de cripto por cortesía de
-  [CoinGecko](https://www.coingecko.com).
+- **Fuentes de datos:** *Ver → Fuentes de datos…* (en el celular, *Ajustes → Fuentes de
+  datos*) elige de dónde vienen los precios de **acciones y fondos** y, por separado, de
+  **criptomonedas**. Índices, divisas y velas intradía siempre vienen de Yahoo.
+
+  | Fuente | Clave | Gratis | Qué da |
+  |---|---|---|---|
+  | Yahoo Finance (por defecto) | No | Sin límite publicado | Velas completas, historia larga, intradía, fundamentales |
+  | Twelve Data | Sí | ~800 consultas/día, 8/min | Velas diarias completas de acciones, ETF y cripto |
+  | Alpha Vantage | Sí | ~25 consultas/día | Velas diarias de acciones (sin ajustar por splits) y cripto |
+  | CoinGecko | No | Pocas consultas/min | Solo cripto: un precio por día, 365 días (gráfico en línea) |
+  | Finnhub | Sí | 60 consultas/min | Cotización actual; el historial suele ser de pago y entonces lo avisa |
+
+  Las claves se consiguen gratis en la web de cada servicio (enlace en la misma ventana) y
+  se guardan en el almacén de credenciales de Windows (en el celular, en el espacio privado de
+  la app); nunca en archivos del programa ni en GitHub. También se pueden dar con una
+  variable de entorno `ANALISIS_ACCIONES_ALPHAVANTAGE_KEY`, `…_FINNHUB_KEY` o
+  `…_TWELVEDATA_KEY`. Al cambiar de fuente, los datos guardados de la anterior se descargan
+  de nuevo (nunca se mezclan dos fuentes en un mismo gráfico). Datos de cripto de CoinGecko
+  por cortesía de [CoinGecko](https://www.coingecko.com).
 - **Intervalo:** 15 minutos, 1 hora, Diario, Semanal o Mensual (los dos últimos se calculan a
   partir de los datos diarios). Intradía: solo horario regular (9:30–16:00 de Nueva York, que es
   la hora que muestra el gráfico); Yahoo ofrece unos 60 días de barras de 15 minutos y unos 2 años

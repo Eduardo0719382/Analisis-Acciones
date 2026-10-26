@@ -1099,3 +1099,19 @@ Three crashes or teardown errors (PROBLEMS.md P-011 to P-013) shaped these rules
   every call. `MarketDataService` refetches a cached series whose source differs from the
   current one, so two sources are never mixed in one series.
 - Rate limits (HTTP 429): one retry after 20 s, then a clear message.
+
+## D-074 — Optional keyed data sources (Alpha Vantage, Finnhub, Twelve Data)
+
+- One source for stocks/funds and one for crypto, chosen in the settings; `SourceRouter` reads
+  them at every call. Indices, currency pairs, CSV series, intraday intervals and search
+  always use Yahoo. CoinGecko (no key) only offers crypto.
+- Keys are the user's own: stored with `keyring` (OS credential store) on the PC, or an
+  environment variable; on the phone a JSON file in the app's private storage. Never in the
+  repository, the database or logs; errors never include URLs with query strings, and Finnhub
+  and Twelve Data receive the key in a header. A test checks that no error text contains it.
+- Free-plan limits are stated where the source is chosen and in every series' notices.
+  Alpha Vantage's free `TIME_SERIES_DAILY` is unadjusted (splits appear as jumps) and may be
+  limited to 100 sessions; Finnhub's free plan usually refuses candles, which is reported as
+  such instead of an empty chart. No source falls back silently to another.
+- Keys pasted in chats or tickets are not used by the program or the tests; live tests run
+  only when a key is provided through the environment.

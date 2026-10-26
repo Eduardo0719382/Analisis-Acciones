@@ -1,13 +1,14 @@
-"""Choose the price source for cryptocurrencies (Yahoo Finance or CoinGecko) at each call.
+"""Choose the price source per kind of asset at each call.
 
-Stocks, funds and indices always come from the primary source (Yahoo). For crypto pairs,
-``use_coingecko()`` decides; it is read on every call so a change in the settings applies
-at once. CoinGecko has daily data only, so intraday crypto bars still come from Yahoo.
+Stocks/funds and cryptocurrencies each have a chosen source (read from the settings at every
+call, so a change applies at once). CSV series, indices and currency pairs, and any
+interval the chosen source does not offer (intraday), always use the primary source
+(Yahoo Finance). Search always uses the primary source too.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import date
 
 from analisis_acciones.data.freshness import is_crypto
@@ -22,22 +23,40 @@ from analisis_acciones.models.market import (
 from analisis_acciones.providers.base import MarketDataProvider
 
 
-class CryptoSourceRouter(MarketDataProvider):
-    def __init__(self, primary: MarketDataProvider, crypto: MarketDataProvider,
-                 use_crypto_source: Callable[[], bool]) -> None:  # fmt: skip
+def plain_stock(symbol: str) -> bool:
+    """US stock/ETF ticker (not an index ``^GSPC``, currency ``EURUSD=X`` or crypto pair)."""
+    s = symbol.strip().upper()
+    return bool(s) and not is_crypto(s) and not s.startswith("^") and "=" not in s \
+        and not s.startswith("CSV:")  # fmt: skip
+
+
+class SourceRouter(MarketDataProvider):
+    def __init__(
+        self,
+        primary: MarketDataProvider,
+        sources: Mapping[str, MarketDataProvider],
+        stock_source: Callable[[], str],
+        crypto_source: Callable[[], str],
+    ) -> None:
         self._primary = primary
-        self._crypto = crypto
-        self._use = use_crypto_source
+        self._sources = dict(sources)
+        self._stock = stock_source
+        self._crypto = crypto_source
         self.name = primary.name
 
-    def _for(self, symbol: str, interval: Interval = Interval.D1) -> MarketDataProvider:
-        if (is_crypto(symbol) and self._use()
-                and interval in self._crypto.get_available_intervals()):  # fmt: skip
-            return self._crypto
+    def provider_for(self, symbol: str, interval: Interval = Interval.D1) -> MarketDataProvider:
+        if is_crypto(symbol):
+            chosen = self._sources.get(self._crypto())
+        elif plain_stock(symbol):
+            chosen = self._sources.get(self._stock())
+        else:
+            chosen = None
+        if chosen is not None and interval in chosen.get_available_intervals():
+            return chosen
         return self._primary
 
     def source_for(self, symbol: str, interval: Interval = Interval.D1) -> str:
-        return self._for(symbol, interval).name
+        return self.provider_for(symbol, interval).name
 
     def get_available_intervals(self) -> list[Interval]:
         return self._primary.get_available_intervals()
@@ -45,19 +64,19 @@ class CryptoSourceRouter(MarketDataProvider):
     def get_historical_data(
         self, symbol: str, interval: Interval, start: date | None = None, end: date | None = None
     ) -> BarSeries:
-        return self._for(symbol, interval).get_historical_data(symbol, interval, start, end)
+        return self.provider_for(symbol, interval).get_historical_data(symbol, interval, start, end)
 
     def search_symbol(self, query: str, limit: int = 10) -> list[SearchResult]:
         return self._primary.search_symbol(query, limit)
 
     def get_quote(self, symbol: str) -> Quote:
-        return self._for(symbol).get_quote(symbol)
+        return self.provider_for(symbol).get_quote(symbol)
 
     def get_company_info(self, symbol: str) -> CompanyInfo:
-        return self._for(symbol).get_company_info(symbol)
+        return self.provider_for(symbol).get_company_info(symbol)
 
     def get_fundamentals(self, symbol: str) -> Fundamentals:
         return self._primary.get_fundamentals(symbol)
 
     def get_currency(self, symbol: str) -> str | None:
-        return self._for(symbol).get_currency(symbol)
+        return self.provider_for(symbol).get_currency(symbol)

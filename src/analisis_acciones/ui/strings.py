@@ -4,20 +4,28 @@ APP_TITLE = "Análisis de Acciones"
 
 SEARCH_PLACEHOLDER = "Buscar ticker, empresa o cripto (BTC-USD)…"
 SEARCH_CRYPTO = "criptomoneda"
-MENU_CRYPTO_SOURCE = "Fuente de &criptomonedas"
-CRYPTO_SOURCES = (
-    (
-        "yahoo",
-        "Yahoo Finance (recomendada)",
-        "Velas completas (apertura, máximo, mínimo y cierre), historia larga e intradía.",
-    ),
-    (
-        "coingecko",
-        "CoinGecko",
-        "Precio de CoinGecko: un cierre diario y 365 días de historia (sin velas). El intradía "
-        "sigue viniendo de Yahoo. Datos de CoinGecko (plan gratuito, pocas consultas por minuto).",
-    ),
+ACTION_DATA_SOURCES = "&Fuentes de datos…"
+DS_TITLE = "Fuentes de datos"
+DS_INTRO = (
+    "Elija de dónde se descargan los precios. Yahoo Finance es la opción recomendada y no "
+    "necesita clave. Las demás son alternativas gratuitas con límites; las que piden clave "
+    "necesitan una propia (gratis en su web). Los índices, divisas y el intradía siempre usan "
+    "Yahoo. Al cambiar de fuente, los datos guardados de la otra se descargan de nuevo."
 )
+DS_STOCKS = "Acciones y fondos:"
+DS_CRYPTO = "Criptomonedas:"
+DS_KEYS = "Claves (API keys)"
+DS_KEYS_NOTE = (
+    "Se guardan en el almacén de credenciales de Windows, no en archivos del programa ni en "
+    "GitHub. Nunca se muestran completas."
+)
+DS_KEY_PLACEHOLDER = "Pegue aquí su clave"
+DS_SAVE = "Guardar"
+DS_DELETE = "Borrar"
+DS_GET_KEY = "Conseguir una clave gratis"
+DS_KEY_SAVED = "Clave guardada ({key})."
+DS_KEY_MISSING = "Sin clave."
+DS_NEEDS_KEY = "Falta la clave de: {names}. Guárdela antes de elegir esa fuente."
 SEARCH_NO_RESULTS = "Sin resultados"
 SEARCH_SEARCHING = "Buscando…"
 SEARCH_RECENT = "Recientes"

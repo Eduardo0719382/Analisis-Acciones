@@ -36,10 +36,10 @@ from analisis_acciones.data.freshness import is_crypto
 from analisis_acciones.models.errors import AppError, UserError
 from analisis_acciones.models.market import Interval, SearchResult
 from analisis_acciones.providers.base import MarketDataProvider
-from analisis_acciones.providers.coingecko import CoinGeckoProvider
-from analisis_acciones.providers.routing import CryptoSourceRouter
 from analisis_acciones.providers.yahoo import YahooClient, YahooFinanceProvider
 from analisis_acciones.providers.yahoo_http import YahooHttpClient
+from analisis_acciones.services.api_keys import FileKeyStore, KeyStore, clean_key
+from analisis_acciones.services.data_sources import build_router
 from analisis_acciones.services.market_data_service import MarketDataService
 from analisis_acciones.services.scan_report import num, verdict
 from analisis_acciones.services.scanner import ScanResult, run_scan
@@ -213,16 +213,15 @@ def exhaustion_view(a: Assessment) -> ExhaustionView:
 class MobileSession:
     def __init__(self, root: Path, client: YahooClient | None = None,
                  clock: Callable[[], datetime] = lambda: datetime.now(UTC),
-                 crypto_provider: MarketDataProvider | None = None) -> None:  # fmt: skip
+                 keys: KeyStore | None = None,
+                 router: MarketDataProvider | None = None) -> None:  # fmt: skip
         root.mkdir(parents=True, exist_ok=True)
         path = root / DATABASE
         self._conn = open_database(path)
         self.settings = SettingsService(SettingsRepository(self._conn))
-        provider = CryptoSourceRouter(
-            YahooFinanceProvider(client or YahooHttpClient()),
-            crypto_provider or CoinGeckoProvider(),
-            lambda: self.settings.crypto_source() == "coingecko",
-        )
+        self.keys: KeyStore = keys or FileKeyStore(root / "claves.json")
+        yahoo = YahooFinanceProvider(client or YahooHttpClient())
+        provider = router or build_router(yahoo, self.settings, self.keys)
         self.market = MarketDataService(provider, open_database(path), clock)
         self.alerts = AlertService(open_database(path), self.market, clock)
         self.lists = WatchlistService(self._conn)
@@ -239,6 +238,21 @@ class MobileSession:
 
     def set_crypto_source(self, source: str) -> None:
         self.settings.set_crypto_source(source)
+
+    def stock_source(self) -> str:
+        return self.settings.stock_source()
+
+    def set_stock_source(self, source: str) -> None:
+        self.settings.set_stock_source(source)
+
+    def has_key(self, service: str) -> bool:
+        return bool(self.keys.get(service))
+
+    def save_key(self, service: str, key: str) -> None:
+        self.keys.set(service, clean_key(service, key))
+
+    def delete_key(self, service: str) -> None:
+        self.keys.delete(service)
 
     # Watchlist ------------------------------------------------------------------------
     def symbols(self) -> list[str]:

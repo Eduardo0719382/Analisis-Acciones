@@ -59,10 +59,10 @@ cerradas). Las velas intradía se muestran en hora UTC.</li>
 <li>Todas las herramientas de precio funcionan igual que con acciones. La volatilidad anualizada
 de la comparación usa 365 días.</li>
 <li>No hay datos fundamentales (beneficios, PER, dividendos): no son empresas.</li>
-<li><b>Fuente:</b> <i>Ver → Fuente de criptomonedas</i> elige entre Yahoo Finance (velas
-completas e intradía) y CoinGecko (un precio por día, 365 días; el gráfico se ve como línea y
-el intradía sigue viniendo de Yahoo). Los datos de una fuente nunca se mezclan con los de la
-otra.</li>
+<li><b>Fuentes:</b> <i>Ver → Fuentes de datos…</i> elige de dónde vienen los precios de
+acciones y de criptomonedas: Yahoo Finance (recomendada, sin clave), Twelve Data, Alpha Vantage,
+CoinGecko (solo cripto, un precio por día) o Finnhub. Las que piden clave usan la suya propia,
+gratis en su web; se guarda en el almacén de credenciales de Windows.</li>
 <li>En la cartera simulada, los pares en otras divisas se convierten a dólares con el cambio de
 cada día: <b>ETH-EUR</b> con EURUSD=X, <b>ETH-BTC</b> con BTC-USD y <b>SOL-USDT</b> con
 USDT-USD.</li>

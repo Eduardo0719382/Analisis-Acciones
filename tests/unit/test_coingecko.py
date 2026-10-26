@@ -20,7 +20,7 @@ from analisis_acciones.providers.coingecko import (
     CoinGeckoProvider,
     daily_bars,
 )
-from analisis_acciones.providers.routing import CryptoSourceRouter
+from analisis_acciones.providers.routing import SourceRouter
 from analisis_acciones.providers.yahoo import YahooFinanceProvider
 from analisis_acciones.services.market_data_service import MarketDataService
 from tests.synthetic import FakeYahooClient, synthetic_daily
@@ -137,7 +137,12 @@ def test_router_and_cache_follow_the_setting(fake: Fake, gecko: CoinGeckoProvide
     client = FakeYahooClient(yahoo_bars)
     client.known = {"BTC-USD", "AAPL"}
     use = {"gecko": False}
-    router = CryptoSourceRouter(YahooFinanceProvider(client), gecko, lambda: use["gecko"])
+    router = SourceRouter(
+        YahooFinanceProvider(client),
+        {"coingecko": gecko},
+        lambda: "yahoo",
+        lambda: "coingecko" if use["gecko"] else "yahoo",
+    )
     market = MarketDataService(router, conn, lambda: NOW)
     fake.routes["/coins/bitcoin/market_chart"] = chart(3)
 

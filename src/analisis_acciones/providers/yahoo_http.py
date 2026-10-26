@@ -23,7 +23,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
@@ -52,13 +52,16 @@ def _ssl_context() -> ssl.SSLContext:
     return ssl.create_default_context(cafile=certifi.where())
 
 
-def http_get(url: str) -> bytes:
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT,
-                                                   "Accept": "application/json"})  # fmt: skip
+def http_get(url: str, headers: Mapping[str, str] | None = None) -> bytes:
+    """GET ``url``. Errors never include the query string (it may carry an API key)."""
+    request = urllib.request.Request(
+        url, headers={"User-Agent": USER_AGENT, "Accept": "application/json", **(headers or {})}
+    )
     try:
         with urllib.request.urlopen(request, timeout=TIMEOUT_S, context=_ssl_context()) as resp:
             body: bytes = resp.read(MAX_BYTES + 1)
-    except urllib.error.HTTPError:
+    except urllib.error.HTTPError as exc:
+        exc.url = exc.filename = url.split("?")[0]  # keep keys out of tracebacks and logs
         raise  # carries the status code ("HTTP Error 404: ...")
     except (urllib.error.URLError, OSError) as exc:
         raise ConnectionError(f"{url.split('?')[0]}: {exc}") from exc

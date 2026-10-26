@@ -33,6 +33,8 @@ from analisis_acciones.mobile.updates import (
     latest_build,
     newer_than,
 )
+from analisis_acciones.services.api_keys import SERVICES, SIGNUP_URLS
+from analisis_acciones.services.data_sources import SOURCE_BY_KEY, SOURCES
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("analisis_acciones.mobile.app")
@@ -813,15 +815,24 @@ class MobileApp:
             on_change=self.on_theme,
             show_selected_icon=False,
         )
-        crypto = ft.SegmentedButton(
-            segments=[
-                ft.Segment(value="yahoo", label=ft.Text("Yahoo Finance")),
-                ft.Segment(value="coingecko", label=ft.Text("CoinGecko")),
-            ],
-            selected=[self.session.crypto_source()],
-            on_change=self.on_crypto_source,
-            show_selected_icon=False,
+        self.source_info = small("")
+        self.stock_source = ft.Dropdown(
+            label="Acciones y fondos",
+            value=self.session.stock_source(),
+            options=[ft.DropdownOption(key=x.key, text=x.name) for x in SOURCES if x.stocks],
+            on_select=self.on_sources,
+            expand=True,
         )
+        self.crypto_source = ft.Dropdown(
+            label="Criptomonedas",
+            value=self.session.crypto_source(),
+            options=[ft.DropdownOption(key=x.key, text=x.name) for x in SOURCES if x.crypto],
+            on_select=self.on_sources,
+            expand=True,
+        )
+        self.describe_sources()
+        self.keys_box = ft.Column(spacing=6)
+        self.fill_keys()
         content = ft.ListView(
             [
                 section("Versión"),
@@ -841,12 +852,21 @@ class MobileApp:
                     "sola: la app la descarga y usted confirma la instalación."
                 ),
                 ft.Divider(),
-                section("Datos de criptomonedas"),
-                crypto,
+                section("Fuentes de datos"),
                 small(
-                    "Yahoo Finance: velas completas e intradía. CoinGecko: un precio por día y "
-                    "365 días (el gráfico se ve como línea); las acciones siempre usan Yahoo."
+                    "Yahoo Finance es la recomendada y no necesita clave. Las demás son "
+                    "alternativas gratuitas con límites. Índices, divisas e intradía siempre "
+                    "usan Yahoo."
                 ),
+                self.stock_source,
+                self.crypto_source,
+                self.source_info,
+                section("Claves"),
+                small(
+                    "Se guardan solo en este celular, en el espacio privado de la app. Nunca "
+                    "se muestran completas."
+                ),
+                self.keys_box,
                 ft.Divider(),
                 section("Tema"),
                 theme,
@@ -860,11 +880,89 @@ class MobileApp:
         )
         self.set_body("Ajustes", content, actions=[])
 
-    def on_crypto_source(self, e: Any) -> None:
-        source = str((e.control.selected or ["yahoo"])[0])
-        self.session.set_crypto_source(source)
-        name = "CoinGecko" if source == "coingecko" else "Yahoo Finance"
-        self.toast(f"Las criptomonedas se cargarán desde {name}.")
+    def describe_sources(self) -> None:
+        stock = SOURCE_BY_KEY[str(self.stock_source.value or "yahoo")]
+        crypto = SOURCE_BY_KEY[str(self.crypto_source.value or "yahoo")]
+        self.source_info.value = f"Acciones: {stock.summary}\nCripto: {crypto.summary}"
+
+    def on_sources(self, _e: Any) -> None:
+        stock = str(self.stock_source.value or "yahoo")
+        crypto = str(self.crypto_source.value or "yahoo")
+        missing = [
+            SOURCE_BY_KEY[k].name
+            for k in dict.fromkeys((stock, crypto))
+            if SOURCE_BY_KEY[k].needs_key and not self.session.has_key(k)
+        ]
+        if missing:
+            self.stock_source.value = self.session.stock_source()
+            self.crypto_source.value = self.session.crypto_source()
+            self.toast(f"Primero guarde la clave de {', '.join(missing)} (más abajo).")
+        else:
+            self.session.set_stock_source(stock)
+            self.session.set_crypto_source(crypto)
+            self.toast("Fuentes guardadas: los datos se descargarán de nuevo al abrir un activo.")
+        self.describe_sources()
+        self.page.update()
+
+    def fill_keys(self) -> None:
+        rows: list[ft.Control] = []
+        for service, name in SERVICES.items():
+            field = ft.TextField(
+                label=f"Clave de {name}",
+                password=True,
+                can_reveal_password=True,
+                dense=True,
+                expand=True,
+            )
+            saved = self.session.has_key(service)
+            rows.append(
+                ft.Row(
+                    [
+                        field,
+                        ft.IconButton(
+                            ft.Icons.SAVE,
+                            tooltip="Guardar",
+                            on_click=lambda e, s=service, f=field: self.save_key(s, f),
+                        ),
+                        ft.IconButton(
+                            ft.Icons.DELETE_OUTLINE,
+                            tooltip="Borrar",
+                            disabled=not saved,
+                            on_click=lambda e, s=service: self.delete_key(s),
+                        ),
+                    ]
+                )
+            )
+            rows.append(
+                ft.Row(
+                    [
+                        small("Clave guardada." if saved else "Sin clave."),
+                        ft.TextButton(
+                            "Conseguir una gratis",
+                            on_click=lambda e, s=service: self.page.run_task(
+                                self.launcher.launch_url, SIGNUP_URLS[s]
+                            ),
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                )
+            )
+        self.keys_box.controls = rows
+
+    def save_key(self, service: str, field: Any) -> None:
+        try:
+            self.session.save_key(service, str(field.value or ""))
+        except Exception as exc:
+            self.toast(friendly_error(exc))
+            return
+        self.toast(f"Clave de {SERVICES[service]} guardada.")
+        self.fill_keys()
+        self.page.update()
+
+    def delete_key(self, service: str) -> None:
+        self.session.delete_key(service)
+        self.fill_keys()
+        self.page.update()
 
     def on_theme(self, e: Any) -> None:
         mode = str((e.control.selected or ["system"])[0])

@@ -16,6 +16,7 @@ dependencies = [
     "numpy>=1.26",
     "yfinance>=0.2.54",
     "tzdata>=2024.1",  # time-zone database for zoneinfo on Windows
+    "keyring>=25",  # API keys of optional data sources in the OS credential store
 ]
 
 [project.optional-dependencies]
